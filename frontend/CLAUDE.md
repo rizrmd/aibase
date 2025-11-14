@@ -23,7 +23,7 @@ Use **Bun** instead of npm/pnpm/yarn (per parent CLAUDE.md):
 
 ```bash
 # Development
-bun run dev              # Start dev server (http://localhost:5173)
+bun run dev              # Start dev server (http://localhost:5050)
 bun run dev -- --open    # Start dev server and open browser
 
 # Building
@@ -98,12 +98,12 @@ CSS variables in `src/app.css`:
 
 ## Backend Integration
 
-The backend is a **Bun + oRPC + WebSocket server** at `http://localhost:3000`:
+The backend is a **Bun + oRPC + WebSocket server** at `http://localhost:5040`:
 
 ### Backend Endpoints
-- `http://localhost:3000/orpc/*` - oRPC procedures (type-safe RPC)
-- `ws://localhost:3000/ws` - WebSocket for streaming conversations
-- `http://localhost:3000/health` - Health check
+- `http://localhost:5040/orpc/*` - oRPC procedures (type-safe RPC)
+- `ws://localhost:5040/ws` - WebSocket for streaming conversations
+- `http://localhost:5040/health` - Health check
 
 ### Backend Scripts
 ```bash
@@ -120,14 +120,14 @@ import { createClient } from '@orpc/client';
 import type { Router } from '../../../backend/src/orpc/router';
 
 export const client = createClient<Router>({
-  baseURL: 'http://localhost:3000/orpc'
+  baseURL: 'http://localhost:5040/orpc'
 });
 ```
 
 WebSocket service for streaming:
 ```typescript
 // src/lib/services/websocket.ts
-const ws = new WebSocket('ws://localhost:3000/ws');
+const ws = new WebSocket('ws://localhost:5040/ws');
 ws.onmessage = (event) => {
   const chunk = JSON.parse(event.data);
   // Handle streaming chunks
@@ -167,4 +167,4 @@ bun test              # Run tests
 3. **Svelte 5 syntax**: Use runes, not legacy `$:` reactive statements
 4. **SvelteKit conventions**: Follow `+page.svelte`, `+layout.svelte` naming
 5. **shadcn-svelte**: Install components as needed, don't create custom versions
-6. **Backend coordination**: Backend runs on port 3000, frontend on 5173
+6. **Backend coordination**: Backend runs on port 5040, frontend on 5050

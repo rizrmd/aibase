@@ -319,5 +319,6 @@ export function startServer(port = 3000) {
 
 // Start server if this file is run directly
 if (import.meta.main) {
-  startServer(3000);
+  const port = parseInt(process.env.PORT || '5040', 10);
+  startServer(port);
 }
