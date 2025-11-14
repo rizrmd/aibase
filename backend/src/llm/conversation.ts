@@ -58,6 +58,11 @@ export interface MessageHooks {
    * Called when streaming completes
    */
   end?: (fullText: string) => void | Promise<void>;
+
+  /**
+   * Called when a message is canceled/aborted
+   */
+  cancel?: (partialText: string) => void | Promise<void>;
 }
 
 /**
@@ -162,6 +167,7 @@ export class Conversation {
     max_tokens?: number;
     top_p?: number;
   } = {};
+  private currentAbortController: AbortController | null = null;
 
   constructor(options: ConversationOptions = {}) {
     const config = createOpenAI(options.configName);
@@ -267,6 +273,23 @@ export class Conversation {
   }
 
   /**
+   * Abort the current ongoing message stream
+   */
+  abort(): void {
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+    }
+  }
+
+  /**
+   * Check if there's an ongoing message being processed
+   */
+  isProcessing(): boolean {
+    return this.currentAbortController !== null;
+  }
+
+  /**
    * Send a message and stream the response
    * Can be used both as an async generator (for streaming) or awaited (for non-streaming)
    *
@@ -275,7 +298,9 @@ export class Conversation {
    * - Non-streaming: `const fullText = await conversation.sendMessage("hello")`
    */
   sendMessage(message: string): AsyncGenerator<string, string, unknown> & Promise<string> {
-    const generator = this.streamMessageInternal(message);
+    // Create new AbortController for this message
+    this.currentAbortController = new AbortController();
+    const generator = this.streamMessageInternal(message, this.currentAbortController);
 
     // Make the generator both awaitable and iterable
     const hybrid = generator as any;
@@ -291,6 +316,8 @@ export class Conversation {
           return fullText;
         } catch (error) {
           throw error;
+        } finally {
+          this.currentAbortController = null;
         }
       })().then(resolve, reject);
     };
@@ -318,7 +345,8 @@ export class Conversation {
   /**
    * Internal method to stream a message
    */
-  private async *streamMessageInternal(message: string): AsyncGenerator<string, void, unknown> {
+  private async *streamMessageInternal(message: string, abortController: AbortController): AsyncGenerator<string, void, unknown> {
+    let fullText = "";
     try {
       await this.hooks.message?.before?.(message, this._history);
       await this.hooks.message?.start?.();
@@ -330,10 +358,12 @@ export class Conversation {
       };
       this.addMessage(userMessage);
 
-      let fullText = "";
-
       // Stream the continuation (handles tool calls recursively)
-      for await (const chunk of this.streamContinuation()) {
+      for await (const chunk of this.streamContinuation(abortController)) {
+        // Check if aborted
+        if (abortController.signal.aborted) {
+          throw new Error("Message aborted");
+        }
         fullText += chunk;
         yield chunk;
       }
@@ -342,7 +372,13 @@ export class Conversation {
       await this.hooks.message?.after?.(fullText, this._history);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      await this.hooks.error?.(err, "sendMessage");
+
+      // Call cancel hook for abort errors
+      if (err.message === "Message aborted") {
+        await this.hooks.message?.cancel?.(fullText);
+      } else {
+        await this.hooks.error?.(err, "sendMessage");
+      }
       throw err;
     }
   }
@@ -351,7 +387,7 @@ export class Conversation {
    * Internal method to stream a continuation of the conversation
    * This handles both regular responses and tool call responses recursively
    */
-  private async *streamContinuation(): AsyncGenerator<string, void, unknown> {
+  private async *streamContinuation(abortController: AbortController): AsyncGenerator<string, void, unknown> {
     let fullText = "";
     let currentToolCalls: any[] = [];
     let isToolCallResponse = false;
@@ -362,34 +398,54 @@ export class Conversation {
       tools: this.getOpenAITools(),
       stream: true,
       ...this.modelParams,
+    }, {
+      signal: abortController.signal as any,
     });
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
+    try {
+      for await (const chunk of stream) {
+        // Check if aborted
+        if (abortController.signal.aborted) {
+          break;
+        }
 
-      if (delta?.content) {
-        fullText += delta.content;
-        await this.hooks.message?.chunk?.(delta.content, fullText);
-        yield delta.content;
-      }
+        const delta = chunk.choices[0]?.delta;
 
-      // Handle streaming tool calls
-      if (delta?.tool_calls) {
-        isToolCallResponse = true;
-        for (const toolCall of delta.tool_calls) {
-          const index = toolCall.index;
-          if (!currentToolCalls[index]) {
-            currentToolCalls[index] = {
-              id: toolCall.id || "",
-              type: "function",
-              function: { name: toolCall.function?.name || "", arguments: "" },
-            };
-          }
-          if (toolCall.function?.arguments) {
-            currentToolCalls[index].function.arguments += toolCall.function.arguments;
+        if (delta?.content) {
+          fullText += delta.content;
+          await this.hooks.message?.chunk?.(delta.content, fullText);
+          yield delta.content;
+        }
+
+        // Handle streaming tool calls
+        if (delta?.tool_calls) {
+          isToolCallResponse = true;
+          for (const toolCall of delta.tool_calls) {
+            const index = toolCall.index;
+            if (!currentToolCalls[index]) {
+              currentToolCalls[index] = {
+                id: toolCall.id || "",
+                type: "function",
+                function: { name: toolCall.function?.name || "", arguments: "" },
+              };
+            }
+            if (toolCall.function?.arguments) {
+              currentToolCalls[index].function.arguments += toolCall.function.arguments;
+            }
           }
         }
       }
+    } catch (error: any) {
+      // If aborted, just stop - don't add partial response to history
+      if (error?.name === 'AbortError' || abortController.signal.aborted) {
+        return;
+      }
+      throw error;
+    }
+
+    // Only add to history if not aborted
+    if (abortController.signal.aborted) {
+      return;
     }
 
     // Add assistant's response to history
@@ -403,7 +459,7 @@ export class Conversation {
       await this.executeToolCalls(currentToolCalls);
 
       // Recursively stream the next response after tool execution
-      yield* this.streamContinuation();
+      yield* this.streamContinuation(abortController);
     } else {
       this.addMessage({
         role: "assistant",
