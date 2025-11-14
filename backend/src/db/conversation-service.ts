@@ -1,5 +1,5 @@
 import { db } from './connection';
-import { conversations, messages, type Conversation, type NewConversation, type Message, type NewMessage } from './schema';
+import { conversations, messages, type Conversation, type Message, type NewMessage } from './schema';
 import { eq, desc, and, isNull } from 'drizzle-orm';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
@@ -24,7 +24,7 @@ export class ConversationDB {
     };
     metadata?: Record<string, any>;
   }): Promise<Conversation> {
-    const [conversation] = await db
+    const result = await db
       .insert(conversations)
       .values({
         id: data.id,
@@ -37,7 +37,11 @@ export class ConversationDB {
       })
       .returning();
 
-    return conversation;
+    if (!result[0]) {
+      throw new Error('Failed to create conversation');
+    }
+
+    return result[0];
   }
 
   /**
@@ -121,7 +125,11 @@ export class ConversationDB {
       messageData.toolCallId = message.tool_call_id;
     }
 
-    const [inserted] = await db.insert(messages).values(messageData).returning();
+    const result = await db.insert(messages).values(messageData).returning();
+
+    if (!result[0]) {
+      throw new Error('Failed to insert message');
+    }
 
     // Update conversation's updatedAt timestamp
     await db
@@ -129,7 +137,7 @@ export class ConversationDB {
       .set({ updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
 
-    return inserted;
+    return result[0];
   }
 
   /**
@@ -251,18 +259,16 @@ export class ConversationDB {
    * List conversations for a user
    */
   async listConversations(userId?: string, limit = 50): Promise<Conversation[]> {
-    let query = db
+    const whereConditions = userId
+      ? and(isNull(conversations.deletedAt), eq(conversations.userId, userId))
+      : isNull(conversations.deletedAt);
+
+    return await db
       .select()
       .from(conversations)
-      .where(isNull(conversations.deletedAt))
+      .where(whereConditions)
       .orderBy(desc(conversations.updatedAt))
       .limit(limit);
-
-    if (userId) {
-      query = query.where(eq(conversations.userId, userId)) as any;
-    }
-
-    return await query;
   }
 
   /**

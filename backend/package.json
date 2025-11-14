@@ -5,16 +5,9 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "dev": "bun run src/index.ts",
-    "server": "bun run src/server.ts",
-    "server:dev": "bun run --watch src/server.ts",
-    "orpc": "bun run src/orpc/server.ts",
-    "orpc:dev": "bun --hot src/orpc/server.ts",
-    "orpc:example": "bun run src/orpc/example.ts",
-    "cli": "bun run src/cli/cli.tsx",
-    "build": "bun build src/server.ts --outdir dist --target node",
-    "start": "bun run dist/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "bun --hot src/orpc/server.ts",
+    "start": "bun run src/orpc/server.ts",
+    "example": "bun run src/orpc/example.ts"
   },
   "keywords": ["openai", "agents", "llm", "ai", "backend"],
   "author": "",
@@ -31,6 +24,8 @@
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
     "jsonc-parser": "^3.3.1",
+    "marked": "^17.0.0",
+    "marked-terminal": "^7.3.0",
     "openai": "^6.8.1",
     "react": "^19.2.0",
     "tsx": "^4.20.6",

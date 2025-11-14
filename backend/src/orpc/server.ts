@@ -90,7 +90,26 @@ export function startServer(port = 3000) {
         });
       }
 
-      // Default response
+      // Serve static files from frontend/dist
+      const frontendPath = new URL('../../../frontend/dist', import.meta.url).pathname;
+      let filePath = frontendPath + url.pathname;
+
+      // Try to serve the requested file
+      let file = Bun.file(filePath);
+
+      if (await file.exists()) {
+        return new Response(file);
+      }
+
+      // If file doesn't exist and it's not an API route, serve index.html for SPA routing
+      if (!url.pathname.startsWith('/orpc') && !url.pathname.startsWith('/ws') && !url.pathname.startsWith('/health')) {
+        file = Bun.file(frontendPath + '/index.html');
+        if (await file.exists()) {
+          return new Response(file);
+        }
+      }
+
+      // Default response if frontend not found
       return new Response(JSON.stringify({
         message: 'oRPC + WebSocket Server',
         endpoints: {

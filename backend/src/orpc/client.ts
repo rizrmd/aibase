@@ -22,6 +22,7 @@ export class WSClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private shouldReconnect = true;
 
   constructor(
     private conversationId: string,
@@ -41,6 +42,7 @@ export class WSClient {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        this.shouldReconnect = true;
         this.ws = new WebSocket(this.wsUrl);
 
         this.ws.onopen = () => {
@@ -78,6 +80,11 @@ export class WSClient {
    * Handle reconnection logic
    */
   private handleReconnect() {
+    // Don't reconnect if manually disconnected
+    if (!this.shouldReconnect) {
+      return;
+    }
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       const delay = this.reconnectDelay * this.reconnectAttempts;
@@ -346,6 +353,7 @@ export class WSClient {
    * Disconnect from WebSocket
    */
   disconnect() {
+    this.shouldReconnect = false;
     if (this.ws) {
       this.ws.close();
       this.ws = null;
