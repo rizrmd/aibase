@@ -113,3 +113,4 @@ For more information, read the Bun API docs in `node_modules/bun-types/docs/**.m
 # Important
 
 - When importing do not include .js
+- never run backend or frontend dev server

@@ -21,3 +21,10 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Auto-generated component files (from shadcn-svelte-extras/jsrepo)
+# We manually maintain exports in src/lib/index.js instead
+*.svelte.d.ts
+src/lib/components/ui/**/index.js
+src/lib/components/ui/**/index.d.ts
+src/lib/components/ui/**/config.d.ts
