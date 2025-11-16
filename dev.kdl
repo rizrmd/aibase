@@ -2,7 +2,7 @@ layout {
     pane split_direction="vertical" {
         pane {
             command "bash"
-            args "-c" "cd backend && bun --hot src/orpc/server.ts"
+            args "-c" "bun --hot backend/src/orpc/server.ts"
         }
         pane {
             command "bash"

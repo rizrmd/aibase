@@ -1,27 +1,7 @@
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
 import OpenAI from "openai";
 import { Agent, Runner, RunResult, setTracingDisabled } from "@openai/agents";
-import { parse } from "jsonc-parser";
 
 setTracingDisabled(true);
-
-/**
- * Find the AI config file (supports both .json and .jsonc)
- * @returns Path to the config file
- */
-function getConfigPath(): string {
-  const jsonPath = join(__dirname, "../../../config/ai.json");
-  const jsoncPath = join(__dirname, "../../../config/ai.jsonc");
-  if (existsSync(jsoncPath)) {
-    return jsoncPath;
-  }
-  if (existsSync(jsonPath)) {
-    return jsonPath;
-  }
-
-  throw new Error("Config file not found. Expected config/ai.json or config/ai.jsonc");
-}
 
 /**
  * AI Configuration Interface
@@ -33,54 +13,21 @@ export interface AIConfig {
 }
 
 /**
- * Configuration File Structure
- */
-export interface ConfigFile {
-  default: AIConfig;
-  [key: string]: AIConfig;
-}
-
-/**
- * Load AI configuration from config/ai.json
+ * Load AI configuration from environment variables
  * @param configName - Name of the configuration to load (defaults to "default")
  * @returns AI configuration object
  */
 export function loadAIConfig(configName: string = "default"): AIConfig {
-  try {
-    const configPath = getConfigPath();
-    const configData = readFileSync(configPath, "utf-8");
-    const config: ConfigFile = parse(configData);
-
-    if (!config[configName]) {
-      throw new Error(
-        `Configuration "${configName}" not found in ${configPath}`
-      );
-    }
-
-    return config[configName];
-  } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`Failed to load AI config: ${error.message}`);
-    }
-    throw error;
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
+    throw new Error("OPENAI_API_KEY environment variable is required");
   }
-}
 
-/**
- * Load all AI configurations from config/ai.json
- * @returns All configurations from the config file
- */
-export function loadAllAIConfigs(): ConfigFile {
-  try {
-    const configPath = getConfigPath();
-    const configData = readFileSync(configPath, "utf-8");
-    return parse(configData);
-  } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`Failed to load AI configs: ${error.message}`);
-    }
-    throw error;
-  }
+  return {
+    url: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+    key,
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+  };
 }
 
 /**
