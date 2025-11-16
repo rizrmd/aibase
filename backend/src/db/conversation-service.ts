@@ -1,4 +1,4 @@
-import { db } from './connection';
+import { getDb } from './connection';
 import { conversations, messages, type Conversation, type Message, type NewMessage } from './schema';
 import { eq, desc, and, isNull } from 'drizzle-orm';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
@@ -24,7 +24,7 @@ export class ConversationDB {
     };
     metadata?: Record<string, any>;
   }): Promise<Conversation> {
-    const result = await db
+    const result = await getDb()
       .insert(conversations)
       .values({
         id: data.id,
@@ -48,7 +48,7 @@ export class ConversationDB {
    * Get a conversation by ID
    */
   async getConversation(conversationId: string): Promise<Conversation | null> {
-    const [conversation] = await db
+    const [conversation] = await getDb()
       .select()
       .from(conversations)
       .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)));
@@ -68,7 +68,7 @@ export class ConversationDB {
       metadata?: any;
     }
   ): Promise<Conversation | null> {
-    const [updated] = await db
+    const [updated] = await getDb()
       .update(conversations)
       .set({
         ...updates,
@@ -84,7 +84,7 @@ export class ConversationDB {
    * Soft delete a conversation
    */
   async deleteConversation(conversationId: string): Promise<boolean> {
-    const [deleted] = await db
+    const [deleted] = await getDb()
       .update(conversations)
       .set({ deletedAt: new Date() })
       .where(eq(conversations.id, conversationId))
@@ -97,7 +97,7 @@ export class ConversationDB {
    * Get all messages for a conversation
    */
   async getMessages(conversationId: string): Promise<Message[]> {
-    return await db
+    return await getDb()
       .select()
       .from(messages)
       .where(eq(messages.conversationId, conversationId))
@@ -125,14 +125,14 @@ export class ConversationDB {
       messageData.toolCallId = message.tool_call_id;
     }
 
-    const result = await db.insert(messages).values(messageData).returning();
+    const result = await getDb().insert(messages).values(messageData).returning();
 
     if (!result[0]) {
       throw new Error('Failed to insert message');
     }
 
     // Update conversation's updatedAt timestamp
-    await db
+    await getDb()
       .update(conversations)
       .set({ updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
@@ -171,10 +171,10 @@ export class ConversationDB {
       return messageData;
     });
 
-    const inserted = await db.insert(messages).values(messagesToInsert).returning();
+    const inserted = await getDb().insert(messages).values(messagesToInsert).returning();
 
     // Update conversation's updatedAt timestamp
-    await db
+    await getDb()
       .update(conversations)
       .set({ updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
@@ -188,24 +188,24 @@ export class ConversationDB {
   async clearMessages(conversationId: string, keepSystemPrompt = true): Promise<void> {
     if (keepSystemPrompt) {
       // Delete all messages except system messages
-      await db
+      await getDb()
         .delete(messages)
         .where(and(eq(messages.conversationId, conversationId), eq(messages.role, 'user')));
 
-      await db
+      await getDb()
         .delete(messages)
         .where(and(eq(messages.conversationId, conversationId), eq(messages.role, 'assistant')));
 
-      await db
+      await getDb()
         .delete(messages)
         .where(and(eq(messages.conversationId, conversationId), eq(messages.role, 'tool')));
     } else {
       // Delete all messages
-      await db.delete(messages).where(eq(messages.conversationId, conversationId));
+      await getDb().delete(messages).where(eq(messages.conversationId, conversationId));
     }
 
     // Update conversation's updatedAt timestamp
-    await db
+    await getDb()
       .update(conversations)
       .set({ updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
@@ -263,7 +263,7 @@ export class ConversationDB {
       ? and(isNull(conversations.deletedAt), eq(conversations.userId, userId))
       : isNull(conversations.deletedAt);
 
-    return await db
+    return await getDb()
       .select()
       .from(conversations)
       .where(whereConditions)

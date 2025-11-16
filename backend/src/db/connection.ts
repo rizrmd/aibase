@@ -1,28 +1,27 @@
-import { drizzle } from 'drizzle-orm/bun-sql';
-import { SQL } from 'bun';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import * as schema from './schema';
 
 /**
- * Database connection configuration using Bun's native SQL driver
+ * Database connection configuration using PostgreSQL
  *
  * Benefits:
- * - Zero dependencies (built into Bun runtime)
- * - Native performance with optimizations
- * - Automatic connection pooling
- * - Support for prepared statements and query pipelining
+ * - Robust connection pooling
+ * - Production-ready PostgreSQL driver
+ * - Type-safe queries with Drizzle ORM
  */
 
 /**
- * Bun SQL client instance
+ * PostgreSQL connection pool instance
  * Singleton pattern to ensure single instance
  */
-let sqlClient: SQL | null = null;
+let pool: Pool | null = null;
 
 /**
- * Get or create the Bun SQL client
+ * Get or create PostgreSQL connection pool
  */
-export function getClient(): SQL {
-  if (!sqlClient) {
+export function getClient(): Pool {
+  if (!pool) {
     const connectionString = process.env.DATABASE_URL;
 
     if (!connectionString) {
@@ -31,34 +30,35 @@ export function getClient(): SQL {
       );
     }
 
-    // Initialize Bun SQL client with connection pooling
-    sqlClient = new SQL({
-      url: connectionString,
-      // Connection pool configuration
+    // Initialize PostgreSQL connection pool
+    pool = new Pool({
+      connectionString,
       max: 20, // Maximum number of connections
-      idleTimeout: 30, // Close idle connections after 30 seconds
-      connectionTimeout: 10, // Connection timeout in seconds
+      idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+      connectionTimeoutMillis: 10000, // Connection timeout in milliseconds
     });
   }
 
-  return sqlClient;
+  return pool;
 }
 
 /**
  * Drizzle database instance
- * Provides type-safe database queries using Bun's native SQL driver
+ * Provides type-safe database queries using PostgreSQL
+ * Lazy initialization - only connects when actually used
  */
-export const db = drizzle({ client: getClient(), schema });
+export function getDb() {
+  return drizzle({ client: getClient(), schema });
+}
 
 /**
  * Close database connection
  * Call this when shutting down the application
  */
 export async function closeConnection(): Promise<void> {
-  if (sqlClient) {
-    // Bun SQL client doesn't expose a close method
-    // Connections are managed automatically
-    sqlClient = null;
+  if (pool) {
+    await pool.end();
+    pool = null;
   }
 }
 
@@ -69,8 +69,8 @@ export async function closeConnection(): Promise<void> {
 export async function testConnection(): Promise<boolean> {
   try {
     const client = getClient();
-    const result = await client`SELECT NOW() as now`;
-    return result.length > 0;
+    const result = await client.query('SELECT NOW() as now');
+    return result.rows.length > 0;
   } catch (error) {
     console.error('Database connection test failed:', error);
     return false;
@@ -78,19 +78,17 @@ export async function testConnection(): Promise<boolean> {
 }
 
 /**
- * Execute a raw SQL query using Bun's native tagged template
+ * Execute a raw SQL query using PostgreSQL
  * Use sparingly - prefer Drizzle ORM queries for type safety
  *
  * @example
- * const users = await executeRawQuery`SELECT * FROM users WHERE id = ${userId}`;
+ * const users = await executeRawQuery('SELECT * FROM users WHERE id = $1', [userId]);
  */
 export async function executeRawQuery<T = any>(
-  strings: TemplateStringsArray,
-  ...values: any[]
+  query: string,
+  values: any[] = []
 ): Promise<T[]> {
   const client = getClient();
-  // Reconstruct the tagged template call
-  const query = String.raw({ raw: strings }, ...values);
-  const result = await client`${query}`;
-  return result as T[];
+  const result = await client.query(query, values);
+  return result.rows as T[];
 }

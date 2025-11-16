@@ -90,8 +90,8 @@ export function startServer(port = 3000) {
         });
       }
 
-      // Serve static files from frontend/dist
-      const frontendPath = new URL('../../../frontend/dist', import.meta.url).pathname;
+      // Serve static files from frontend/build
+      const frontendPath = new URL('../../../frontend/build', import.meta.url).pathname;
       let filePath = frontendPath + url.pathname;
 
       // Try to serve the requested file
