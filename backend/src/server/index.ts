@@ -67,7 +67,7 @@ export class WebSocketServer {
 
   constructor(options: ServerOptions = {}) {
     this.options = {
-      port: 3000,
+      port: 5040,
       hostname: "localhost",
       development: false,
       maxConnections: 100,
