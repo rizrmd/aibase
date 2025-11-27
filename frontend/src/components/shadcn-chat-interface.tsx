@@ -87,22 +87,33 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       }
 
       if (data.isAccumulated) {
-        // For accumulated chunks from active streams, create a complete message immediately
+        // For accumulated chunks, check if we already have an assistant message and update it
+        // This prevents creating duplicate messages when both accumulated chunks and completions are received
         const trimmedContent = data.chunk.trim();
-        const messageId = `accumulated_${Date.now()}`;
-        const newMessage: Message = {
-          id: messageId,
-          role: "assistant",
-          content: trimmedContent,
-          createdAt: new Date(),
-        };
+        const assistantMessages = messages.filter(msg => msg.role === 'assistant');
 
-        console.log("Creating complete message from accumulated content:", { id: messageId, contentLength: trimmedContent.length });
-        setMessages(prev => {
-          // Check if we already have this exact message to avoid duplicates
-          const exists = prev.some(msg => msg.content === trimmedContent);
-          return exists ? prev : [...prev, newMessage];
-        });
+        if (assistantMessages.length > 0) {
+          // Update the most recent assistant message with accumulated content
+          const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+          console.log("Updating last assistant message with accumulated chunk:", { id: lastAssistantMessage.id, contentLength: trimmedContent.length });
+          setMessages(prev => prev.map(msg =>
+            msg.id === lastAssistantMessage.id
+              ? { ...msg, content: trimmedContent }
+              : msg
+          ));
+        } else {
+          // Create a new message if no assistant message exists
+          const messageId = `accumulated_${Date.now()}`;
+          const newMessage: Message = {
+            id: messageId,
+            role: "assistant",
+            content: trimmedContent,
+            createdAt: new Date(),
+          };
+
+          console.log("Creating new message from accumulated chunk:", { id: messageId, contentLength: trimmedContent.length });
+          setMessages(prev => [...prev, newMessage]);
+        }
         return;
       }
 
@@ -149,14 +160,22 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       });
 
       if (data.isAccumulated) {
-        // For accumulated completions, create a complete message if it doesn't exist
-        const messageExists = messages.some(msg =>
-          msg.role === 'assistant' &&
-          msg.content === data.fullText
-        );
+        // For accumulated completions, find any recent assistant message and update it
+        // or create a new one if none exists
+        const assistantMessages = messages.filter(msg => msg.role === 'assistant');
 
-        if (!messageExists) {
-          console.log("Creating complete message from accumulated completion");
+        if (assistantMessages.length > 0) {
+          // Update the most recent assistant message
+          const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+          console.log("Updating last assistant message with accumulated completion");
+          setMessages(prev => prev.map(msg =>
+            msg.id === lastAssistantMessage.id
+              ? { ...msg, content: data.fullText }
+              : msg
+          ));
+        } else {
+          // Create a new message if no assistant message exists
+          console.log("Creating new message from accumulated completion");
           const newMessage: Message = {
             id: `accumulated_complete_${Date.now()}`,
             role: "assistant",
@@ -164,8 +183,6 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
             createdAt: new Date(),
           };
           setMessages(prev => [...prev, newMessage]);
-        } else {
-          console.log("Accumulated completion message already exists, skipping");
         }
       } else {
         // Normal completion - finalize the current message if it exists
