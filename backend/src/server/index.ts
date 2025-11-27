@@ -100,11 +100,14 @@ export class WebSocketServer {
         const url = new URL(req.url);
         
         // Handle WebSocket upgrade requests
-        console.log("Incoming request:", req.method, req.url);
         if (url.pathname.startsWith("/api/ws")) {
-          console.log("WebSocket upgrade request for:", req.url);
-          const upgraded = server.upgrade(req);
-          console.log("WebSocket upgrade result:", upgraded);
+          // Extract client ID from URL before upgrading
+          const clientId = url.searchParams.get("clientId");
+
+          // Pass client ID as data to WebSocket connection
+          const upgraded = server.upgrade(req, {
+            data: { clientId }
+          });
           if (upgraded) {
             return undefined; // WebSocket connection established
           }

@@ -201,7 +201,7 @@ export function Chat({
         />
       ) : null}
 
-      <div className="max-w-[650px] w-full">
+      <div className="max-w-[650px] w-full mx-auto pt-10">
 
         {messages.length > 0 ? (
           <ChatMessages messages={messages}>

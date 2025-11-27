@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, type ChangeEvent } from "react";
-import { Chat } from "@/components/ui/chat";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { WSClient } from "@/lib/ws/ws-client";
+import { Chat } from "@/components/ui/chat";
 import type { Message } from "@/components/ui/chat-message";
+import { useClientId } from "@/lib/client-id";
+import { useWSConnection } from "@/lib/ws/ws-connection-manager";
 import {
-  Square,
-  Trash2,
-  AlertCircle,
+  AlertCircle
 } from "lucide-react";
+import { lazy, useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+
+// Lazy load debug component only in development
+const ClientIdDebug = process.env.NODE_ENV === "development"
+  ? lazy(() => import("@/components/debug/client-id-debug").then(mod => ({ default: mod.ClientIdDebug })))
+  : null;
 
 interface ShadcnChatInterfaceProps {
   wsUrl: string;
@@ -24,27 +26,36 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [error, setError] = useState<string | null>(null);
-  const wsClientRef = useRef<WSClient | null>(null);
+
+  // Use the client ID management hook
+  const { clientId, metadata: clientMetadata } = useClientId();
+
+  
+  // Use WebSocket connection manager - this ensures only one connection even with Strict Mode
+  const wsClient = useWSConnection({
+    url: wsUrl,
+    reconnectAttempts: 5,
+    reconnectDelay: 1000,
+    heartbeatInterval: 30000,
+    timeout: 10000,
+  });
 
   const currentMessageRef = useRef<string | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
 
-  // Initialize WebSocket client
+  // Set up WebSocket event handlers using the managed connection
   useEffect(() => {
-    const wsClient = new WSClient({
-      url: wsUrl,
-      reconnectAttempts: 5,
-      reconnectDelay: 1000,
-      heartbeatInterval: 30000,
-      timeout: 10000,
-    });
+    if (!wsClient) return;
 
-    wsClientRef.current = wsClient;
+    // Log client ID information for debugging
+    console.log("ShadcnChatInterface: Setting up event handlers with Client ID:", clientId);
 
     // Set up event handlers
     const handleConnected = () => {
       setConnectionStatus("connected");
       setError(null);
+      // Request message history from server when connected
+      wsClient.getHistory();
     };
 
     const handleDisconnected = () => {
@@ -124,6 +135,27 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       }
     };
 
+    const handleHistoryResponse = (data: { messages?: any[] }) => {
+      if (data.messages && Array.isArray(data.messages)) {
+        // Convert server messages to Message format
+        const serverMessages: Message[] = data.messages.map((msg, index) => ({
+          id: msg.id || `server_msg_${index}`,
+          role: msg.role || "assistant",
+          content: msg.content || msg.text || "",
+          createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+        }));
+
+        console.log(`Loaded ${serverMessages.length} messages from server`);
+        setMessages(serverMessages);
+      }
+    };
+
+    const handleControl = (data: any) => {
+      if (data.type === "history_response") {
+        handleHistoryResponse(data);
+      }
+    };
+
     // Register event listeners
     wsClient.on("connected", handleConnected);
     wsClient.on("disconnected", handleDisconnected);
@@ -133,20 +165,29 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
     wsClient.on("llm_complete", handleLLMComplete);
     wsClient.on("communication_error", handleCommunicationError);
     wsClient.on("status", handleStatus);
+    wsClient.on("control", handleControl);
 
-    // Connect to WebSocket
+    // Connect to WebSocket (connection manager handles multiple calls gracefully)
     wsClient.connect().catch(handleError);
 
-    // Cleanup function
+    // Cleanup function - just remove event listeners, connection manager handles disconnection
     return () => {
-      wsClient.disconnect();
+      wsClient.off("connected", handleConnected);
+      wsClient.off("disconnected", handleDisconnected);
+      wsClient.off("reconnecting", handleReconnecting);
+      wsClient.off("error", handleError);
+      wsClient.off("llm_chunk", handleLLMChunk);
+      wsClient.off("llm_complete", handleLLMComplete);
+      wsClient.off("communication_error", handleCommunicationError);
+      wsClient.off("status", handleStatus);
+      wsClient.off("control", handleControl);
     };
-  }, [wsUrl]);
+  }, [wsClient, clientId]); // Include wsClient and clientId in dependencies
 
   const handleSubmit = useCallback(async (e?: { preventDefault?: () => void }) => {
     e?.preventDefault?.();
 
-    if (!input.trim() || !wsClientRef.current?.isConnected()) {
+    if (!input.trim() || !wsClient?.isConnected()) {
       return;
     }
 
@@ -164,7 +205,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
     setError(null);
 
     try {
-      await wsClientRef.current!.sendMessage(messageText);
+      await wsClient.sendMessage(messageText);
     } catch (error) {
       setIsLoading(false);
       setError(error instanceof Error ? error.message : "Failed to send message");
@@ -172,7 +213,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       // Remove the user message if send failed
       setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
     }
-  }, [input]);
+  }, [input, wsClient]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -181,15 +222,15 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   const clearHistory = useCallback(() => {
     setMessages([]);
     setError(null);
-    wsClientRef.current?.clearHistory();
-  }, []);
+    wsClient?.clearHistory();
+  }, [wsClient]);
 
   const abort = useCallback(() => {
     setIsLoading(false);
     currentMessageRef.current = null;
     currentMessageIdRef.current = null;
-    wsClientRef.current?.abort();
-  }, []);
+    wsClient?.abort();
+  }, [wsClient]);
 
   const append = useCallback((message: { role: "user"; content: string }) => {
     const newMessage: Message = {
@@ -245,12 +286,12 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   // Update connection status based on wsClient
   useEffect(() => {
     const checkConnection = () => {
-      setIsConnected(wsClientRef.current?.isConnected() ?? false);
+      setIsConnected(wsClient?.isConnected() ?? false);
     };
 
     const interval = setInterval(checkConnection, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [wsClient]);
 
   return (
     <div className={`flex flex-col h-screen ${className}`}>
@@ -262,6 +303,15 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
           <AlertDescription className="text-red-800">{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Development Debug Panel */}
+      {/* {ClientIdDebug && (
+        <div className="absolute top-4 right-4 z-50">
+          <Suspense fallback={<div className="text-xs text-gray-500">Loading debug...</div>}>
+            <ClientIdDebug />
+          </Suspense>
+        </div>
+      )} */}
 
       <Chat
         messages={messages}

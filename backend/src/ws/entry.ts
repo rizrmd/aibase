@@ -13,6 +13,7 @@ import { Conversation, Tool } from "../llm/conversation";
 import { getBuiltinTools } from "../tools/builtin-tools";
 import { getAllAvailableTools } from "../tools/conversation-tools";
 import { WSEventEmitter } from "./events";
+import { MessagePersistence } from "./message-persistence";
 
 // Use Bun's built-in WebSocket type for compatibility
 // This matches Bun's ServerWebSocket interface
@@ -31,6 +32,7 @@ export class WSServer extends WSEventEmitter {
   private connections = new Map<ServerWebSocket, ConnectionInfo>();
   private sessions = new Map<string, SessionInfo>();
   private heartbeats = new Map<ServerWebSocket, NodeJS.Timeout>();
+  private messagePersistence: MessagePersistence;
 
   constructor(options: WSServerOptions = {}) {
     super();
@@ -41,6 +43,7 @@ export class WSServer extends WSEventEmitter {
       conversationOptions: {},
       ...options,
     };
+    this.messagePersistence = MessagePersistence.getInstance();
   }
 
   /**
@@ -139,7 +142,18 @@ export class WSServer extends WSEventEmitter {
   }
 
   private async handleConnectionOpen(ws: ServerWebSocket): Promise<void> {
-    const clientId = this.generateClientId();
+    // Extract client ID from URL parameters if provided
+    let urlClientId: string | null = null;
+
+    try {
+      // Extract client ID from the data passed during upgrade
+      urlClientId = ws.data?.clientId || null;
+    } catch (error) {
+      console.warn("Failed to extract client ID from WebSocket data:", error);
+    }
+
+    // Use provided client ID or generate a new one
+    const clientId = urlClientId || this.generateClientId();
     const sessionId = this.generateSessionId();
 
     const connectionInfo: ConnectionInfo = {
@@ -163,8 +177,9 @@ export class WSServer extends WSEventEmitter {
     };
     this.sessions.set(sessionId, sessionInfo);
 
-    // Create conversation for this session
-    const conversation = await this.createConversation();
+    // Create conversation for this session with existing history
+    const existingHistory = this.messagePersistence.getClientHistory(clientId);
+    const conversation = await this.createConversation(existingHistory);
     connectionInfo.conversation = conversation;
 
     // Start heartbeat for this connection
@@ -317,6 +332,10 @@ export class WSServer extends WSEventEmitter {
           sessionId: connectionInfo.sessionId,
         },
       });
+
+      // Save updated conversation history to persistent storage
+      const currentHistory = conversation.history;
+      this.messagePersistence.setClientHistory(connectionInfo.clientId, currentHistory);
     } catch (error: any) {
       console.error("LLM Processing Error:", error);
       // Send error response but don't disconnect
@@ -368,6 +387,8 @@ export class WSServer extends WSEventEmitter {
         case "clear_history":
           if (conversation) {
             conversation.clearHistory();
+            // Also clear from persistent storage
+            this.messagePersistence.clearClientHistory(connectionInfo.clientId);
             this.sendToWebSocket(ws, {
               type: "control_response",
               id: message.id,
@@ -378,15 +399,14 @@ export class WSServer extends WSEventEmitter {
           break;
 
         case "get_history":
-          if (conversation) {
-            const history = conversation.history;
-            this.sendToWebSocket(ws, {
-              type: "control_response",
-              id: message.id,
-              data: { status: "history", history, type: control.type },
-              metadata: { timestamp: Date.now() },
-            });
-          }
+          // Get history from persistent storage (which should match conversation history)
+          const history = this.messagePersistence.getClientHistory(connectionInfo.clientId);
+          this.sendToWebSocket(ws, {
+            type: "control_response",
+            id: message.id,
+            data: { status: "history", history, type: control.type },
+            metadata: { timestamp: Date.now() },
+          });
           break;
 
         case "get_status":
@@ -441,28 +461,15 @@ export class WSServer extends WSEventEmitter {
     }
   }
 
-  private async createConversation(): Promise<Conversation> {
+  private async createConversation(initialHistory: any[] = []): Promise<Conversation> {
     const tools = await this.getDefaultTools();
     return new Conversation({
       systemPrompt: `You are a helpful AI assistant connected via WebSocket.
 You have access to tools that can help you provide better responses.
 Always be helpful and conversational.`,
+      initialHistory,
       tools,
-      hooks: {
-        message: {
-          chunk: (_chunk: string) => {
-            // This is handled in the message processing logic
-          },
-        },
-        tools: {
-          before: async (_toolCallId, _toolName, _args) => {
-            // Could broadcast tool call start to all clients if needed
-          },
-          after: async (_toolCallId, _toolName, _args, _result) => {
-            // Could broadcast tool call result to all clients if needed
-          },
-        },
-      },
+      hooks: {},
       ...this.options.conversationOptions,
     });
   }
@@ -481,7 +488,6 @@ Always be helpful and conversational.`,
 
     // Fallback to basic tools
     const basicTools = getBuiltinTools();
-    console.log(`Using basic tool system with ${basicTools.length} tools`);
     return basicTools;
   }
 

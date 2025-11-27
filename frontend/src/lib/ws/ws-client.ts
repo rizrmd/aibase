@@ -16,6 +16,7 @@ import type {
 } from "../types/model";
 
 import { WSEventEmitter } from "./ws-emitter";
+import { ClientIdManager } from "../client-id";
 
 export class WSClient extends WSEventEmitter {
   private ws: WebSocket | null = null;
@@ -281,8 +282,9 @@ export class WSClient extends WSEventEmitter {
   }
 
   private async handleMessage(message: WSMessage): Promise<void> {
-    // Handle pending message responses
-    if (message.type && this.pendingMessages.has(message.id)) {
+    // Handle pending message responses only for completion messages
+    if (message.type && this.pendingMessages.has(message.id) &&
+        (message.type === "llm_complete" || message.type === "control_response" || message.type === "error")) {
       const pending = this.pendingMessages.get(message.id)!;
       if (pending.timeout) clearTimeout(pending.timeout);
       this.pendingMessages.delete(message.id);
@@ -335,13 +337,20 @@ export class WSClient extends WSEventEmitter {
         break;
 
       case "status":
-        // Store client and session IDs from server response
-        if (message.data?.clientId) {
-          this.setClientId(message.data.clientId);
-        }
+        // Store session ID from server response
         if (message.data?.sessionId) {
           this.state.sessionId = message.data.sessionId;
         }
+
+        // Only accept server client ID if we don't already have one
+        // This preserves the client-side generated ID across refreshes
+        if (message.data?.clientId && !ClientIdManager.hasClientId()) {
+          this.setClientId(message.data.clientId);
+          console.log("WSClient: Accepted server client ID (no existing ID):", message.data.clientId);
+        } else if (message.data?.clientId) {
+          console.log("WSClient: Ignoring server client ID, keeping existing:", message.data.clientId);
+        }
+
         this.emit("status", message.data);
         break;
 
@@ -476,30 +485,13 @@ export class WSClient extends WSEventEmitter {
   }
 
   private getClientId(): string {
-    // Generate or retrieve a persistent client ID
-    if (typeof window !== "undefined") {
-      // Browser environment
-      let clientId = localStorage.getItem("ws_client_id");
-      if (!clientId) {
-        clientId = `client_${Date.now()}_${Math.random()
-          .toString(36)
-          .substring(2, 11)}`;
-        localStorage.setItem("ws_client_id", clientId);
-      }
-      return clientId;
-    } else {
-      // Node.js environment
-      return `client_${Date.now()}_${Math.random()
-        .toString(36)
-        .substring(2, 11)}`;
-    }
+    // Use the shared ClientIdManager for consistency
+    return ClientIdManager.getClientId();
   }
 
   private setClientId(clientId: string): void {
-    // Store the client ID (useful when server assigns one)
-    if (typeof window !== "undefined") {
-      localStorage.setItem("ws_client_id", clientId);
-    }
+    // Use the shared ClientIdManager for consistency
+    ClientIdManager.setClientId(clientId);
     // Update the connection state
     this.state.clientId = clientId;
   }
