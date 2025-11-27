@@ -90,7 +90,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
         // For accumulated chunks, check if we already have an assistant message and update it
         // This prevents creating duplicate messages when both accumulated chunks and completions are received
         const trimmedContent = data.chunk.trim();
-        const assistantMessages = messages.filter(msg => msg.role === 'assistant');
+        const assistantMessages = messages.filter(msg => msg.role === 'assistant' && msg.content.length > 0);
 
         if (assistantMessages.length > 0) {
           // Update the most recent assistant message with accumulated content
@@ -102,7 +102,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
               : msg
           ));
         } else {
-          // Create a new message if no assistant message exists
+          // Create a new message if no non-empty assistant message exists
           const messageId = `accumulated_${Date.now()}`;
           const newMessage: Message = {
             id: messageId,
@@ -160,9 +160,9 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       });
 
       if (data.isAccumulated) {
-        // For accumulated completions, find any recent assistant message and update it
+        // For accumulated completions, find any recent non-empty assistant message and update it
         // or create a new one if none exists
-        const assistantMessages = messages.filter(msg => msg.role === 'assistant');
+        const assistantMessages = messages.filter(msg => msg.role === 'assistant' && msg.content.length > 0);
 
         if (assistantMessages.length > 0) {
           // Update the most recent assistant message
@@ -174,7 +174,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
               : msg
           ));
         } else {
-          // Create a new message if no assistant message exists
+          // Create a new message if no non-empty assistant message exists
           console.log("Creating new message from accumulated completion");
           const newMessage: Message = {
             id: `accumulated_complete_${Date.now()}`,
@@ -236,13 +236,16 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       console.log("handleHistoryResponse called with:", data);
       if (data.messages && Array.isArray(data.messages)) {
         console.log("Converting messages:", data.messages);
-        // Convert server messages to Message format
-        const serverMessages: Message[] = data.messages.map((msg, index) => ({
-          id: msg.id || `server_msg_${index}`,
-          role: msg.role || "assistant",
-          content: msg.content || msg.text || "",
-          createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-        }));
+        // Convert server messages to Message format and filter out empty messages
+        const serverMessages: Message[] = data.messages
+          .map((msg, index) => ({
+            id: msg.id || `server_msg_${index}`,
+            role: msg.role || "assistant",
+            content: msg.content || msg.text || "",
+            createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+          }))
+          .filter(msg => msg.content.trim().length > 0); // Filter out empty messages
+
         console.log("Setting messages to:", serverMessages);
         console.log("First message structure:", serverMessages[0]);
         console.log("Messages state will be updated to:", serverMessages.length, "messages");
