@@ -5,10 +5,12 @@ import { Chat } from "@/components/ui/chat";
 import type { Message } from "@/components/ui/chat-message";
 import { useConvId } from "@/lib/conv-id";
 import { useWSConnection } from "@/lib/ws/ws-connection-manager";
+import { activeTabManager } from "@/lib/ws/active-tab-manager";
 import {
   AlertCircle
 } from "lucide-react";
 import { lazy, useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { flushSync } from "react-dom";
 
 // Lazy load debug component only in development
 const ConvIdDebug = process.env.NODE_ENV === "development"
@@ -44,13 +46,30 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   const currentMessageRef = useRef<string | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
 
+  // Create a stable component reference for tab management
+  const componentRef = useRef({});
+
+  // Debug: Track messages state changes
+  useEffect(() => {
+    console.log(`[State-Effect] Messages state changed:`, {
+      count: messages.length,
+      messages: messages.map(m => ({ id: m.id, role: m.role, contentLength: m.content.length, contentPreview: m.content.substring(0, 50) }))
+    });
+  }, [messages]);
+
   // Set up WebSocket event handlers using the managed connection
   useEffect(() => {
     if (!wsClient) return;
 
-    
+    console.log("[Setup] Registering event handlers for convId:", convId);
+
+    // Register this tab as active for this conversation
+    activeTabManager.registerTab(componentRef.current, convId);
+
     // Set up event handlers
     const handleConnected = () => {
+      // Only active tab handles connection events
+      if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
       setConnectionStatus("connected");
       setError(null);
       // Request message history from server when connected
@@ -71,7 +90,9 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       setIsLoading(false);
     };
 
-    const handleLLMChunk = (data: { chunk: string; sequence?: number; isAccumulated?: boolean }) => {
+    const handleLLMChunk = (data: { chunk: string; messageId?: string; sequence?: number; isAccumulated?: boolean }) => {
+      // Only active tab processes chunks
+      if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
       console.log("ShadcnChatInterface: handleLLMChunk called with:", data);
 
       // Don't process empty chunks
@@ -80,87 +101,124 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
         return;
       }
 
-      // For accumulated chunks, only process if they have substantial content
-      if (data.isAccumulated && data.chunk.length < 10) {
-        console.log("Skipping very short accumulated chunk:", data.chunk.length, "chars");
-        return;
-      }
+      const messageId = data.messageId || `msg_${Date.now()}_assistant`;
 
-      if (data.isAccumulated) {
-        // For accumulated chunks, check if we already have an assistant message and update it
-        // This prevents creating duplicate messages when both accumulated chunks and completions are received
-        const trimmedContent = data.chunk.trim();
-        const assistantMessages = messages.filter(msg => msg.role === 'assistant' && msg.content.length > 0);
+      flushSync(() => {
+        setMessages(prev => {
+          console.log(`[State] Current messages count: ${prev.length}, isAccumulated: ${data.isAccumulated}`);
 
-        if (assistantMessages.length > 0) {
-          // Update the most recent assistant message with accumulated content
-          const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
-          console.log("Updating last assistant message with accumulated chunk:", { id: lastAssistantMessage.id, contentLength: trimmedContent.length });
-          setMessages(prev => prev.map(msg =>
-            msg.id === lastAssistantMessage.id
-              ? { ...msg, content: trimmedContent }
-              : msg
-          ));
+        if (data.isAccumulated) {
+          // Accumulated chunks on reconnect
+          console.log(`[Chunk-Accumulated] Received ${data.chunk.length} chars for message ${messageId}`);
+
+          // First, try to find message by ID
+          let existingIndex = prev.findIndex(m => m.id === messageId);
+
+          // If not found by ID, look for the last empty assistant message (from history)
+          if (existingIndex === -1) {
+            console.log(`[Chunk-Accumulated] Message ID ${messageId} not found, looking for empty assistant message`);
+            existingIndex = prev.findIndex(m => m.role === "assistant" && (!m.content || m.content.trim() === ''));
+            if (existingIndex !== -1) {
+              console.log(`[Chunk-Accumulated] Found empty assistant message at index ${existingIndex}, will update it and change ID to ${messageId}`);
+            }
+          }
+
+          console.log(`[Chunk-Accumulated] Final message index: ${existingIndex}`);
+
+          if (existingIndex !== -1) {
+            // Update existing message with accumulated content and correct ID
+            console.log(`[Chunk-Accumulated] Updating message at index ${existingIndex} with content length ${data.chunk.length}`);
+            const updatedMessages = prev.map((msg, idx) =>
+              idx === existingIndex
+                ? { ...msg, id: messageId, content: data.chunk }
+                : msg
+            );
+
+            // Store in refs for completion handler
+            currentMessageIdRef.current = messageId;
+            currentMessageRef.current = data.chunk;
+
+            console.log(`[Chunk-Accumulated] Returning ${updatedMessages.length} messages`);
+            return updatedMessages;
+          } else {
+            // Create new message with accumulated content
+            console.log(`[Chunk-Accumulated] Creating new message ${messageId} with accumulated content (${data.chunk.length} chars)`);
+            const newMessage: Message = {
+              id: messageId,
+              role: "assistant",
+              content: data.chunk,
+              createdAt: new Date(),
+            };
+
+            // Store in refs for completion handler
+            currentMessageIdRef.current = messageId;
+            currentMessageRef.current = data.chunk;
+
+            const newMessages = [...prev, newMessage];
+            console.log(`[Chunk-Accumulated] Returning ${newMessages.length} messages (added new)`);
+            return newMessages;
+          }
         } else {
-          // Create a new message if no non-empty assistant message exists
-          const messageId = `accumulated_${Date.now()}`;
-          const newMessage: Message = {
-            id: messageId,
-            role: "assistant",
-            content: trimmedContent,
-            createdAt: new Date(),
-          };
+          // Real-time chunk - check if message already exists in array
+          const existingIndex = prev.findIndex(m => m.id === messageId);
+          console.log(`[Chunk] Searching for message ${messageId}, found at index: ${existingIndex}, prev.length: ${prev.length}`);
 
-          console.log("Creating new message from accumulated chunk:", { id: messageId, contentLength: trimmedContent.length });
-          setMessages(prev => [...prev, newMessage]);
+          if (existingIndex === -1) {
+            // Create new message
+            console.log(`[Chunk] Creating new message: ${messageId} with chunk "${data.chunk.substring(0, 20)}..."`);
+            const newMessage: Message = {
+              id: messageId,
+              role: "assistant",
+              content: data.chunk,
+              createdAt: new Date(),
+            };
+
+            // Store in refs
+            currentMessageIdRef.current = messageId;
+            currentMessageRef.current = data.chunk;
+
+            const newArray = [...prev, newMessage];
+            console.log(`[Chunk] Returning new array with ${newArray.length} messages`);
+            return newArray;
+          } else {
+            // Append to existing message
+            const existingMessage = prev[existingIndex];
+            console.log(`[Chunk] Found existing message at index ${existingIndex}, current content length: ${existingMessage.content.length}`);
+            const newContent = existingMessage.content + data.chunk;
+
+            // Update refs
+            currentMessageIdRef.current = messageId;
+            currentMessageRef.current = newContent;
+
+            console.log(`[Chunk] Appending "${data.chunk.substring(0, 20)}..." (chunk size: ${data.chunk.length}) -> total: ${newContent.length} chars`);
+
+            const updatedArray = prev.map((msg, idx) =>
+              idx === existingIndex
+                ? { ...msg, content: newContent }
+                : msg
+            );
+            console.log(`[Chunk] Returning updated array with ${updatedArray.length} messages`);
+            return updatedArray;
+          }
         }
-        return;
-      }
+        });
+      });
 
-      // Normal streaming - append to existing message or create new one
-      if (currentMessageRef.current && currentMessageIdRef.current) {
-        // Append to existing message (real-time streaming)
-        currentMessageRef.current += data.chunk;
-
-        console.log("Appending to existing message, new length:", currentMessageRef.current.length);
-        setMessages(prev => prev.map(msg =>
-          msg.id === currentMessageIdRef.current
-            ? { ...msg, content: currentMessageRef.current! }
-            : msg
-        ));
-      } else {
-        // Only start a new message if the chunk has substantial content
-        if (data.chunk.length < 3) {
-          console.log("Skipping very short initial chunk:", data.chunk.length, "chars");
-          return;
-        }
-
-        // Start a new assistant message
-        const messageId = `msg_${Date.now()}_assistant`;
-        currentMessageIdRef.current = messageId;
-        currentMessageRef.current = data.chunk;
-
-        const newMessage: Message = {
-          id: messageId,
-          role: "assistant",
-          content: data.chunk,
-          createdAt: new Date(),
-        };
-
-        console.log("Creating new assistant message:", { id: messageId, content: data.chunk.substring(0, 50) + '...' });
-        setMessages(prev => [...prev, newMessage]);
-      }
+      // Add logging to verify state update completed
+      console.log(`[State] setMessages completed for ${messageId}`);
     };
 
     const handleLLMComplete = (data: { fullText: string; messageId: string; isAccumulated?: boolean }) => {
+      // Only active tab processes completion
+      if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
       console.log("ShadcnChatInterface: handleLLMComplete called with:", {
         messageId: data.messageId,
         contentLength: data.fullText.length,
         isAccumulated: data.isAccumulated
       });
 
-      // Always ensure we have a non-empty fullText
-      const fullText = data.fullText?.trim() || '';
+      // Don't process empty completions
+      const fullText = data.fullText || '';
       if (!fullText) {
         console.log("Skipping empty completion");
         currentMessageRef.current = null;
@@ -169,89 +227,46 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
         return;
       }
 
-      // Use functional setState to avoid stale closure issues
       setMessages(prev => {
-        console.log("handleLLMComplete: Current state has", prev.length, "messages");
+        console.log(`[Complete] Processing completion for message ${data.messageId} (${fullText.length} chars, accumulated: ${data.isAccumulated})`);
 
-        if (data.isAccumulated) {
-          console.log("Handling accumulated completion with", fullText.length, "chars");
+        // Try to update message by ID
+        const messageIndex = prev.findIndex(m => m.id === data.messageId);
 
-          // Find all assistant messages in the current state
-          const assistantMessages = prev.filter(msg => msg.role === 'assistant');
+        if (messageIndex !== -1) {
+          // Message already exists from streaming chunks
+          const existingMessage = prev[messageIndex];
+          console.log(`[Complete] Message ${data.messageId} already exists with ${existingMessage.content.length} chars from streaming`);
+          console.log(`[Complete] Backend fullText has ${fullText.length} chars`);
 
-          // Strategy 1: Try to match by messageId if provided
-          if (data.messageId) {
-            const matchingMessage = assistantMessages.find(msg => msg.id === data.messageId);
-            if (matchingMessage) {
-              console.log("Updating message by ID:", data.messageId);
-              return prev.map(msg =>
-                msg.id === data.messageId
-                  ? { ...msg, content: fullText }
-                  : msg
-              );
-            }
+          // Don't replace content if we already accumulated chunks during streaming
+          // Only use fullText if the message was created without chunks (e.g., on reconnect)
+          if (existingMessage.content.length > 0 && !data.isAccumulated) {
+            console.log(`[Complete] Keeping streamed content (${existingMessage.content.length} chars), ignoring fullText`);
+            return prev; // No change needed, we already have the complete content from streaming
           }
 
-          // Strategy 2: If no ID match, update the most recent assistant message
-          if (assistantMessages.length > 0) {
-            const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
-            console.log("Updating most recent assistant message:", {
-              messageId: lastAssistantMessage.id,
-              currentLength: lastAssistantMessage.content.length,
-              newLength: fullText.length
-            });
-
-            return prev.map(msg =>
-              msg.id === lastAssistantMessage.id
-                ? { ...msg, content: fullText }
-                : msg
-            );
-          }
-
-          // Strategy 3: If no assistant messages exist, create a new one
-          console.log("Creating new message from accumulated completion");
-          const newMessage: Message = {
-            id: `accumulated_complete_${Date.now()}`,
-            role: "assistant",
-            content: fullText,
-            createdAt: new Date(),
-          };
-          return [...prev, newMessage];
-        } else {
-          // Normal completion handling
-          if (currentMessageIdRef.current) {
-            console.log("Finalizing current message:", currentMessageIdRef.current);
-            return prev.map(msg =>
-              msg.id === currentMessageIdRef.current
-                ? { ...msg, content: fullText }
-                : msg
-            );
-          } else if (data.messageId) {
-            // Try to find message by ID in current state
-            const messageToUpdate = prev.find(msg => msg.id === data.messageId);
-            if (messageToUpdate) {
-              console.log("Updating message by ID:", data.messageId);
-              return prev.map(msg =>
-                msg.id === data.messageId
-                  ? { ...msg, content: fullText }
-                  : msg
-              );
-            }
-          }
-
-          // If still no update, create a new message
-          console.log("Creating new message from completion");
-          const newMessage: Message = {
-            id: `msg_${Date.now()}_assistant`,
-            role: "assistant",
-            content: fullText,
-            createdAt: new Date(),
-          };
-          return [...prev, newMessage];
+          // Use fullText only for accumulated messages on reconnect
+          console.log(`[Complete] Using fullText for ${data.isAccumulated ? 'accumulated' : 'empty'} message`);
+          return prev.map((msg, idx) =>
+            idx === messageIndex
+              ? { ...msg, content: fullText }
+              : msg
+          );
         }
+
+        // Message not found - create one with fullText
+        console.warn(`[Complete] Message ${data.messageId} not found, creating new message with fullText`);
+        const newMessage: Message = {
+          id: data.messageId,
+          role: "assistant",
+          content: fullText,
+          createdAt: new Date(),
+        };
+        return [...prev, newMessage];
       });
 
-      // Always reset refs and loading state
+      // Clear refs after completion
       currentMessageRef.current = null;
       currentMessageIdRef.current = null;
       setIsLoading(false);
@@ -286,18 +301,60 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
         console.log("Converting messages:", data.messages);
         // Convert server messages to Message format and filter out empty messages
         const serverMessages: Message[] = data.messages
-          .map((msg, index) => ({
-            id: msg.id || `server_msg_${index}`,
-            role: msg.role || "assistant",
-            content: msg.content || msg.text || "",
-            createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          }))
+          .map((msg, index) => {
+            // Prefer server-provided ID, fall back to generated ID
+            const messageId = msg.id || `history_${Date.now()}_${index}`;
+            console.log(`[History] Message ${index}: role=${msg.role}, id=${messageId}, content length=${(msg.content || '').length}`);
+
+            return {
+              id: messageId,
+              role: msg.role || "assistant",
+              content: msg.content || msg.text || "",
+              createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+            };
+          })
           .filter(msg => msg.content.trim().length > 0); // Filter out empty messages
 
         console.log("Setting messages to:", serverMessages);
         console.log("First message structure:", serverMessages[0]);
         console.log("Messages state will be updated to:", serverMessages.length, "messages");
-        setMessages(serverMessages);
+
+        // IMPORTANT: Merge with current state instead of replacing it
+        // This prevents history from overwriting streamed content
+        setMessages(prev => {
+          // If we have no current messages, just use server messages
+          if (prev.length === 0) {
+            console.log("[History] No existing messages, using server messages");
+            return serverMessages;
+          }
+
+          // If we have messages, merge smartly
+          console.log(`[History] Merging with ${prev.length} existing messages`);
+          const merged = [...serverMessages];
+
+          // For each existing message, check if it has MORE content than the server version
+          // This handles the case where streaming accumulated more content than what's in history
+          prev.forEach(existingMsg => {
+            const serverMsgIndex = merged.findIndex(m => m.id === existingMsg.id);
+
+            if (serverMsgIndex !== -1) {
+              const serverMsg = merged[serverMsgIndex];
+              // Keep the version with more content (streaming version beats history)
+              if (existingMsg.content.length > serverMsg.content.length) {
+                console.log(`[History] Keeping streamed version of ${existingMsg.id} (${existingMsg.content.length} chars > ${serverMsg.content.length} chars from history)`);
+                merged[serverMsgIndex] = existingMsg;
+              } else {
+                console.log(`[History] Using history version of ${existingMsg.id} (${serverMsg.content.length} chars >= ${existingMsg.content.length} chars from stream)`);
+              }
+            } else {
+              // Message exists locally but not in history (shouldn't happen, but handle it)
+              console.log(`[History] Message ${existingMsg.id} exists locally but not in history, keeping it`);
+              merged.push(existingMsg);
+            }
+          });
+
+          return merged;
+        });
       } else {
         console.log("No messages to process or messages is not an array");
       }
@@ -327,6 +384,11 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
 
     // Cleanup function - just remove event listeners, connection manager handles disconnection
     return () => {
+      console.log("[Setup] Cleaning up event handlers for convId:", convId);
+
+      // Unregister this tab
+      activeTabManager.unregisterTab(componentRef.current, convId);
+
       wsClient.off("connected", handleConnected);
       wsClient.off("disconnected", handleDisconnected);
       wsClient.off("reconnecting", handleReconnecting);

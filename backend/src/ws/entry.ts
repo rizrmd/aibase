@@ -33,7 +33,6 @@ interface StreamingState {
   messageId: string;
   chunks: string[];
   fullResponse: string;
-  isComplete: boolean;
   startTime: number;
   lastChunkTime: number;
 }
@@ -43,15 +42,16 @@ class StreamingManager {
 
   startStream(convId: string, messageId: string): void {
     const key = `${convId}_${messageId}`;
+    console.log(`[StreamingManager] Starting stream: ${key}`);
     this.activeStreams.set(key, {
       convId,
       messageId,
       chunks: [],
       fullResponse: '',
-      isComplete: false,
       startTime: Date.now(),
       lastChunkTime: Date.now(),
     });
+    console.log(`[StreamingManager] Total active streams: ${this.activeStreams.size}`);
   }
 
   addChunk(convId: string, messageId: string, chunk: string): void {
@@ -68,8 +68,11 @@ class StreamingManager {
     const key = `${convId}_${messageId}`;
     const stream = this.activeStreams.get(key);
     if (stream) {
-      stream.isComplete = true;
+      console.log(`[StreamingManager] Completing stream: ${key} (had ${stream.fullResponse.length} chars)`);
     }
+    // Remove the stream immediately after completion
+    this.activeStreams.delete(key);
+    console.log(`[StreamingManager] Total active streams: ${this.activeStreams.size}`);
   }
 
   getStream(convId: string, messageId: string): StreamingState | undefined {
@@ -79,31 +82,13 @@ class StreamingManager {
 
   getActiveStreamsForConv(convId: string): StreamingState[] {
     return Array.from(this.activeStreams.values()).filter(stream =>
-      stream.convId === convId && !stream.isComplete
+      stream.convId === convId
     );
   }
 
   getAllStreamsForConv(convId: string): StreamingState[] {
     return Array.from(this.activeStreams.values()).filter(stream =>
       stream.convId === convId
-    );
-  }
-
-  // Clean up old completed streams (older than 5 minutes)
-  cleanup(): void {
-    const cutoff = Date.now() - 5 * 60 * 1000; // 5 minutes
-    for (const [key, stream] of this.activeStreams) {
-      if (stream.isComplete && stream.lastChunkTime < cutoff) {
-        this.activeStreams.delete(key);
-      }
-    }
-  }
-
-  // Get all streams for a conversation (including recently completed ones)
-  getRecentStreamsForConv(convId: string, withinLastMinutes: number = 2): StreamingState[] {
-    const cutoff = Date.now() - withinLastMinutes * 60 * 1000;
-    return Array.from(this.activeStreams.values()).filter(stream =>
-      stream.convId === convId && stream.lastChunkTime >= cutoff
     );
   }
 }
@@ -115,7 +100,6 @@ export class WSServer extends WSEventEmitter {
   private heartbeats = new Map<ServerWebSocket, NodeJS.Timeout>();
   private messagePersistence: MessagePersistence;
   private streamingManager: StreamingManager;
-  private cleanupInterval: NodeJS.Timeout;
 
   constructor(options: WSServerOptions = {}) {
     super();
@@ -128,11 +112,6 @@ export class WSServer extends WSEventEmitter {
     };
     this.messagePersistence = MessagePersistence.getInstance();
     this.streamingManager = new StreamingManager();
-
-    // Start cleanup interval for old streams
-    this.cleanupInterval = setInterval(() => {
-      this.streamingManager.cleanup();
-    }, 60000); // Clean up every minute
   }
 
   /**
@@ -184,11 +163,6 @@ export class WSServer extends WSEventEmitter {
       clearInterval(timer);
     }
     this.heartbeats.clear();
-
-    // Clear cleanup interval
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-    }
 
     // Clear all connections
     this.connections.clear();
@@ -291,29 +265,17 @@ export class WSServer extends WSEventEmitter {
 
   /**
    * Send accumulated chunks to a newly connected WebSocket
+   * Only sends currently active (incomplete) streams
+   * Note: Completed message history is sent via get_history control message
    */
   private sendAccumulatedChunks(ws: ServerWebSocket, convId: string): void {
-    const allStreams = this.streamingManager.getRecentStreamsForConv(convId, 5); // Get streams from last 5 minutes
+    const activeStreams = this.streamingManager.getActiveStreamsForConv(convId);
 
-    console.log(`sendAccumulatedChunks: Found ${allStreams.length} streams for convId: ${convId}`);
+    console.log(`sendAccumulatedChunks: Found ${activeStreams.length} active streams for convId: ${convId}`);
 
-    for (const stream of allStreams) {
-      if (stream.isComplete) {
-        // For completed streams, send the complete response as one message
-        console.log(`Sending accumulated completed stream: ${stream.messageId}, length: ${stream.fullResponse.length}`);
-        this.sendToWebSocket(ws, {
-          type: "llm_complete",
-          id: stream.messageId,
-          data: { fullText: stream.fullResponse, isAccumulated: true },
-          metadata: {
-            timestamp: stream.lastChunkTime,
-            convId: stream.convId,
-            isAccumulated: true,
-          },
-        });
-      } else if (stream.fullResponse.length > 10) {
-        // For active streams with substantial content, send the current accumulated response as a single chunk
-        // so the frontend can see what has been generated so far
+    for (const stream of activeStreams) {
+      if (stream.fullResponse.length > 0) {
+        // Send the current accumulated response as a single chunk
         console.log(`Sending accumulated active stream: ${stream.messageId}, accumulated length: ${stream.fullResponse.length}`);
         this.sendToWebSocket(ws, {
           type: "llm_chunk",
@@ -343,6 +305,11 @@ export class WSServer extends WSEventEmitter {
     // Use provided client ID or generate a new one
     const convId = urlClientId || this.generateClientId();
     const sessionId = this.generateSessionId();
+
+    console.log(`=== New Connection ===`);
+    console.log(`convId: ${convId} (from URL: ${!!urlClientId})`);
+    console.log(`Total active streams in manager: ${Array.from(this.streamingManager['activeStreams'].keys()).length}`);
+    console.log(`Active stream keys:`, Array.from(this.streamingManager['activeStreams'].keys()));
 
     const connectionInfo: ConnectionInfo = {
       convId,
@@ -493,9 +460,13 @@ export class WSServer extends WSEventEmitter {
     const conversation = connectionInfo.conversation;
     if (!conversation) return;
 
+    // Generate IDs for user and assistant messages
+    const userMsgId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const assistantMsgId = originalMessage.id; // Use the streaming message ID
+
     try {
       // Start tracking this stream in the streaming manager
-      this.streamingManager.startStream(connectionInfo.convId, originalMessage.id);
+      this.streamingManager.startStream(connectionInfo.convId, assistantMsgId);
 
       // Send processing status to all connections for this conversation
       const statusMessage = {
@@ -507,18 +478,22 @@ export class WSServer extends WSEventEmitter {
       this.broadcastToConv(connectionInfo.convId, statusMessage);
 
       let fullResponse = "";
+      let chunkCount = 0;
 
       // Process message with streaming - no timeouts
       for await (const chunk of conversation.sendMessage(userData.text)) {
         fullResponse += chunk;
+        chunkCount++;
+
+        console.log(`[Backend Chunk ${chunkCount}] Received ${chunk.length} chars, total now: ${fullResponse.length}`);
 
         // Add chunk to streaming manager
-        this.streamingManager.addChunk(connectionInfo.convId, originalMessage.id, chunk);
+        this.streamingManager.addChunk(connectionInfo.convId, assistantMsgId, chunk);
 
         // Create chunk message
         const chunkMessage = {
           type: "llm_chunk" as const,
-          id: originalMessage.id,
+          id: assistantMsgId,
           data: { chunk, isComplete: false },
           metadata: {
             timestamp: Date.now(),
@@ -530,36 +505,65 @@ export class WSServer extends WSEventEmitter {
         this.broadcastToConv(connectionInfo.convId, chunkMessage);
       }
 
+      console.log(`[Backend Complete] Streaming finished. Total chunks: ${chunkCount}, Final fullResponse length: ${fullResponse.length}`);
+      console.log(`[Backend Complete] First 100 chars: "${fullResponse.substring(0, 100)}..."`);
+      console.log(`[Backend Complete] Last 100 chars: "...${fullResponse.substring(fullResponse.length - 100)}"`);
+
       // Mark stream as complete in streaming manager
-      this.streamingManager.completeStream(connectionInfo.convId, originalMessage.id);
+      this.streamingManager.completeStream(connectionInfo.convId, assistantMsgId);
 
       // Send completion message to all connections for this conversation
       const completionMessage = {
         type: "llm_complete" as const,
-        id: originalMessage.id,
+        id: assistantMsgId,
         data: { fullText: fullResponse },
         metadata: {
           timestamp: Date.now(),
           convId: connectionInfo.convId,
         },
       };
+      console.log(`[Backend Complete] Broadcasting completion message with ${fullResponse.length} chars`);
       this.broadcastToConv(connectionInfo.convId, completionMessage);
 
-      // Save updated conversation history to persistent storage
+      // Save updated conversation history to persistent storage with message IDs
       const currentHistory = conversation.history;
-      this.messagePersistence.setClientHistory(connectionInfo.convId, currentHistory);
+
+      // Add message IDs to the last user and assistant messages
+      const historyWithIds = currentHistory.map((msg: any, index: number) => {
+        // Check if this is the latest user message (second-to-last) or assistant message (last)
+        if (index === currentHistory.length - 2 && msg.role === 'user') {
+          return { ...msg, id: userMsgId };
+        } else if (index === currentHistory.length - 1 && msg.role === 'assistant') {
+          return { ...msg, id: assistantMsgId };
+        }
+        // Keep existing ID or don't add one for system/older messages
+        return msg;
+      });
+
+      console.log(`[Backend Complete] Saving conversation history for ${connectionInfo.convId}`);
+      console.log(`[Backend Complete] History has ${historyWithIds.length} messages`);
+      console.log(`[Backend Complete] History messages:`, historyWithIds.map((m: any) => ({
+        role: m.role,
+        id: m.id,
+        contentLength: typeof m.content === 'string' ? m.content.length : 'N/A'
+      })));
+      this.messagePersistence.setClientHistory(connectionInfo.convId, historyWithIds);
+
+      // Verify it was saved
+      const savedHistory = this.messagePersistence.getClientHistory(connectionInfo.convId);
+      console.log(`[Backend Complete] Verification: Saved history has ${savedHistory.length} messages`);
     } catch (error: any) {
       console.error("LLM Processing Error:", error);
 
       // Mark stream as complete even on error
-      this.streamingManager.completeStream(connectionInfo.convId, originalMessage.id);
+      this.streamingManager.completeStream(connectionInfo.convId, assistantMsgId);
 
       const errorMessage = "I apologize, but I encountered an error processing your request. Please try again.";
 
       // Send error response to all connections
       const errorChunkMessage = {
         type: "llm_chunk" as const,
-        id: originalMessage.id,
+        id: assistantMsgId,
         data: { chunk: errorMessage, isComplete: false },
         metadata: { timestamp: Date.now() },
       };
@@ -567,7 +571,7 @@ export class WSServer extends WSEventEmitter {
 
       const errorCompletionMessage = {
         type: "llm_complete" as const,
-        id: originalMessage.id,
+        id: assistantMsgId,
         data: { fullText: errorMessage },
         metadata: { timestamp: Date.now() },
       };
@@ -630,11 +634,15 @@ export class WSServer extends WSEventEmitter {
           // Get history from persistent storage (which should match conversation history)
           console.log(`Backend: Getting history for convId: ${connectionInfo.convId}`);
           const history = this.messagePersistence.getClientHistory(connectionInfo.convId);
+
+          // Filter out system messages - they should never be sent to client
+          const clientHistory = history.filter(msg => msg.role !== 'system');
+
           console.log(`Backend: Retrieved history:`, {
             hasHistory: !!history,
             messageCount: history?.messageCount || 0,
             messages: history?.messages?.length || 0,
-            messagesContent: history?.messages || 'No messages'
+            filteredMessages: clientHistory.length
           });
 
           // Also check conversation object directly
@@ -647,13 +655,17 @@ export class WSServer extends WSEventEmitter {
             });
           }
 
+          // Send accumulated chunks from any active streams for this conversation
+          console.log(`Backend: Checking for active streams to send accumulated chunks`);
+          this.sendAccumulatedChunks(ws, connectionInfo.convId);
+
           this.sendToWebSocket(ws, {
             type: "control_response",
             id: message.id,
-            data: { status: "history", history, type: control.type },
+            data: { status: "history", history: clientHistory, type: control.type },
             metadata: { timestamp: Date.now() },
           });
-          console.log(`Backend: Sent history response`);
+          console.log(`Backend: Sent history response (filtered out system messages)`);
           break;
 
         case "get_status":
@@ -710,10 +722,15 @@ export class WSServer extends WSEventEmitter {
 
   private async createConversation(initialHistory: any[] = []): Promise<Conversation> {
     const tools = await this.getDefaultTools();
-    return new Conversation({
-      systemPrompt: `You are a helpful AI assistant connected via WebSocket.
+    const defaultSystemPrompt = `You are a helpful AI assistant connected via WebSocket.
 You have access to tools that can help you provide better responses.
-Always be helpful and conversational.`,
+Always be helpful and conversational.`;
+
+    // Check if initialHistory already contains a system message
+    const hasSystemMessage = initialHistory.some(msg => msg.role === 'system');
+
+    return new Conversation({
+      systemPrompt: hasSystemMessage ? undefined : defaultSystemPrompt,
       initialHistory,
       tools,
       hooks: {},

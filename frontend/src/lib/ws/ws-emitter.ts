@@ -38,6 +38,9 @@ export class WSEventEmitter extends EventTarget {
     // Emit to our internal listeners only
     const eventListeners = this.listeners.get(event);
     if (eventListeners) {
+      if (event === "llm_chunk") {
+        console.log(`[Emitter] Emitting ${event} to ${eventListeners.size} listeners`);
+      }
       eventListeners.forEach((listener) => {
         try {
           listener(data);

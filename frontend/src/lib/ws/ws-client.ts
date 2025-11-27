@@ -311,7 +311,9 @@ export class WSClient extends WSEventEmitter {
         console.log("WSClient: Emitting llm_chunk:", message.data?.chunk);
         this.emit("llm_chunk", {
           chunk: message.data?.chunk || "",
+          messageId: message.id,
           sequence: message.metadata?.sequence,
+          isAccumulated: message.data?.isAccumulated || message.metadata?.isAccumulated || false,
         });
         break;
 
@@ -321,6 +323,7 @@ export class WSClient extends WSEventEmitter {
         this.emit("llm_complete", {
           fullText: message.data?.fullText || "",
           messageId: message.id,
+          isAccumulated: message.data?.isAccumulated || message.metadata?.isAccumulated || false,
         });
         // Return after handling if we already resolved pending message
         if (shouldResolvePending) {
