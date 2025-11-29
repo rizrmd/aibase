@@ -5,6 +5,7 @@ import type {
   ChatCompletionMessageFunctionToolCall,
   ChatCompletionAssistantMessageParam,
 } from "openai/resources/chat/completions";
+import { defaultContext } from "./context";
 
 /**
  * Type for function tool calls (excludes custom tool calls)
@@ -212,11 +213,13 @@ export class Conversation {
       this.modelParams.max_tokens = options.maxTokens;
     if (options.topP !== undefined) this.modelParams.top_p = options.topP;
 
-    // Initialize history with system prompt if provided
-    if (options.systemPrompt) {
+    // Initialize history with system prompt
+    // Use provided systemPrompt or default context
+    const systemPrompt = options.systemPrompt || defaultContext();
+    if (systemPrompt) {
       this._history.push({
         role: "system",
-        content: options.systemPrompt,
+        content: systemPrompt,
       });
     }
 
