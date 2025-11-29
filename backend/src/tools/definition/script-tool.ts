@@ -19,6 +19,8 @@ import { ScriptRuntime } from "../runtime/script-runtime";
  *   Options: { query, region?, safesearch?, timelimit?, maxResults? }
  * - duckdb(options) for SQL queries on data files
  *   Options: { query, database?, format?, readonly? }
+ * - postgresql(options) for PostgreSQL database queries
+ *   Options: { query, connectionUrl?, format?, timeout?, memoryCategory?, memoryKey? }
  * - convId and projectId for context
  * - console for debugging
  * - fetch for HTTP requests
@@ -27,8 +29,8 @@ export class ScriptTool extends Tool {
   name = "script";
 
   description = `Execute TypeScript code with programmatic access to other tools.
-Use for batch operations, complex workflows, data transformations, and SQL queries.
-Available functions: progress(message, data?), webSearch(options), duckdb(options), and all registered tools as async functions.
+Use for batch operations, complex workflows, data transformations, SQL queries, and database operations.
+Available functions: progress(message, data?), webSearch(options), duckdb(options), postgresql(options), and all registered tools as async functions.
 Context variables: convId, projectId.`;
 
   parameters = {
@@ -83,7 +85,38 @@ DuckDB query examples (read CSV/Excel/Parquet files):
   const result = await duckdb({
     query: "SELECT a.name, b.score FROM 'users.csv' a JOIN 'scores.parquet' b ON a.id = b.user_id"
   });
-  return result.data;`,
+  return result.data;
+
+PostgreSQL query examples (connection URL stored in memory):
+  // First, store the connection URL in memory using the memory tool:
+  // await memory({ action: 'add', category: 'database', key: 'postgresql_url', value: 'postgresql://user:pass@host:5432/db' })
+
+  // Query users from PostgreSQL
+  const users = await postgresql({
+    query: "SELECT * FROM users WHERE active = true LIMIT 10"
+  });
+  progress(\`Found \${users.rowCount} users\`);
+  return users.data;
+
+  // Query with aggregation
+  const stats = await postgresql({
+    query: "SELECT status, COUNT(*) as count FROM orders GROUP BY status"
+  });
+  return stats.data;
+
+  // Use custom connection URL (override memory)
+  const products = await postgresql({
+    query: "SELECT * FROM products WHERE price > 100",
+    connectionUrl: "postgresql://user:pass@localhost:5432/shop"
+  });
+  return products.data;
+
+  // Query with timeout
+  const large = await postgresql({
+    query: "SELECT * FROM large_table",
+    timeout: 60000 // 60 seconds
+  });
+  return { rowCount: large.rowCount, executionTime: large.executionTime };`,
       },
     },
     required: ["purpose", "code"],

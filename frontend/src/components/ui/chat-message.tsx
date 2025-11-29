@@ -586,6 +586,16 @@ function ToolCall({
                 "Script execution";
 
               if (code) {
+                // Extract the actual result from the wrapped response
+                let actualResult = undefined;
+                if ("result" in invocation && invocation.result) {
+                  // For completed scripts, result is wrapped as { purpose, result }
+                  // Extract the nested result if it exists, otherwise use the whole result
+                  actualResult = invocation.result.result !== undefined
+                    ? invocation.result.result
+                    : invocation.result;
+                }
+
                 setSelectedScript({
                   purpose,
                   code,
@@ -593,8 +603,7 @@ function ToolCall({
                     invocation.state === "partial-call"
                       ? "call"
                       : invocation.state,
-                  result:
-                    "result" in invocation ? invocation.result : undefined,
+                  result: actualResult,
                   error: "error" in invocation ? invocation.error : undefined,
                 });
               }
@@ -720,13 +729,29 @@ function ToolCall({
                         : undefined
                   }
                   className={cn(
-                    "flex items-center gap-2 rounded-xl border border-green-200 bg-green-50/50 px-2.5 py-1.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400",
+                    "flex flex-col gap-1 rounded-xl border border-green-200 bg-green-50/50 px-2.5 py-1.5 text-xs dark:border-green-800 dark:bg-green-950/30",
                     (isScript || isFileTool) &&
                       "cursor-pointer hover:bg-green-100/50 dark:hover:bg-green-900/40"
                   )}
                 >
-                  <Code2 className="h-3 w-3" />
-                  {toolName}
+                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                    <Code2 className="h-3 w-3" />
+                    {toolName}
+                  </div>
+                  {invocation.result && (
+                    <div className="text-green-600 dark:text-green-500 ml-5 font-mono text-[11px]">
+                      {(() => {
+                        // Extract nested result for script tools
+                        const displayResult = invocation.result.result !== undefined
+                          ? invocation.result.result
+                          : invocation.result;
+                        const resultStr = typeof displayResult === "string"
+                          ? displayResult
+                          : JSON.stringify(displayResult);
+                        return resultStr.substring(0, 100) + (resultStr.length > 100 ? "..." : "");
+                      })()}
+                    </div>
+                  )}
                 </div>
               );
             case "error":

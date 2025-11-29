@@ -1,6 +1,7 @@
 import type { Tool } from "../../llm/conversation";
 import { createWebSearchFunction } from "./web-search";
 import { createDuckDBFunction } from "./duckdb";
+import { createPostgreSQLFunction } from "./postgresql";
 
 /**
  * Context provided to the script execution environment
@@ -68,6 +69,9 @@ export class ScriptRuntime {
 
       // Inject DuckDB query function
       duckdb: this.createDuckDBFunction(),
+
+      // Inject PostgreSQL query function
+      postgresql: this.createPostgreSQLFunction(),
     };
 
     // Inject all registered tools as callable functions
@@ -111,6 +115,15 @@ export class ScriptRuntime {
     const cwd = `data/${this.context.projectId}/${this.context.convId}/files`;
     // Return the DuckDB function from the modular implementation
     return createDuckDBFunction(cwd);
+  }
+
+  /**
+   * Get the PostgreSQL query function
+   */
+  private createPostgreSQLFunction() {
+    // Return the PostgreSQL function with project context
+    // Connection URL will be read from memory at database.postgresql_url
+    return createPostgreSQLFunction(this.context.projectId);
   }
 
   /**
