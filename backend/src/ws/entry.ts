@@ -466,15 +466,27 @@ export class WSServer extends WSEventEmitter {
       return;
     }
 
+    // Check if already processing a message for this connection
+    if (connectionInfo.isProcessing) {
+      console.log(`[UserMessage] Already processing a message for convId: ${connectionInfo.convId}, ignoring duplicate`);
+      return;
+    }
+
     const userData = message.data as UserMessageData;
 
+    // Mark as processing
+    connectionInfo.isProcessing = true;
+
     // Process message asynchronously without blocking
-    this.processUserMessageAsync(ws, connectionInfo, message, userData).catch(
-      (error) => {
+    this.processUserMessageAsync(ws, connectionInfo, message, userData)
+      .catch((error) => {
         console.error("Error processing user message:", error);
         this.sendError(ws, "PROCESSING_ERROR", error.message);
-      }
-    );
+      })
+      .finally(() => {
+        // Clear processing flag when done
+        connectionInfo.isProcessing = false;
+      });
   }
 
   private async processUserMessageAsync(
@@ -662,6 +674,47 @@ export class WSServer extends WSEventEmitter {
         assistantMsgId
       );
 
+      // Check if this was an abort (user-initiated cancellation)
+      const isAbort = error?.name === "AbortError" || error?.message?.includes("abort");
+
+      if (isAbort) {
+        console.log(`[Abort] Stream aborted for message ${assistantMsgId}`);
+
+        // Get the partial response from streaming manager
+        const stream = this.streamingManager.getStream(connectionInfo.convId, assistantMsgId);
+        const partialResponse = stream?.fullResponse || "";
+
+        if (partialResponse.length > 0 && conversation) {
+          console.log(`[Abort] Saving partial response to history (${partialResponse.length} chars)`);
+
+          // Get current history and add the partial response
+          const currentHistory = conversation.history;
+
+          // Add message IDs to the last user and assistant messages
+          const historyWithIds = currentHistory.map((msg: any, index: number) => {
+            if (index === currentHistory.length - 2 && msg.role === "user") {
+              return { ...msg, id: userMsgId };
+            } else if (index === currentHistory.length - 1 && msg.role === "assistant") {
+              // Mark as incomplete/aborted
+              return {
+                ...msg,
+                id: assistantMsgId,
+                content: partialResponse,
+                aborted: true
+              };
+            }
+            return msg;
+          });
+
+          // Save to persistent storage
+          this.messagePersistence.setClientHistory(connectionInfo.convId, historyWithIds);
+          console.log(`[Abort] Saved aborted message to history`);
+        }
+
+        // Don't send error messages for user-initiated aborts
+        return;
+      }
+
       const errorMessage =
         "I apologize, but I encountered an error processing your request. Please try again.";
 
@@ -711,7 +764,22 @@ export class WSServer extends WSEventEmitter {
       switch (control.type) {
         case "abort":
           if (conversation) {
+            console.log(`[Abort] Aborting conversation for convId: ${connectionInfo.convId}`);
             conversation.abort();
+
+            // Clean up any active streams for this conversation
+            const activeStreams = this.streamingManager.getActiveStreamsForConv(connectionInfo.convId);
+            console.log(`[Abort] Cleaning up ${activeStreams.length} active streams`);
+            for (const stream of activeStreams) {
+              this.streamingManager.completeStream(connectionInfo.convId, stream.messageId);
+            }
+
+            // Clear assistant message ID from connection info
+            delete (connectionInfo as any).assistantMsgId;
+
+            // Clear processing flag to allow new messages
+            connectionInfo.isProcessing = false;
+
             this.sendToWebSocket(ws, {
               type: "control_response",
               id: message.id,
@@ -1022,4 +1090,5 @@ interface ConnectionInfo {
   messageCount: number;
   isAlive: boolean;
   conversation?: Conversation;
+  isProcessing?: boolean; // Track if a message is currently being processed
 }

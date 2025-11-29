@@ -133,14 +133,16 @@ export interface Message {
   parts?: MessagePart[];
   completionTime?: number; // Time in seconds to complete the message
   isThinking?: boolean; // Temporary thinking indicator
+  aborted?: boolean; // Message was aborted/cancelled
 }
 
-export interface ChatMessageProps extends Omit<Message, 'completionTime' | 'isThinking'> {
+export interface ChatMessageProps extends Omit<Message, 'completionTime' | 'isThinking' | 'aborted'> {
   showTimeStamp?: boolean;
   animation?: Animation;
   actions?: React.ReactNode;
   completionTime?: number;
   isThinking?: boolean;
+  aborted?: boolean;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -155,6 +157,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   parts,
   completionTime,
   isThinking,
+  aborted,
   ...props
 }) => {
   const files = useMemo(() => {
@@ -357,6 +360,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {formattedTime}
           {!isUser && completionTime !== undefined && completionTime >= 1 && (
             <> • {completionTime}s</>
+          )}
+          {!isUser && aborted && (
+            <> • <span className="text-orange-600 dark:text-orange-400">Cancelled</span></>
           )}
         </time>
       ) : null}

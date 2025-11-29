@@ -198,6 +198,16 @@ export class WSClient extends WSEventEmitter {
    * Abort current message processing
    */
   abort(): void {
+    // Clear pending user message without rejecting (abort is user-initiated, not an error)
+    if (this.pendingUserMessage) {
+      if (this.pendingUserMessage.timeout) {
+        clearTimeout(this.pendingUserMessage.timeout);
+      }
+      // Resolve with null instead of rejecting to avoid error display
+      this.pendingUserMessage.resolve(null);
+      this.pendingUserMessage = null;
+    }
+
     this.sendControl({ type: "abort" });
   }
 

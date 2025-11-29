@@ -51,6 +51,9 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   // Track thinking indicator start time
   const thinkingStartTimeRef = useRef<number | null>(null);
 
+  // Track if we're currently submitting to prevent double submissions
+  const isSubmittingRef = useRef(false);
+
   // Update thinking indicator seconds every second
   useEffect(() => {
     // Only set interval if thinking indicator exists
@@ -139,6 +142,19 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       }
 
       const messageId = data.messageId || `msg_${Date.now()}_assistant`;
+
+      // If we have a currentMessageIdRef and this chunk is for a different message, ignore it
+      // This prevents processing chunks from aborted requests
+      if (currentMessageIdRef.current && currentMessageIdRef.current !== messageId && !data.isAccumulated) {
+        console.log(`[Chunk] Ignoring chunk from old message ${messageId}, current is ${currentMessageIdRef.current}`);
+        return;
+      }
+
+      // Set the current message ID if not set (for first chunk)
+      if (!currentMessageIdRef.current && !data.isAccumulated) {
+        currentMessageIdRef.current = messageId;
+        console.log(`[Chunk] Set current message ID to ${messageId}`);
+      }
 
       // Set loading state when chunks arrive (for thinking indicator)
       if (!isLoading && !data.isAccumulated) {
@@ -510,6 +526,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
                 content: mergedContent,
                 createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
                 ...(finalCompletionTime !== undefined && { completionTime: finalCompletionTime }),
+                ...(msg.aborted && { aborted: true }),
               };
 
               if (toolInvocations.length > 0) {
@@ -722,8 +739,55 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   const handleSubmit = useCallback(async (e?: { preventDefault?: () => void }) => {
     e?.preventDefault?.();
 
+    console.log('[Submit] Called with input:', input?.substring(0, 50), 'isConnected:', wsClient?.isConnected());
+
     if (!input.trim() || !wsClient?.isConnected()) {
+      console.log('[Submit] Skipping - no input or not connected');
       return;
+    }
+
+    // Prevent double submissions
+    if (isSubmittingRef.current) {
+      console.log('[Submit] Already submitting, ignoring duplicate submission');
+      return;
+    }
+
+    // Mark as submitting
+    isSubmittingRef.current = true;
+    console.log('[Submit] Marked as submitting');
+
+    // If already loading, abort the previous request first
+    if (isLoading) {
+      console.log('[Submit] Aborting previous request before sending new message');
+
+      // Clear thinking start time
+      thinkingStartTimeRef.current = null;
+      // Clear tool invocations
+      currentToolInvocationsRef.current.clear();
+      // Save the aborted message ID
+      const abortedMessageId = currentMessageIdRef.current;
+      // Clear current message refs
+      currentMessageRef.current = null;
+      currentMessageIdRef.current = null;
+      // Reset loading state to allow new submission
+      setIsLoading(false);
+
+      // Mark message as aborted and remove thinking indicator
+      setMessages(prev => {
+        const filtered = prev.filter(m => !m.isThinking);
+        if (abortedMessageId) {
+          return filtered.map(m =>
+            m.id === abortedMessageId ? { ...m, aborted: true } : m
+          );
+        }
+        return filtered;
+      });
+
+      // Send abort to backend
+      wsClient.abort();
+
+      // Wait longer for abort to fully process on backend before sending new message
+      await new Promise(resolve => setTimeout(resolve, 150));
     }
 
     const userMessage: Message = {
@@ -751,13 +815,22 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
     setError(null);
 
     try {
+      console.log('[Submit] Sending message to backend:', messageText.substring(0, 50));
       await wsClient.sendMessage(messageText);
+      console.log('[Submit] Message sent successfully');
     } catch (error) {
+      console.log('[Submit] Error sending message:', error);
       setIsLoading(false);
       setError(error instanceof Error ? error.message : "Failed to send message");
 
       // Remove both the user message and thinking indicator if send failed
       setMessages(prev => prev.filter(msg => msg.id !== userMessage.id && msg.id !== thinkingMessage.id));
+    } finally {
+      // Reset submitting flag after a short delay to allow state updates to complete
+      setTimeout(() => {
+        console.log('[Submit] Clearing submitting flag');
+        isSubmittingRef.current = false;
+      }, 100);
     }
   }, [input, wsClient]);
 
@@ -772,11 +845,28 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   }, [wsClient]);
 
   const abort = useCallback(() => {
+    console.log('[Abort] User manually aborted request');
     setIsLoading(false);
+    const abortedMessageId = currentMessageIdRef.current;
     currentMessageRef.current = null;
     currentMessageIdRef.current = null;
-    // Remove thinking indicator
-    setMessages(prev => prev.filter(m => !m.isThinking));
+    // Clear thinking start time
+    thinkingStartTimeRef.current = null;
+    // Clear tool invocations
+    currentToolInvocationsRef.current.clear();
+    // Clear submitting flag to allow new messages
+    isSubmittingRef.current = false;
+    // Mark the current message as aborted and remove thinking indicator
+    setMessages(prev => {
+      const filtered = prev.filter(m => !m.isThinking);
+      // Mark the aborted message
+      if (abortedMessageId) {
+        return filtered.map(m =>
+          m.id === abortedMessageId ? { ...m, aborted: true } : m
+        );
+      }
+      return filtered;
+    });
     wsClient?.abort();
   }, [wsClient]);
 
