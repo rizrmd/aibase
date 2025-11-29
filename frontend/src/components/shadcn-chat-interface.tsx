@@ -107,25 +107,23 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
         setIsLoading(true);
       }
 
-      // Update thinking indicator with elapsed time from backend
-      if (data.elapsedTime !== undefined && data.elapsedTime > 0) {
-        setMessages(prev => {
-          const thinkingIndex = prev.findIndex(m => m.isThinking);
-          if (thinkingIndex === -1) return prev;
-
-          return prev.map((msg, idx) =>
-            idx === thinkingIndex
-              ? { ...msg, content: `Thinking... ${data.elapsedTime}s` }
-              : msg
-          );
-        });
-      }
-
       flushSync(() => {
         setMessages(prevMessages => {
-          // Remove thinking indicator when first chunk arrives
-          const prev = prevMessages.filter(m => !m.isThinking);
-          console.log(`[State] Current messages count: ${prev.length}, isAccumulated: ${data.isAccumulated}`);
+          // Update thinking indicator with elapsed time if present
+          const thinkingIndex = prevMessages.findIndex(m => m.isThinking);
+
+          if (thinkingIndex !== -1 && data.elapsedTime !== undefined && data.elapsedTime > 0) {
+            prevMessages = prevMessages.map((msg, idx) =>
+              idx === thinkingIndex
+                ? { ...msg, content: `Thinking... ${data.elapsedTime}s` }
+                : msg
+            );
+          }
+
+          // Don't remove thinking indicator - keep it throughout streaming
+          console.log(`[State] Current messages count: ${prevMessages.length}, isAccumulated: ${data.isAccumulated}`);
+
+        const prev = prevMessages;
 
         if (data.isAccumulated) {
           // Accumulated chunks on reconnect
@@ -181,9 +179,8 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
             currentMessageIdRef.current = messageId;
             currentMessageRef.current = data.chunk;
 
-            const newMessages = [...prev, newMessage];
-            console.log(`[Chunk-Accumulated] Returning ${newMessages.length} messages (added new)`);
-            return newMessages;
+            console.log(`[Chunk-Accumulated] Returning ${prev.length + 1} messages (added new)`);
+            return [...prev, newMessage];
           }
         } else {
           // Real-time chunk - check if message already exists in array
@@ -248,7 +245,6 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
             console.log(`[Chunk] Returning updated array with ${updatedArray.length} messages`);
             return updatedArray;
           }
-        }
         });
       });
 
