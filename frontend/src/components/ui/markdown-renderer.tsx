@@ -19,13 +19,13 @@ export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   )
 }
 
-interface HighlightedPre extends React.HTMLAttributes<HTMLPreElement> {
+interface HighlightedPreProps extends React.HTMLAttributes<HTMLPreElement> {
   children: string
   language: string
 }
 
 const HighlightedPre = React.memo(
-  async ({ children, language, ...props }: HighlightedPre) => {
+  async ({ children, language, ...props }: HighlightedPreProps) => {
     const { codeToTokens, bundledLanguages } = await import("shiki")
 
     if (!(language in bundledLanguages)) {
@@ -45,8 +45,8 @@ const HighlightedPre = React.memo(
       <pre {...props}>
         <code>
           {tokens.map((line, lineIndex) => (
-            <>
-              <span key={lineIndex}>
+            <React.Fragment key={lineIndex}>
+              <span>
                 {line.map((token, tokenIndex) => {
                   const style =
                     typeof token.htmlStyle === "string"
@@ -65,7 +65,7 @@ const HighlightedPre = React.memo(
                 })}
               </span>
               {lineIndex !== tokens.length - 1 && "\n"}
-            </>
+            </React.Fragment>
           ))}
         </code>
       </pre>
@@ -92,7 +92,7 @@ const CodeBlock = ({
       : childrenTakeAllStringContents(children)
 
   const preClass = cn(
-    "overflow-x-scroll rounded-md border bg-background/50 p-4 font-mono text-sm [scrollbar-width:none]",
+    "overflow-x-scroll rounded-md border bg-background/50 p-4 font-mono text-xs [scrollbar-width:none]",
     className
   )
 
@@ -117,13 +117,18 @@ const CodeBlock = ({
   )
 }
 
-function childrenTakeAllStringContents(element: any): string {
+function childrenTakeAllStringContents(element: React.ReactNode): string {
   if (typeof element === "string") {
     return element
   }
 
-  if (element?.props?.children) {
-    let children = element.props.children
+  if (
+    element &&
+    typeof element === "object" &&
+    "props" in element &&
+    element.props?.children
+  ) {
+    const children = element.props.children
 
     if (Array.isArray(children)) {
       return children
@@ -146,7 +151,14 @@ const COMPONENTS = {
   strong: withClass("strong", "font-semibold"),
   a: withClass("a", "text-primary underline underline-offset-2"),
   blockquote: withClass("blockquote", "border-l-2 border-primary pl-4"),
-  code: ({ children, className, node, ...rest }: any) => {
+  code: ({
+    children,
+    className,
+    ...rest
+  }: React.HTMLAttributes<HTMLElement> & {
+    children?: React.ReactNode
+    className?: string
+  }) => {
     const match = /language-(\w+)/.exec(className || "")
     return match ? (
       <CodeBlock className={className} language={match[1]} {...rest}>
@@ -155,7 +167,7 @@ const COMPONENTS = {
     ) : (
       <code
         className={cn(
-          "font-mono [:not(pre)>&]:rounded-md [:not(pre)>&]:bg-background/50 [:not(pre)>&]:px-1 [:not(pre)>&]:py-0.5"
+          "font-mono text-xs [:not(pre)>&]:rounded-md [:not(pre)>&]:bg-background/50 [:not(pre)>&]:px-1 [:not(pre)>&]:py-0.5"
         )}
         {...rest}
       >
@@ -163,7 +175,7 @@ const COMPONENTS = {
       </code>
     )
   },
-  pre: ({ children }: any) => children,
+  pre: ({ children }: { children?: React.ReactNode }) => children,
   ol: withClass("ol", "list-decimal space-y-2 pl-6"),
   ul: withClass("ul", "list-disc space-y-2 pl-6"),
   li: withClass("li", "my-1.5"),
@@ -185,7 +197,9 @@ const COMPONENTS = {
 }
 
 function withClass(Tag: keyof JSX.IntrinsicElements, classes: string) {
-  const Component = ({ node, ...props }: any) => (
+  const Component = ({
+    ...props
+  }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) => (
     <Tag className={classes} {...props} />
   )
   Component.displayName = Tag

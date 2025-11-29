@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
-// How many pixels from the bottom of the container to enable auto-scroll
-const ACTIVATION_THRESHOLD = 50
+// Auto-scroll activates when user is within 30% from the bottom of the viewport
+const ACTIVATION_THRESHOLD_PERCENT = 0.3
 // Minimum pixels of scroll-up movement required to disable auto-scroll
 const MIN_SCROLL_UP_THRESHOLD = 10
 
@@ -10,13 +10,15 @@ export function useAutoScroll(dependencies: React.DependencyList) {
   const previousScrollTop = useRef<number | null>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
-  const scrollToBottom = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
-    }
-  }
+  const scrollToBottom = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
 
-  const handleScroll = () => {
+    // Force immediate scroll to bottom
+    container.scrollTop = container.scrollHeight
+  }, [])
+
+  const handleScroll = useCallback(() => {
     if (containerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current
 
@@ -38,27 +40,29 @@ export function useAutoScroll(dependencies: React.DependencyList) {
       if (isDeliberateScrollUp) {
         setShouldAutoScroll(false)
       } else {
-        const isScrolledToBottom = distanceFromBottom < ACTIVATION_THRESHOLD
+        // Auto-scroll if within 30% from the bottom of the viewport
+        const activationThreshold = clientHeight * ACTIVATION_THRESHOLD_PERCENT
+        const isScrolledToBottom = distanceFromBottom < activationThreshold
         setShouldAutoScroll(isScrolledToBottom)
       }
 
       previousScrollTop.current = scrollTop
     }
-  }
-
-  const handleTouchStart = () => {
-    setShouldAutoScroll(false)
-  }
-
-  useEffect(() => {
-    if (containerRef.current) {
-      previousScrollTop.current = containerRef.current.scrollTop
-    }
   }, [])
 
+  const handleTouchStart = useCallback(() => {
+    setShouldAutoScroll(false)
+  }, [])
+
+  // Scroll when dependencies change (messages update)
   useEffect(() => {
-    if (shouldAutoScroll) {
-      scrollToBottom()
+    if (shouldAutoScroll && containerRef.current) {
+      // Use setTimeout to defer scroll until after React has finished rendering
+      const timeoutId = setTimeout(() => {
+        scrollToBottom()
+      }, 0)
+
+      return () => clearTimeout(timeoutId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies)
