@@ -23,7 +23,7 @@ interface TodoList {
 
 export class TodoTool extends Tool {
   name = "todo";
-  description = "Manage todo items: add new tasks, list all tasks, check/uncheck items, remove items, clear all, or finish (remove completed items). All todos are stored per conversation.";
+  description = "Manage todo items: add new tasks, list all tasks, check/uncheck items, remove items, clear all, or finish (remove completed items). All todos are stored per conversation. Supports batch operations for add/check/uncheck/remove.";
   parameters = {
     type: "object",
     properties: {
@@ -34,11 +34,21 @@ export class TodoTool extends Tool {
       },
       text: {
         type: "string",
-        description: "Todo text (required for add action)",
+        description: "Todo text (for single add action)",
+      },
+      texts: {
+        type: "array",
+        items: { type: "string" },
+        description: "Array of todo texts (for batch add action)",
       },
       id: {
         type: "string",
-        description: "Todo ID (required for check, uncheck, remove actions)",
+        description: "Todo ID (for single check, uncheck, remove actions)",
+      },
+      ids: {
+        type: "array",
+        items: { type: "string" },
+        description: "Array of todo IDs (for batch check, uncheck, remove actions)",
       },
     },
     required: ["action"],
@@ -151,7 +161,9 @@ export class TodoTool extends Tool {
   async execute(args: {
     action: "list" | "add" | "check" | "uncheck" | "remove" | "clear" | "finish";
     text?: string;
+    texts?: string[];
     id?: string;
+    ids?: string[];
   }): Promise<string> {
     try {
       const todoList = await this.loadTodos();
@@ -161,8 +173,23 @@ export class TodoTool extends Tool {
           return this.formatTodoList(todoList);
 
         case "add":
+          // Handle batch add
+          if (args.texts && args.texts.length > 0) {
+            const newItems: TodoItem[] = args.texts.map((text) => ({
+              id: this.generateId(),
+              text,
+              checked: false,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }));
+            todoList.items.push(...newItems);
+            await this.saveTodos(todoList);
+            return this.formatTodoList(todoList);
+          }
+
+          // Handle single add
           if (!args.text) {
-            throw new Error("text is required for add action");
+            throw new Error("text or texts is required for add action");
           }
           const newItem: TodoItem = {
             id: this.generateId(),
@@ -176,8 +203,34 @@ export class TodoTool extends Tool {
           return this.formatTodoList(todoList);
 
         case "check":
+          // Handle batch check
+          if (args.ids && args.ids.length > 0) {
+            let checkedCount = 0;
+            const notFound: string[] = [];
+
+            for (const id of args.ids) {
+              const item = todoList.items.find((item) => item.id === id);
+              if (item) {
+                item.checked = true;
+                item.updatedAt = new Date().toISOString();
+                checkedCount++;
+              } else {
+                notFound.push(id);
+              }
+            }
+
+            await this.saveTodos(todoList);
+            const result = JSON.parse(this.formatTodoList(todoList));
+            result.batchResult = {
+              checkedCount,
+              notFound: notFound.length > 0 ? notFound : undefined,
+            };
+            return JSON.stringify(result, null, 2);
+          }
+
+          // Handle single check
           if (!args.id) {
-            throw new Error("id is required for check action");
+            throw new Error("id or ids is required for check action");
           }
           const itemToCheck = todoList.items.find((item) => item.id === args.id);
           if (!itemToCheck) {
@@ -189,8 +242,34 @@ export class TodoTool extends Tool {
           return this.formatTodoList(todoList);
 
         case "uncheck":
+          // Handle batch uncheck
+          if (args.ids && args.ids.length > 0) {
+            let uncheckedCount = 0;
+            const notFound: string[] = [];
+
+            for (const id of args.ids) {
+              const item = todoList.items.find((item) => item.id === id);
+              if (item) {
+                item.checked = false;
+                item.updatedAt = new Date().toISOString();
+                uncheckedCount++;
+              } else {
+                notFound.push(id);
+              }
+            }
+
+            await this.saveTodos(todoList);
+            const result = JSON.parse(this.formatTodoList(todoList));
+            result.batchResult = {
+              uncheckedCount,
+              notFound: notFound.length > 0 ? notFound : undefined,
+            };
+            return JSON.stringify(result, null, 2);
+          }
+
+          // Handle single uncheck
           if (!args.id) {
-            throw new Error("id is required for uncheck action");
+            throw new Error("id or ids is required for uncheck action");
           }
           const itemToUncheck = todoList.items.find(
             (item) => item.id === args.id
@@ -204,8 +283,33 @@ export class TodoTool extends Tool {
           return this.formatTodoList(todoList);
 
         case "remove":
+          // Handle batch remove
+          if (args.ids && args.ids.length > 0) {
+            let removedCount = 0;
+            const notFound: string[] = [];
+
+            for (const id of args.ids) {
+              const index = todoList.items.findIndex((item) => item.id === id);
+              if (index !== -1) {
+                todoList.items.splice(index, 1);
+                removedCount++;
+              } else {
+                notFound.push(id);
+              }
+            }
+
+            await this.saveTodos(todoList);
+            const result = JSON.parse(this.formatTodoList(todoList));
+            result.batchResult = {
+              removedCount,
+              notFound: notFound.length > 0 ? notFound : undefined,
+            };
+            return JSON.stringify(result, null, 2);
+          }
+
+          // Handle single remove
           if (!args.id) {
-            throw new Error("id is required for remove action");
+            throw new Error("id or ids is required for remove action");
           }
           const indexToRemove = todoList.items.findIndex(
             (item) => item.id === args.id

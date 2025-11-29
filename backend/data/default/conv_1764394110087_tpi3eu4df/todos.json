@@ -1,0 +1,54 @@
+{
+  "items": [
+    {
+      "id": "1764411030230-7e8n9uee4",
+      "text": "Brainstorm story concept and main theme",
+      "checked": true,
+      "createdAt": "2025-11-29T10:10:30.230Z",
+      "updatedAt": "2025-11-29T10:10:33.771Z"
+    },
+    {
+      "id": "1764411030232-ymyt9oocy",
+      "text": "Create protagonist and main characters",
+      "checked": true,
+      "createdAt": "2025-11-29T10:10:30.232Z",
+      "updatedAt": "2025-11-29T10:10:38.040Z"
+    },
+    {
+      "id": "1764411030233-38gmtrzyd",
+      "text": "Outline the story stages (beginning, middle, end)",
+      "checked": true,
+      "createdAt": "2025-11-29T10:10:30.233Z",
+      "updatedAt": "2025-11-29T10:10:39.136Z"
+    },
+    {
+      "id": "1764411030233-hjtmqu371",
+      "text": "Write Stage 1: The setup/introduction",
+      "checked": false,
+      "createdAt": "2025-11-29T10:10:30.233Z",
+      "updatedAt": "2025-11-29T10:10:30.233Z"
+    },
+    {
+      "id": "1764411030234-d1wi1sxpj",
+      "text": "Write Stage 2: The development/conflict",
+      "checked": false,
+      "createdAt": "2025-11-29T10:10:30.234Z",
+      "updatedAt": "2025-11-29T10:10:30.234Z"
+    },
+    {
+      "id": "1764411030234-qgw5wv40q",
+      "text": "Write Stage 3: The climax/resolution",
+      "checked": false,
+      "createdAt": "2025-11-29T10:10:30.234Z",
+      "updatedAt": "2025-11-29T10:10:30.234Z"
+    },
+    {
+      "id": "1764411030235-x3zhufp8f",
+      "text": "Review and polish the complete story",
+      "checked": false,
+      "createdAt": "2025-11-29T10:10:30.235Z",
+      "updatedAt": "2025-11-29T10:10:30.235Z"
+    }
+  ],
+  "updatedAt": "2025-11-29T10:10:39.136Z"
+}

@@ -2,7 +2,19 @@ import OpenAI from "openai";
 import type {
   ChatCompletionMessageParam,
   ChatCompletionTool,
+  ChatCompletionMessageFunctionToolCall,
+  ChatCompletionAssistantMessageParam,
 } from "openai/resources/chat/completions";
+
+/**
+ * Type for function tool calls (excludes custom tool calls)
+ */
+type FunctionToolCall = ChatCompletionMessageFunctionToolCall;
+
+/**
+ * Type for a hybrid async generator that can be both awaited and iterated
+ */
+type HybridGenerator = AsyncGenerator<string, string, unknown> & Promise<string>;
 
 /**
  * Base class for tools that can be called by the LLM
@@ -10,12 +22,12 @@ import type {
 export abstract class Tool {
   abstract name: string;
   abstract description: string;
-  abstract parameters: Record<string, any>; // JSON Schema for parameters
+  abstract parameters: Record<string, unknown>; // JSON Schema for parameters
 
   /**
    * Execute the tool with given arguments
    */
-  abstract execute(args: any): Promise<any>;
+  abstract execute(args: unknown): Promise<unknown>;
 
   /**
    * Convert tool to OpenAI function definition format
@@ -324,7 +336,7 @@ export class Conversation {
    */
   sendMessage(
     message: string
-  ): AsyncGenerator<string, string, unknown> & Promise<string> {
+  ): HybridGenerator {
     // Create new AbortController for this message
     this.currentAbortController = new AbortController();
     const generator = this.streamMessageInternal(
@@ -333,13 +345,13 @@ export class Conversation {
     );
 
     // Make the generator both awaitable and iterable
-    const hybrid = generator as any;
+    const hybrid = generator as unknown as HybridGenerator;
 
     // When awaited, collect all chunks
-    hybrid.then = (
-      resolve: (value: string) => void,
-      reject?: (reason: any) => void
-    ) => {
+    hybrid.then = <TResult1 = string, TResult2 = never>(
+      onfulfilled?: ((value: string) => TResult1 | PromiseLike<TResult1>) | null,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+    ): Promise<TResult1 | TResult2> => {
       return (async () => {
         try {
           let fullText = "";
@@ -352,21 +364,23 @@ export class Conversation {
         } finally {
           this.currentAbortController = null;
         }
-      })().then(resolve, reject);
+      })().then(onfulfilled, onrejected);
     };
 
-    hybrid.catch = (reject: (reason: any) => void) => {
-      return hybrid.then(undefined, reject);
+    hybrid.catch = <TResult = never>(
+      onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null
+    ): Promise<string | TResult> => {
+      return hybrid.then(undefined, onrejected);
     };
 
-    hybrid.finally = (onfinally: () => void) => {
+    hybrid.finally = (onfinally?: (() => void) | null): Promise<string> => {
       return hybrid.then(
         (value: string) => {
-          onfinally();
+          onfinally?.();
           return value;
         },
-        (reason: any) => {
-          onfinally();
+        (reason: unknown) => {
+          onfinally?.();
           throw reason;
         }
       );
@@ -427,7 +441,7 @@ export class Conversation {
     abortController: AbortController
   ): AsyncGenerator<string, void, unknown> {
     let fullText = "";
-    let currentToolCalls: any[] = [];
+    let currentToolCalls: FunctionToolCall[] = [];
     let isToolCallResponse = false;
     let assistantMessageIndex = -1; // Track the assistant message index for updates
 
@@ -468,7 +482,7 @@ export class Conversation {
           // Update the assistant message content as we stream
           if (assistantMessageIndex >= 0 && !isToolCallResponse) {
             this._history[assistantMessageIndex] = {
-              ...this._history[assistantMessageIndex],
+              ...(this._history[assistantMessageIndex] as ChatCompletionAssistantMessageParam),
               content: fullText,
             };
           }
@@ -499,9 +513,9 @@ export class Conversation {
           }
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If aborted, keep the partial message in history (it's already been added)
-      if (error?.name === "AbortError" || abortController.signal.aborted) {
+      if ((error as Error)?.name === "AbortError" || abortController.signal.aborted) {
         return;
       }
       throw error;
@@ -528,7 +542,7 @@ export class Conversation {
       // If we already added the message during streaming, just ensure it has the final content
       if (assistantMessageIndex >= 0) {
         this._history[assistantMessageIndex] = {
-          ...this._history[assistantMessageIndex],
+          ...(this._history[assistantMessageIndex] as ChatCompletionAssistantMessageParam),
           content: fullText,
         };
       } else {
@@ -544,7 +558,7 @@ export class Conversation {
   /**
    * Execute tool calls and add results to history
    */
-  private async executeToolCalls(toolCalls: any[]): Promise<void> {
+  private async executeToolCalls(toolCalls: FunctionToolCall[]): Promise<void> {
     for (const toolCall of toolCalls) {
       const toolName = toolCall.function.name;
       const tool = this.tools.get(toolName);
