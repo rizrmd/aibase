@@ -488,16 +488,23 @@ export class WSServer extends WSEventEmitter {
         fullResponse += chunk;
         chunkCount++;
 
-        console.log(`[Backend Chunk ${chunkCount}] Received ${chunk.length} chars, total now: ${fullResponse.length}`);
+        // Calculate elapsed time for this chunk
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+
+        console.log(`[Backend Chunk ${chunkCount}] Received ${chunk.length} chars, total now: ${fullResponse.length}, elapsed: ${elapsedSeconds}s`);
 
         // Add chunk to streaming manager
         this.streamingManager.addChunk(connectionInfo.convId, assistantMsgId, chunk);
 
-        // Create chunk message
+        // Create chunk message with elapsed time
         const chunkMessage = {
           type: "llm_chunk" as const,
           id: assistantMsgId,
-          data: { chunk, isComplete: false },
+          data: {
+            chunk,
+            isComplete: false,
+            elapsedTime: elapsedSeconds
+          },
           metadata: {
             timestamp: Date.now(),
             convId: connectionInfo.convId,

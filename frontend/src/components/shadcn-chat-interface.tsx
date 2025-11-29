@@ -89,7 +89,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       setIsLoading(false);
     };
 
-    const handleLLMChunk = (data: { chunk: string; messageId?: string; sequence?: number; isAccumulated?: boolean }) => {
+    const handleLLMChunk = (data: { chunk: string; messageId?: string; sequence?: number; isAccumulated?: boolean; elapsedTime?: number }) => {
       // Only active tab processes chunks
       if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
       console.log("ShadcnChatInterface: handleLLMChunk called with:", data);
@@ -105,6 +105,20 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       // Set loading state when chunks arrive (for thinking indicator)
       if (!isLoading && !data.isAccumulated) {
         setIsLoading(true);
+      }
+
+      // Update thinking indicator with elapsed time from backend
+      if (data.elapsedTime !== undefined && data.elapsedTime > 0) {
+        setMessages(prev => {
+          const thinkingIndex = prev.findIndex(m => m.isThinking);
+          if (thinkingIndex === -1) return prev;
+
+          return prev.map((msg, idx) =>
+            idx === thinkingIndex
+              ? { ...msg, content: `Thinking... ${data.elapsedTime}s` }
+              : msg
+          );
+        });
       }
 
       flushSync(() => {
