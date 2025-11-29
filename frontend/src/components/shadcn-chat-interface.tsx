@@ -245,6 +245,7 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
             console.log(`[Chunk] Returning updated array with ${updatedArray.length} messages`);
             return updatedArray;
           }
+        }
         });
       });
 
