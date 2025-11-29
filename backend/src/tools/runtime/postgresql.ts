@@ -158,8 +158,7 @@ export function createPostgreSQLFunction(projectId?: string) {
       // Execute the query using Bun's SQL API
       // We need to use the unsafe method for dynamic query strings
       const queryPromise = (async () => {
-        // @ts-ignore - Using SQL as tagged template with string
-        return await db([options.query], ...[]);
+        return await db.unsafe(options.query);
       })();
 
       const result = await Promise.race([
