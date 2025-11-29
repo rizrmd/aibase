@@ -285,14 +285,14 @@ export class TodoTool extends Tool {
         case "finish":
           const beforeCount = todoList.items.length;
           todoList.items = todoList.items.filter((item) => !item.checked);
-          const removedCount = beforeCount - todoList.items.length;
+          const finishRemovedCount = beforeCount - todoList.items.length;
           await this.saveTodos(todoList);
-          const result = JSON.parse(this.formatTodoList(todoList));
-          result.finishResult = {
-            removedCount,
-            message: `Removed ${removedCount} completed item(s)`,
+          const finishResult = JSON.parse(this.formatTodoList(todoList));
+          finishResult.finishResult = {
+            removedCount: finishRemovedCount,
+            message: `Removed ${finishRemovedCount} completed item(s)`,
           };
-          return JSON.stringify(result, null, 2);
+          return JSON.stringify(finishResult, null, 2);
 
         default:
           throw new Error(`Unknown action: ${args.action}`);
