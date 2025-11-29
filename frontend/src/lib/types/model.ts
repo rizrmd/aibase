@@ -73,6 +73,7 @@ export interface StatusData {
   message?: string;
   details?: any;
   history?: any[]; // For chat history responses
+  todos?: any; // For todo list responses
   type?: string; // For control response types
 }
 

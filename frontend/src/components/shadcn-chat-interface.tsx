@@ -3,12 +3,12 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Chat } from "@/components/ui/chat";
 import type { Message } from "@/components/ui/chat-message";
+import { TodoPanel } from "@/components/todo-panel";
 import { useConvId } from "@/lib/conv-id";
 import { useWSConnection } from "@/lib/ws/ws-connection-manager";
 import { activeTabManager } from "@/lib/ws/active-tab-manager";
 import {
-  AlertCircle,
-  Loader2
+  AlertCircle
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { flushSync } from "react-dom";
@@ -22,11 +22,11 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [error, setError] = useState<string | null>(null);
+  const [todos, setTodos] = useState<any>(null);
 
   // Use the client ID management hook
-  const { convId, metadata: convMetadata } = useConvId();
+  const { convId } = useConvId();
 
   
   // Use WebSocket connection manager - this ensures only one connection even with Strict Mode
@@ -110,19 +110,17 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
     const handleConnected = () => {
       // Only active tab handles connection events
       if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
-      setConnectionStatus("connected");
       setError(null);
       // Request message history from server when connected
       wsClient.getHistory();
     };
 
     const handleDisconnected = () => {
-      setConnectionStatus("disconnected");
       setIsLoading(false);
     };
 
     const handleReconnecting = () => {
-      setConnectionStatus("reconnecting");
+      // Reconnecting state
     };
 
     const handleError = (error: Error) => {
@@ -408,10 +406,8 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       });
     };
 
-    const handleStatus = (data: { status?: string }) => {
-      if (data.status) {
-        setConnectionStatus(data.status);
-      }
+    const handleStatus = (_data: { status?: string }) => {
+      // Status update
     };
 
     const handleHistoryResponse = (data: { messages?: any[] }) => {
@@ -596,7 +592,13 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
       console.log("handleControl called with:", data);
       if (data.status === "history" || data.type === "history_response") {
         console.log("Processing history data:", data.history);
+        console.log("Processing todos data:", data.todos);
         handleHistoryResponse({ messages: data.history || [] });
+
+        // Update todos state if provided
+        if (data.todos) {
+          setTodos(data.todos);
+        }
       }
     };
 
@@ -838,12 +840,6 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
     setInput(e.target.value);
   }, []);
 
-  const clearHistory = useCallback(() => {
-    setMessages([]);
-    setError(null);
-    wsClient?.clearHistory();
-  }, [wsClient]);
-
   const abort = useCallback(() => {
     console.log('[Abort] User manually aborted request');
     setIsLoading(false);
@@ -887,73 +883,36 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
     "Explain machine learning",
   ];
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "connected":
-        return "bg-green-500";
-      case "connecting":
-      case "reconnecting":
-        return "bg-yellow-500";
-      case "disconnected":
-      case "error":
-        return "bg-red-500";
-      default:
-        return "bg-gray-500";
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "connected":
-        return "Connected";
-      case "connecting":
-        return "Connecting...";
-      case "reconnecting":
-        return "Reconnecting...";
-      case "disconnected":
-        return "Disconnected";
-      case "error":
-        return "Error";
-      default:
-        return status;
-    }
-  };
-
-  const [isConnected, setIsConnected] = useState(false);
-
-  // Update connection status based on wsClient
-  useEffect(() => {
-    const checkConnection = () => {
-      setIsConnected(wsClient?.isConnected() ?? false);
-    };
-
-    const interval = setInterval(checkConnection, 1000);
-    return () => clearInterval(interval);
-  }, [wsClient]);
-
   return (
-    <div className={`flex flex-col h-screen ${className}`}>
+    <div className={`flex h-screen ${className}`}>
+      {/* Todo Panel - Sticky on left */}
+      <div className="sticky top-0 h-screen border-r bg-background">
+        <TodoPanel todos={todos} isLoading={false} />
+      </div>
 
-      {/* Error Alert */}
-      {error && (
-        <Alert className="mx-4 mb-2 border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Error Alert */}
+        {error && (
+          <Alert className="mx-4 mb-2 border-red-200 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">{error}</AlertDescription>
+          </Alert>
+        )}
 
-      <Chat
-        messages={messages}
-        input={input}
-        handleInputChange={handleInputChange}
-        handleSubmit={handleSubmit}
-        isGenerating={isLoading}
-        stop={abort}
-        setMessages={setMessages}
-        append={append}
-        suggestions={messages.length === 0 ? suggestions : []}
-        className="h-full"
-      />
+        <Chat
+          messages={messages}
+          input={input}
+          handleInputChange={handleInputChange}
+          handleSubmit={handleSubmit}
+          isGenerating={isLoading}
+          stop={abort}
+          setMessages={setMessages}
+          append={append}
+          suggestions={messages.length === 0 ? suggestions : []}
+          className="h-full"
+        />
+      </div>
 
       {/* <div className="flex-1 px-4 pb-4 min-h-0">
         <div className="flex flex-rpw">
