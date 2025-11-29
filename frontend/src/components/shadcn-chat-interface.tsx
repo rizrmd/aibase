@@ -111,8 +111,10 @@ export function ShadcnChatInterface({ wsUrl, className }: ShadcnChatInterfacePro
         setMessages(prevMessages => {
           // Update thinking indicator with elapsed time if present
           const thinkingIndex = prevMessages.findIndex(m => m.isThinking);
+          console.log(`[Chunk] Looking for thinking indicator, found at index: ${thinkingIndex}, elapsedTime: ${data.elapsedTime}`);
 
           if (thinkingIndex !== -1 && data.elapsedTime !== undefined && data.elapsedTime > 0) {
+            console.log(`[Chunk] Updating thinking indicator with ${data.elapsedTime}s`);
             prevMessages = prevMessages.map((msg, idx) =>
               idx === thinkingIndex
                 ? { ...msg, content: `Thinking... ${data.elapsedTime}s` }
