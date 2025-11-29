@@ -299,17 +299,23 @@ export function ShadcnChatInterface({
                 )}..."`
               );
 
-              // Add chunk to parts array in arrival order
+              // Add chunk to parts array in arrival order (create new array for React)
               const lastPart = currentPartsRef.current[currentPartsRef.current.length - 1];
               if (lastPart && lastPart.type === "text") {
-                // Append to existing text part
-                lastPart.text += data.chunk;
+                // Append to existing text part - create new array with updated part
+                currentPartsRef.current = [
+                  ...currentPartsRef.current.slice(0, -1),
+                  { ...lastPart, text: lastPart.text + data.chunk }
+                ];
               } else {
-                // Create new text part
-                currentPartsRef.current.push({
-                  type: "text",
-                  text: data.chunk,
-                });
+                // Create new text part - create new array
+                currentPartsRef.current = [
+                  ...currentPartsRef.current,
+                  {
+                    type: "text",
+                    text: data.chunk,
+                  }
+                ];
               }
 
               const toolInvocations =
@@ -347,17 +353,23 @@ export function ShadcnChatInterface({
               );
               const newContent = existingMessage.content + data.chunk;
 
-              // Add chunk to parts array in arrival order
+              // Add chunk to parts array in arrival order (create new array for React)
               const lastPart = currentPartsRef.current[currentPartsRef.current.length - 1];
               if (lastPart && lastPart.type === "text") {
-                // Append to existing text part
-                lastPart.text += data.chunk;
+                // Append to existing text part - create new array with updated part
+                currentPartsRef.current = [
+                  ...currentPartsRef.current.slice(0, -1),
+                  { ...lastPart, text: lastPart.text + data.chunk }
+                ];
               } else {
-                // Create new text part
-                currentPartsRef.current.push({
-                  type: "text",
-                  text: data.chunk,
-                });
+                // Create new text part - create new array
+                currentPartsRef.current = [
+                  ...currentPartsRef.current,
+                  {
+                    type: "text",
+                    text: data.chunk,
+                  }
+                ];
               }
 
               // Update refs
@@ -938,20 +950,27 @@ export function ShadcnChatInterface({
         currentToolInvocationsRef.current.size
       );
 
-      // Add tool to parts array in arrival order (or update existing)
+      // Add tool to parts array in arrival order (or update existing) - create new array for React
       const existingPartIndex = currentPartsRef.current.findIndex(
         p => p.type === "tool-invocation" && p.toolInvocation?.toolCallId === data.toolCallId
       );
 
       if (existingPartIndex !== -1) {
-        // Update existing tool part
-        currentPartsRef.current[existingPartIndex].toolInvocation = toolInvocation;
+        // Update existing tool part - create new array with updated part
+        currentPartsRef.current = currentPartsRef.current.map((part, idx) =>
+          idx === existingPartIndex
+            ? { ...part, toolInvocation: toolInvocation }
+            : part
+        );
       } else if (data.status === "executing" || data.status === "call") {
-        // Add new tool part on first appearance
-        currentPartsRef.current.push({
-          type: "tool-invocation",
-          toolInvocation: toolInvocation,
-        });
+        // Add new tool part on first appearance - create new array
+        currentPartsRef.current = [
+          ...currentPartsRef.current,
+          {
+            type: "tool-invocation",
+            toolInvocation: toolInvocation,
+          }
+        ];
       }
 
       console.log(
