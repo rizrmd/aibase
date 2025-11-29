@@ -23,7 +23,7 @@ interface TodoList {
 
 export class TodoTool extends Tool {
   name = "todo";
-  description = "Manage todo items: add new tasks, list all tasks, check/uncheck items, remove items, clear all, or finish (remove completed items). All todos are stored per conversation. Supports batch operations for add/check/uncheck/remove.";
+  description = "Manage todo items: add new tasks, list all tasks, check/uncheck items, remove items, clear all, or finish (remove completed items with summary). All todos are stored per conversation. Supports batch operations for add/check/uncheck/remove.";
   parameters = {
     type: "object",
     properties: {
@@ -45,6 +45,10 @@ export class TodoTool extends Tool {
         type: "array",
         items: { type: "string" },
         description: "Array of todo IDs (required for check, uncheck, remove actions)",
+      },
+      summary: {
+        type: "string",
+        description: "Summary of completed work (required for finish action)",
       },
     },
     required: ["action"],
@@ -159,6 +163,7 @@ export class TodoTool extends Tool {
     text?: string;
     texts?: string[];
     ids?: string[];
+    summary?: string;
   }): Promise<string> {
     try {
       const todoList = await this.loadTodos();
@@ -283,6 +288,9 @@ export class TodoTool extends Tool {
           return this.formatTodoList(todoList);
 
         case "finish":
+          if (!args.summary) {
+            throw new Error("summary is required for finish action");
+          }
           const beforeCount = todoList.items.length;
           todoList.items = todoList.items.filter((item) => !item.checked);
           const finishRemovedCount = beforeCount - todoList.items.length;
@@ -290,6 +298,7 @@ export class TodoTool extends Tool {
           const finishResult = JSON.parse(this.formatTodoList(todoList));
           finishResult.finishResult = {
             removedCount: finishRemovedCount,
+            summary: args.summary,
             message: `Removed ${finishRemovedCount} completed item(s)`,
           };
           return JSON.stringify(finishResult, null, 2);
