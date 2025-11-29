@@ -4,27 +4,31 @@ import * as path from "path";
 
 /**
  * File Tool - Built-in file operations
- * Actions: list, info, delete, rename
+ * Actions: list, info, delete, rename, uploadUrl, list_project_files
  * All operations are restricted to /data/{proj-id}/{conv-id}/files directory
  */
 export class FileTool extends Tool {
   name = "file";
-  description = "Perform file operations: list files in directory, get file info, delete file, rename/move file, or list all files across all conversations in the project. All paths are relative to the conversation's file storage directory (/data/{proj-id}/{conv-id}/files).";
+  description = "Perform file operations: list files in directory, get file info, delete file, rename/move file, upload file from URL, or list all files across all conversations in the project. All paths are relative to the conversation's file storage directory (/data/{proj-id}/{conv-id}/files).";
   parameters = {
     type: "object",
     properties: {
       action: {
         type: "string",
-        enum: ["list", "info", "delete", "rename", "list_project_files"],
+        enum: ["list", "info", "delete", "rename", "uploadUrl", "list_project_files"],
         description: "The action to perform",
       },
       path: {
         type: "string",
-        description: "File or directory path (relative to conversation file storage). Defaults to '.' (root) for list action. Not required for list and list_project_files actions.",
+        description: "File or directory path (relative to conversation file storage). Defaults to '.' (root) for list action. For uploadUrl, this is the destination filename. Not required for list and list_project_files actions.",
       },
       newPath: {
         type: "string",
         description: "New path for rename action (required only for rename)",
+      },
+      url: {
+        type: "string",
+        description: "URL to download file from (required only for uploadUrl action)",
       },
     },
     required: ["action"],
@@ -75,9 +79,10 @@ export class FileTool extends Tool {
   }
 
   async execute(args: {
-    action: "list" | "info" | "delete" | "rename" | "list_project_files";
+    action: "list" | "info" | "delete" | "rename" | "uploadUrl" | "list_project_files";
     path?: string;
     newPath?: string;
+    url?: string;
   }): Promise<string> {
     try {
       switch (args.action) {
@@ -102,6 +107,14 @@ export class FileTool extends Tool {
             throw new Error("newPath is required for rename action");
           }
           return await this.renameFile(args.path, args.newPath);
+        case "uploadUrl":
+          if (!args.url) {
+            throw new Error("url is required for uploadUrl action");
+          }
+          if (!args.path) {
+            throw new Error("path is required for uploadUrl action (destination filename)");
+          }
+          return await this.uploadFromUrl(args.url, args.path);
         case "list_project_files":
           return await this.listProjectFiles();
         default:
@@ -201,6 +214,43 @@ export class FileTool extends Tool {
       message: `Renamed: ${relativeOldPath} -> ${relativeNewPath}`,
       oldPath: relativeOldPath,
       newPath: relativeNewPath,
+    });
+  }
+
+  private async uploadFromUrl(url: string, destPath: string): Promise<string> {
+    const resolvedPath = await this.resolvePath(destPath);
+    const baseDir = this.getBaseDir();
+    const relativePath = path.relative(baseDir, resolvedPath);
+
+    // Ensure parent directory exists
+    const parentDir = path.dirname(resolvedPath);
+    await fs.mkdir(parentDir, { recursive: true });
+
+    // Download file from URL
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch file from URL: ${response.status} ${response.statusText}`);
+    }
+
+    // Get content as buffer
+    const buffer = await response.arrayBuffer();
+    const nodeBuffer = Buffer.from(buffer);
+
+    // Write to file
+    await fs.writeFile(resolvedPath, nodeBuffer);
+
+    // Get file stats
+    const stats = await fs.stat(resolvedPath);
+
+    return JSON.stringify({
+      success: true,
+      message: `File uploaded from URL to: ${relativePath}`,
+      url,
+      path: relativePath,
+      name: path.basename(resolvedPath),
+      size: stats.size,
+      sizeHuman: this.formatBytes(stats.size),
+      created: stats.birthtime.toISOString(),
     });
   }
 

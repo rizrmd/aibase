@@ -346,17 +346,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     });
   }
 
-  // Debug logging
-  if (!isUser) {
-    console.log("[ChatMessage Render] Assistant message:", {
-      hasContent: !!content,
-      contentLength: content?.length || 0,
-      hasToolInvocations: !!toolInvocations,
-      toolInvocationsLength: toolInvocations?.length || 0,
-      toolInvocations: toolInvocations,
-    });
-  }
-
   // Split content at first meaningful newline (skip leading newlines) if we have tool invocations
   const shouldSplitContent =
     !isUser && toolInvocations && toolInvocations.length > 0;
@@ -514,6 +503,7 @@ function ToolCall({
 
   if (!toolInvocations?.length) return null;
 
+
   // Collect all progress messages for script tools
   const scriptProgressMap = new Map<string, string[]>();
   toolInvocations.forEach((inv) => {
@@ -626,6 +616,8 @@ function ToolCall({
               });
             }
           };
+
+          if (invocation.toolName === 'todo') return <></>
 
           let toolName = (
             <span className="font-mono text-xs">

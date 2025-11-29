@@ -14,6 +14,12 @@ interface TodoList {
   updatedAt: string;
 }
 
+interface MemoryStore {
+  [category: string]: {
+    [key: string]: any;
+  };
+}
+
 /**
  * Get the path to the todos file
  */
@@ -64,7 +70,64 @@ function formatTodosForContext(todoList: TodoList): string {
 }
 
 /**
- * Get default context with existing todos appended
+ * Get the path to the memory file
+ */
+function getMemoryFilePath(projectId: string): string {
+  return path.join(
+    process.cwd(),
+    "data",
+    projectId,
+    "memory.json"
+  );
+}
+
+/**
+ * Load memory from file
+ */
+async function loadMemory(projectId: string): Promise<MemoryStore | null> {
+  const memoryPath = getMemoryFilePath(projectId);
+
+  try {
+    const content = await fs.readFile(memoryPath, "utf-8");
+    return JSON.parse(content);
+  } catch (error: any) {
+    // File doesn't exist or is invalid
+    return null;
+  }
+}
+
+/**
+ * Format memory for context
+ */
+function formatMemoryForContext(memory: MemoryStore): string {
+  const categories = Object.keys(memory);
+
+  if (categories.length === 0) {
+    return "";
+  }
+
+  let context = `\n\nProject Memory (shared across all conversations):`;
+
+  for (const category of categories) {
+    const categoryData = memory[category];
+    if (!categoryData) continue;
+
+    const keys = Object.keys(categoryData);
+    if (keys.length > 0) {
+      context += `\n\n[${category}]`;
+      for (const key of keys) {
+        const value = categoryData[key];
+        const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+        context += `\n  ${key}: ${valueStr}`;
+      }
+    }
+  }
+
+  return context;
+}
+
+/**
+ * Get default context with existing todos and memory appended
  */
 export const defaultContext = async (convId: string = "default", projectId: string = "default"): Promise<string> => {
   let context = `use todo tool to track step/phases/stages/parts etc. add/remove/check/uncheck multiple time at once instead of one-by-one.
@@ -139,12 +202,19 @@ EXAMPLES:
   "code": "progress('Reading Excel structure...'); const structure = await duckdb({ query: \"DESCRIBE SELECT * FROM read_xlsx('data.xlsx', header=false, all_varchar=true, range='A1:Z100')\" }); progress(\`Found \${structure.rowCount} columns\`); const preview = await duckdb({ query: \"SELECT * FROM read_xlsx('data.xlsx', header=false, all_varchar=true, range='A1:Z10')\" }); return { columns: structure.data.map(c => c.column_name), totalColumns: structure.rowCount, preview: preview.data };"
 }
 
-Available: fetch, webSearch({ query, region?, safesearch?, timelimit?, maxResults? }), duckdb({ query, database?, format?, readonly? }), progress(msg), file(...), todo(...), convId, projectId, console
+Available: fetch, webSearch({ query, region?, safesearch?, timelimit?, maxResults? }), duckdb({ query, database?, format?, readonly? }), progress(msg), file(...), todo(...), memory(...), convId, projectId, console
 Note: For Excel files use read_xlsx('file.xlsx', header=true, all_varchar=true, range='A1:Z1000') - IMPORTANT: range parameter is required for multi-column Excel files!
       Without range, only the first column is read. Use all_varchar=true to avoid type errors. Cast to numeric types when needed: CAST(column AS DOUBLE)
 Write as async function body - NO import/export, just await and return!`;
 
-  // Try to load existing todos
+  // Try to load project memory (shared across all conversations)
+  const memory = await loadMemory(projectId);
+
+  if (memory && Object.keys(memory).length > 0) {
+    context += formatMemoryForContext(memory);
+  }
+
+  // Try to load conversation-specific todos
   const todoList = await loadTodos(convId, projectId);
 
   if (todoList && todoList.items.length > 0) {
