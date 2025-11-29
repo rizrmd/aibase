@@ -214,14 +214,16 @@ export class Conversation {
     if (options.topP !== undefined) this.modelParams.top_p = options.topP;
 
     // Initialize history with system prompt
-    // Use provided systemPrompt or default context
-    const systemPrompt = options.systemPrompt || defaultContext();
-    if (systemPrompt) {
-      this._history.push({
-        role: "system",
-        content: systemPrompt,
-      });
-    }
+    // Start with default context and append custom systemPrompt if provided
+    const baseContext = defaultContext();
+    const systemPrompt = options.systemPrompt
+      ? `${baseContext}\n\n${options.systemPrompt}`
+      : baseContext;
+
+    this._history.push({
+      role: "system",
+      content: systemPrompt,
+    });
 
     // Add initial history if provided
     if (options.initialHistory) {
