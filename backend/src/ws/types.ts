@@ -15,6 +15,7 @@ export interface MessageMetadata {
   total?: number;
   convId?: string;
   sessionId?: string;
+  isAccumulated?: boolean;
 }
 
 export type MessageType =
@@ -43,6 +44,7 @@ export interface ControlMessage {
 // LLM related messages
 export interface UserMessageData {
   text: string;
+  fileIds?: string[]; // File IDs from HTTP upload
   options?: {
     temperature?: number;
     maxTokens?: number;
@@ -127,4 +129,14 @@ export interface ConnectionStats {
   lastMessageAt?: number;
   reconnectCount: number;
   averageLatency?: number;
+}
+
+// File related interfaces (files uploaded via HTTP)
+export interface FileReference {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+  uploadedAt: number;
 }

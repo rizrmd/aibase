@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { WSClient } from "@/lib/ws/ws-client";
 import type { ChatMessage } from "@/lib/types/model";
+import { uploadFiles } from "@/lib/file-upload";
 
 export interface UseChatOptions {
   wsUrl: string;
@@ -12,7 +13,7 @@ export interface UseChatReturn {
   messages: ChatMessage[];
   input: string;
   setInput: (input: string) => void;
-  handleSubmit: (e?: React.FormEvent) => Promise<void>;
+  handleSubmit: (e?: React.FormEvent, options?: { experimental_attachments?: FileList }) => Promise<void>;
   isLoading: boolean;
   connectionStatus: string;
   error: string | null;
@@ -152,7 +153,7 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
     };
   }, [wsUrl, onError, onStatusChange]);
 
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e?: React.FormEvent, options?: { experimental_attachments?: FileList }) => {
     e?.preventDefault();
 
     if (!input.trim() || !wsClientRef.current?.isConnected()) {
@@ -173,7 +174,18 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
     setError(null);
 
     try {
-      await wsClientRef.current!.sendMessage(input.trim());
+      let fileIds: string[] | undefined;
+
+      // Upload files via HTTP if provided
+      if (options?.experimental_attachments && options.experimental_attachments.length > 0) {
+        const files = Array.from(options.experimental_attachments);
+        const uploadedFiles = await uploadFiles(files);
+        fileIds = uploadedFiles.map(f => f.id);
+        console.log(`Uploaded ${uploadedFiles.length} files:`, fileIds);
+      }
+
+      // Send text message via WebSocket with file references
+      await wsClientRef.current!.sendMessage(input.trim(), { fileIds });
     } catch (error) {
       setIsLoading(false);
       setError(error instanceof Error ? error.message : "Failed to send message");

@@ -10,8 +10,7 @@ import type {
   UserMessageData,
 } from "./types";
 import { Conversation, Tool } from "../llm/conversation";
-import { getBuiltinTools } from "../tools/builtin-tools";
-import { getAllAvailableTools } from "../tools/conversation-tools";
+import { getBuiltinTools } from "../tools";
 import { WSEventEmitter } from "./events";
 import { MessagePersistence } from "./message-persistence";
 
@@ -640,8 +639,7 @@ export class WSServer extends WSEventEmitter {
 
           console.log(`Backend: Retrieved history:`, {
             hasHistory: !!history,
-            messageCount: history?.messageCount || 0,
-            messages: history?.messages?.length || 0,
+            messageCount: history?.length || 0,
             filteredMessages: clientHistory.length
           });
 
@@ -753,7 +751,7 @@ Always be helpful and conversational.`;
               },
             });
           },
-          after: async (toolCallId: string, toolName: string, args: any, result: any) => {
+          after: async (toolCallId: string, toolName: string, _args: any, result: any) => {
             console.log(`[Tool Hook] After: ${toolName} (${toolCallId})`);
             // Broadcast tool result to all connections for this conversation
             this.broadcastToConv(convId, {
@@ -770,7 +768,7 @@ Always be helpful and conversational.`;
               },
             });
           },
-          error: async (toolCallId: string, toolName: string, args: any, error: Error) => {
+          error: async (toolCallId: string, toolName: string, _args: any, error: Error) => {
             console.log(`[Tool Hook] Error: ${toolName} (${toolCallId}) - ${error.message}`);
             // Broadcast tool error to all connections for this conversation
             this.broadcastToConv(convId, {
@@ -794,20 +792,9 @@ Always be helpful and conversational.`;
   }
 
   private async getDefaultTools(): Promise<Tool[]> {
-    try {
-      // Try to get advanced tools first
-      const advancedTools = await getAllAvailableTools();
-      if (advancedTools.length > getBuiltinTools().length) {
-        console.log(`Using advanced tool system with ${advancedTools.length} tools`);
-        return advancedTools;
-      }
-    } catch (error) {
-      console.warn('Failed to load advanced tools, falling back to basic tools:', error);
-    }
-
-    // Fallback to basic tools
-    const basicTools = getBuiltinTools();
-    return basicTools;
+    const tools = getBuiltinTools();
+    console.log(`Loaded ${tools.length} built-in tools`);
+    return tools;
   }
 
   private sendToWebSocket(ws: ServerWebSocket, message: WSMessage): boolean {
@@ -836,13 +823,17 @@ Always be helpful and conversational.`;
   private startHeartbeat(ws: ServerWebSocket): void {
     const timer = setInterval(() => {
       const connectionInfo = this.connections.get(ws);
-      if (connectionInfo && !connectionInfo.isAlive) {
+      if (!connectionInfo) {
+        return;
+      }
+
+      if (!connectionInfo.isAlive) {
         // Connection is dead, close it
         ws.terminate();
         return;
       }
 
-      connectionInfo!.isAlive = false;
+      connectionInfo.isAlive = false;
 
       // Send ping
       this.sendToWebSocket(ws, {

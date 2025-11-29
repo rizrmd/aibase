@@ -24,6 +24,7 @@ export interface MessageMetadata {
   total?: number;
   convId?: string;
   sessionId?: string;
+  isAccumulated?: boolean;
 }
 
 export type MessageType =
@@ -31,9 +32,6 @@ export type MessageType =
   | "user_message"
   | "control"
   | "ping"
-  | "file_upload"
-  | "file_list"
-  | "file_request"
   // Server to Client
   | "llm_chunk"
   | "llm_complete"
@@ -42,14 +40,11 @@ export type MessageType =
   | "error"
   | "control_response"
   | "pong"
-  | "status"
-  | "file_upload_response"
-  | "file_list_response"
-  | "file_content";
+  | "status";
 
 export interface UserMessageData {
   text: string;
-  files?: MessageFile[];
+  fileIds?: string[]; // File IDs from upload, not file content
   options?: {
     temperature?: number;
     maxTokens?: number;
@@ -129,43 +124,12 @@ export interface ToolResultData {
   result: any;
 }
 
-// File related interfaces
-export interface MessageFile {
+// File reference interfaces (files uploaded via HTTP)
+export interface FileReference {
+  id: string;
   name: string;
   size: number;
   type: string;
-  data?: string; // Base64 encoded file data
-}
-
-export interface FileUploadData {
-  files: MessageFile[];
-}
-
-export interface FileUploadResponseData {
-  success: boolean;
-  uploaded?: MessageFile[];
-  error?: string;
-}
-
-export interface FileListData {
-  convId?: string;
-}
-
-export interface FileListResponseData {
-  success: boolean;
-  files?: MessageFile[];
-  error?: string;
-}
-
-export interface FileRequestData {
-  fileName: string;
-  asBase64?: boolean;
-}
-
-export interface FileContentData {
-  success: boolean;
-  fileName: string;
-  content?: string;
-  type?: string;
-  error?: string;
+  url: string;
+  uploadedAt: number;
 }

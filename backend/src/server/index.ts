@@ -35,6 +35,7 @@ export { Conversation, Tool } from "../llm/conversation";
 // Import types for convenience functions
 import type { WSClientOptions, WSServerOptions } from "../ws/types";
 import { WSServer } from "../ws/entry";
+import { handleFileUpload, handleFileDownload } from "./upload-handler";
 
 /**
  * Convenience function to create a WebSocket server
@@ -98,7 +99,7 @@ export class WebSocketServer {
       development: this.options.development,
       fetch: (req, server) => {
         const url = new URL(req.url);
-        
+
         // Handle WebSocket upgrade requests
         if (url.pathname.startsWith("/api/ws")) {
           // Extract conversation ID from URL before upgrading
@@ -112,6 +113,16 @@ export class WebSocketServer {
             return undefined; // WebSocket connection established
           }
           return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+
+        // Handle file upload (POST /api/upload?convId=xxx)
+        if (url.pathname === "/api/upload" && req.method === "POST") {
+          return handleFileUpload(req);
+        }
+
+        // Handle file download (GET /api/files/{convId}/{fileName})
+        if (url.pathname.startsWith("/api/files/") && req.method === "GET") {
+          return handleFileDownload(req);
         }
 
         // Default routes

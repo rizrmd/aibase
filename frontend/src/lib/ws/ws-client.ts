@@ -139,12 +139,12 @@ export class WSClient extends WSEventEmitter {
    */
   async sendMessage(
     text: string,
-    options?: UserMessageData["options"]
+    additionalData?: Partial<Omit<UserMessageData, 'text'>>
   ): Promise<any> {
     const message: WSMessage = {
       type: "user_message",
       id: this.generateMessageId(),
-      data: { text, ...options },
+      data: { text, ...additionalData },
       metadata: {
         timestamp: Date.now(),
         convId: this.getConvId(),

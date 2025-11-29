@@ -19,17 +19,21 @@ export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   )
 }
 
-interface HighlightedPreProps extends React.HTMLAttributes<HTMLPreElement> {
+interface HighlightedPreProps {
   children: string
   language: string
+  className?: string
 }
 
-const HighlightedPre = React.memo(
-  async ({ children, language, ...props }: HighlightedPreProps) => {
+const HighlightedPre = async ({
+  children,
+  language,
+  className,
+}: HighlightedPreProps) => {
     const { codeToTokens, bundledLanguages } = await import("shiki")
 
     if (!(language in bundledLanguages)) {
-      return <pre {...props}>{children}</pre>
+      return <pre className={className}>{children}</pre>
     }
 
     const { tokens } = await codeToTokens(children, {
@@ -42,7 +46,7 @@ const HighlightedPre = React.memo(
     })
 
     return (
-      <pre {...props}>
+      <pre className={className}>
         <code>
           {tokens.map((line, lineIndex) => (
             <React.Fragment key={lineIndex}>
@@ -71,21 +75,14 @@ const HighlightedPre = React.memo(
       </pre>
     )
   }
-)
-HighlightedPre.displayName = "HighlightedCode"
 
-interface CodeBlockProps extends React.HTMLAttributes<HTMLPreElement> {
+interface CodeBlockProps {
   children: React.ReactNode
   className?: string
   language: string
 }
 
-const CodeBlock = ({
-  children,
-  className,
-  language,
-  ...restProps
-}: CodeBlockProps) => {
+const CodeBlock = ({ children, className, language }: CodeBlockProps) => {
   const code =
     typeof children === "string"
       ? children
@@ -100,7 +97,7 @@ const CodeBlock = ({
     <div className="group/code relative mb-4">
       <Suspense
         fallback={
-          <pre className={preClass} {...restProps}>
+          <pre className={preClass}>
             {children}
           </pre>
         }
@@ -126,9 +123,10 @@ function childrenTakeAllStringContents(element: React.ReactNode): string {
     element &&
     typeof element === "object" &&
     "props" in element &&
-    element.props?.children
+    (element as { props: { children?: React.ReactNode } }).props?.children
   ) {
-    const children = element.props.children
+    const children = (element as { props: { children?: React.ReactNode } }).props
+      .children
 
     if (Array.isArray(children)) {
       return children
@@ -175,7 +173,7 @@ const COMPONENTS = {
       </code>
     )
   },
-  pre: ({ children }: { children?: React.ReactNode }) => children,
+  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   ol: withClass("ol", "list-decimal space-y-2 pl-6"),
   ul: withClass("ul", "list-disc space-y-2 pl-6"),
   li: withClass("li", "my-1.5"),
@@ -196,13 +194,14 @@ const COMPONENTS = {
   hr: withClass("hr", "border-foreground/20"),
 }
 
-function withClass(Tag: keyof JSX.IntrinsicElements, classes: string) {
-  const Component = ({
-    ...props
-  }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) => (
-    <Tag className={classes} {...props} />
-  )
-  Component.displayName = Tag
+function withClass<T extends keyof React.JSX.IntrinsicElements>(
+  Tag: T,
+  classes: string
+) {
+  const Component = (props: React.ComponentPropsWithoutRef<T>) => {
+    return React.createElement(Tag, { ...props, className: classes })
+  }
+  Component.displayName = Tag as string
   return Component
 }
 
