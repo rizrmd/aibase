@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { WSClient } from "@/lib/ws/ws-client";
-import type { ChatMessage } from "@/lib/types/model";
+import type { Message } from "@/components/ui/chat-message";
 import { uploadFiles } from "@/lib/file-upload";
+import { useChatStore } from "@/stores/chat-store";
 
 export interface UseChatOptions {
   wsUrl: string;
@@ -10,7 +11,7 @@ export interface UseChatOptions {
 }
 
 export interface UseChatReturn {
-  messages: ChatMessage[];
+  messages: Message[];
   input: string;
   setInput: (input: string) => void;
   handleSubmit: (e?: React.FormEvent, options?: { experimental_attachments?: FileList }) => Promise<void>;
@@ -23,11 +24,19 @@ export interface UseChatReturn {
 }
 
 export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): UseChatReturn {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState("disconnected");
-  const [error, setError] = useState<string | null>(null);
+  // Zustand stores
+  const {
+    messages,
+    input,
+    isLoading,
+    connectionStatus,
+    error,
+    setMessages,
+    setInput,
+    setIsLoading,
+    setConnectionStatus,
+    setError,
+  } = useChatStore();
 
   const wsClientRef = useRef<WSClient | null>(null);
   const currentMessageRef = useRef<string | null>(null);
@@ -85,12 +94,11 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
         currentMessageIdRef.current = messageId;
         currentMessageRef.current = data.chunk;
 
-        const newMessage: ChatMessage = {
+        const newMessage: Message = {
           id: messageId,
-          type: "assistant",
+          role: "assistant",
           content: data.chunk,
-          timestamp: Date.now(),
-          isComplete: false,
+          createdAt: new Date(),
         };
 
         setMessages(prev => [...prev, newMessage]);
@@ -102,7 +110,7 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
       if (currentMessageIdRef.current) {
         setMessages(prev => prev.map(msg =>
           msg.id === currentMessageIdRef.current
-            ? { ...msg, content: data.fullText, isComplete: true }
+            ? { ...msg, content: data.fullText }
             : msg
         ));
       }
@@ -117,12 +125,11 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
       setIsLoading(false);
 
       // Add error message to chat
-      const errorMessage: ChatMessage = {
+      const errorMessage: Message = {
         id: `error_${Date.now()}`,
-        type: "error",
+        role: "assistant",
         content: `Error: ${data.message}`,
-        timestamp: Date.now(),
-        isComplete: true,
+        createdAt: new Date(),
       };
 
       setMessages(prev => [...prev, errorMessage]);
@@ -160,12 +167,11 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
       return;
     }
 
-    const userMessage: ChatMessage = {
+    const userMessage: Message = {
       id: `msg_${Date.now()}_user`,
-      type: "user",
+      role: "user",
       content: input.trim(),
-      timestamp: Date.now(),
-      isComplete: true,
+      createdAt: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);

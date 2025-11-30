@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 
 import { recordAudio } from "@/lib/audio-utils"
+import { useAudioStore } from "@/stores/audio-store"
 
 interface UseAudioRecordingOptions {
   transcribeAudio?: (blob: Blob) => Promise<string>
@@ -11,11 +12,20 @@ export function useAudioRecording({
   transcribeAudio,
   onTranscriptionComplete,
 }: UseAudioRecordingOptions) {
-  const [isListening, setIsListening] = useState(false)
-  const [isSpeechSupported, setIsSpeechSupported] = useState(!!transcribeAudio)
-  const [isRecording, setIsRecording] = useState(false)
-  const [isTranscribing, setIsTranscribing] = useState(false)
-  const [audioStream, setAudioStream] = useState<MediaStream | null>(null)
+  // Zustand store
+  const {
+    isListening,
+    isSpeechSupported,
+    isRecording,
+    isTranscribing,
+    audioStream,
+    setIsListening,
+    setIsSpeechSupported,
+    setIsRecording,
+    setIsTranscribing,
+    setAudioStream,
+  } = useAudioStore();
+
   const activeRecordingRef = useRef<any>(null)
 
   useEffect(() => {

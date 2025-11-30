@@ -8,12 +8,13 @@ import { useConvId } from "@/lib/conv-id";
 import { useWSConnection } from "@/lib/ws/ws-connection-manager";
 import { activeTabManager } from "@/lib/ws/active-tab-manager";
 import { uploadFilesWithProgress } from "@/lib/file-upload";
+import { useChatStore } from "@/stores/chat-store";
+import { useFileStore } from "@/stores/file-store";
 import { AlertCircle } from "lucide-react";
 import {
   useCallback,
   useEffect,
   useRef,
-  useState,
   type ChangeEvent,
 } from "react";
 import { flushSync } from "react-dom";
@@ -27,12 +28,21 @@ export function ShadcnChatInterface({
   wsUrl,
   className,
 }: ShadcnChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [todos, setTodos] = useState<any>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  // Zustand stores (reactive state only)
+  const {
+    messages,
+    input,
+    isLoading,
+    error,
+    todos,
+    setMessages,
+    setInput,
+    setIsLoading,
+    setError,
+    setTodos,
+  } = useChatStore();
+
+  const { uploadProgress, setUploadProgress } = useFileStore();
 
   // Use the client ID management hook
   const { convId } = useConvId();
@@ -46,13 +56,10 @@ export function ShadcnChatInterface({
     timeout: 10000,
   });
 
+  // Keep refs as regular useRef (non-reactive tracking for streaming)
   const currentMessageRef = useRef<string | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
-
-  // Track tool invocations for the current assistant message
   const currentToolInvocationsRef = useRef<Map<string, any>>(new Map());
-
-  // Track parts in arrival order for streaming
   const currentPartsRef = useRef<any[]>([]);
 
   // Create a stable component reference for tab management

@@ -14,6 +14,7 @@ import { FileAttachmentList } from "@/components/ui/file-attachment";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { ScriptDetailsDialog } from "@/components/ui/script-details-dialog";
 import { FileToolDetailsDialog } from "@/components/ui/file-tool-details-dialog";
+import { useUIStore } from "@/stores/ui-store";
 
 const chatBubbleVariants = cva(
   "group/message relative break-words rounded-lg p-3 text-sm sm:max-w-[70%]",
@@ -492,22 +493,7 @@ const ReasoningBlock = ({ part }: { part: ReasoningPart }) => {
 function ToolCall({
   toolInvocations,
 }: Pick<ChatMessageProps, "toolInvocations">) {
-  const [selectedScript, setSelectedScript] = useState<{
-    purpose: string;
-    code: string;
-    state: "call" | "executing" | "progress" | "result" | "error";
-    result?: any;
-    error?: string;
-  } | null>(null);
-
-  const [selectedFileTool, setSelectedFileTool] = useState<{
-    action: string;
-    path?: string;
-    newPath?: string;
-    state: "call" | "executing" | "progress" | "result" | "error";
-    result?: any;
-    error?: string;
-  } | null>(null);
+  const { selectedScript, selectedFileTool, setSelectedScript, setSelectedFileTool } = useUIStore();
 
   if (!toolInvocations?.length) return null;
 

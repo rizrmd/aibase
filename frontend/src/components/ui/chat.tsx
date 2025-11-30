@@ -5,7 +5,6 @@ import {
   forwardRef,
   useCallback,
   useRef,
-  useState,
   type ReactElement,
 } from "react";
 
@@ -15,6 +14,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { MessageInput } from "@/components/ui/message-input";
 import { MessageList } from "@/components/ui/message-list";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
+import { useFileStore } from "@/stores/file-store";
 import { cn } from "@/lib/utils";
 
 interface ChatPropsBase {
@@ -306,7 +306,7 @@ interface ChatFormProps {
 
 export const ChatForm = forwardRef<HTMLFormElement, ChatFormProps>(
   ({ children, handleSubmit, isPending, className }, ref) => {
-    const [files, setFiles] = useState<File[] | null>(null);
+    const { files, setFiles, clearFiles } = useFileStore();
 
     const onSubmit = (event: React.FormEvent) => {
       if (!files) {
@@ -316,7 +316,7 @@ export const ChatForm = forwardRef<HTMLFormElement, ChatFormProps>(
 
       const fileList = createFileList(files);
       handleSubmit(event, { experimental_attachments: fileList });
-      setFiles(null);
+      clearFiles();
     };
 
     return (

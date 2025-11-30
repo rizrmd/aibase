@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef } from "react"
+import { useUtilityStore } from "@/stores/utility-store"
 
 // Auto-scroll activates when user is within 30% from the bottom of the viewport
 const ACTIVATION_THRESHOLD_PERCENT = 0.3
@@ -10,7 +11,7 @@ const AT_BOTTOM_THRESHOLD = 5
 export function useAutoScroll(dependencies: React.DependencyList) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const previousScrollTop = useRef<number | null>(null)
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const { shouldAutoScroll, setShouldAutoScroll } = useUtilityStore();
 
   const scrollToBottom = useCallback(() => {
     const container = containerRef.current

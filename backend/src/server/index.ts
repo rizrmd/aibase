@@ -125,30 +125,7 @@ export class WebSocketServer {
           return handleFileDownload(req);
         }
 
-        // Default routes
-        if (url.pathname === "/") {
-          return new Response(
-            `
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>WebSocket Server</title>
-                <meta charset="utf-8">
-              </head>
-              <body>
-                <h1>WebSocket Server Running</h1>
-                <p>WebSocket endpoint: <code>ws://${this.options.hostname}:${this.options.port}/ws</code></p>
-                <p>Chat endpoint: <code>ws://${this.options.hostname}:${this.options.port}/chat</code></p>
-                <p>Health check: <a href="/health">/health</a></p>
-              </body>
-            </html>
-          `,
-            {
-              headers: { "Content-Type": "text/html" },
-            }
-          );
-        }
-
+        // Health check endpoint
         if (url.pathname === "/health") {
           return Response.json({
             status: "healthy",
@@ -163,6 +140,50 @@ export class WebSocketServer {
           if (url.pathname === path) {
             return handler(req);
           }
+        }
+
+        // Serve static files in production
+        if (process.env.NODE_ENV === "production") {
+          try {
+            const staticPath = url.pathname === "/" ? "/index.html" : url.pathname;
+            const filePath = `../frontend/dist${staticPath}`;
+            const file = Bun.file(filePath);
+
+            if (await file.exists()) {
+              return new Response(file);
+            }
+
+            // Fallback to index.html for client-side routing (SPA)
+            const indexFile = Bun.file("../frontend/dist/index.html");
+            if (await indexFile.exists()) {
+              return new Response(indexFile);
+            }
+          } catch (error) {
+            console.error("Error serving static file:", error);
+          }
+        }
+
+        // Development mode - show server info
+        if (url.pathname === "/") {
+          return new Response(
+            `
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>WebSocket Server</title>
+                <meta charset="utf-8">
+              </head>
+              <body>
+                <h1>WebSocket Server Running</h1>
+                <p>WebSocket endpoint: <code>ws://${this.options.hostname}:${this.options.port}/api/ws</code></p>
+                <p>Health check: <a href="/health">/health</a></p>
+              </body>
+            </html>
+          `,
+            {
+              headers: { "Content-Type": "text/html" },
+            }
+          );
         }
 
         return new Response("Not Found", { status: 404 });

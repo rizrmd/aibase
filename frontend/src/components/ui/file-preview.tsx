@@ -1,6 +1,7 @@
 import React, { useEffect } from "react"
 import { motion } from "framer-motion"
 import { FileIcon, X } from "lucide-react"
+import { useFileStore } from "@/stores/file-store"
 
 interface FilePreviewProps {
   file: File
@@ -67,7 +68,7 @@ ImageFilePreview.displayName = "ImageFilePreview"
 
 const TextFilePreview = React.forwardRef<HTMLDivElement, FilePreviewProps>(
   ({ file, onRemove }, ref) => {
-    const [preview, setPreview] = React.useState<string>("")
+    const { preview, setPreview } = useFileStore();
 
     useEffect(() => {
       const reader = new FileReader()
@@ -76,7 +77,7 @@ const TextFilePreview = React.forwardRef<HTMLDivElement, FilePreviewProps>(
         setPreview(text.slice(0, 50) + (text.length > 50 ? "..." : ""))
       }
       reader.readAsText(file)
-    }, [file])
+    }, [file, setPreview])
 
     return (
       <motion.div

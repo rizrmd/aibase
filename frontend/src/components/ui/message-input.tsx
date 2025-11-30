@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ArrowUp, Info, Loader2, Mic, Paperclip, Square } from "lucide-react"
 import { omit } from "remeda"
@@ -12,6 +12,8 @@ import { AudioVisualizer } from "@/components/ui/audio-visualizer"
 import { Button } from "@/components/ui/button"
 import { FilePreview } from "@/components/ui/file-preview"
 import { InterruptPrompt } from "@/components/ui/interrupt-prompt"
+import { useUIStore } from "@/stores/ui-store"
+import { useFileStore } from "@/stores/file-store"
 
 interface MessageInputBaseProps
   extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -50,8 +52,10 @@ export function MessageInput({
   ...props
 }: MessageInputProps) {
   const pasteTimestampRef = useRef<number>(0);
-  const [isDragging, setIsDragging] = useState(false)
-  const [showInterruptPrompt, setShowInterruptPrompt] = useState(false)
+
+  // Zustand stores
+  const { showInterruptPrompt, textAreaHeight, setShowInterruptPrompt, setTextAreaHeight } = useUIStore();
+  const { isDragging, setIsDragging } = useFileStore();
 
   const {
     isListening,
@@ -163,13 +167,12 @@ export function MessageInput({
   }
 
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
-  const [textAreaHeight, setTextAreaHeight] = useState<number>(0)
 
   useEffect(() => {
     if (textAreaRef.current) {
       setTextAreaHeight(textAreaRef.current.offsetHeight)
     }
-  }, [props.value])
+  }, [props.value, setTextAreaHeight])
 
   const showFileList =
     props.allowAttachments && props.files && props.files.length > 0

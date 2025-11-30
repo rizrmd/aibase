@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { codeToHtml } from "shiki";
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
 } from "./dialog";
 import { ScrollArea } from "./scroll-area";
 import { File, Folder, Info, Trash2, Edit3, FolderSearch } from "lucide-react";
+import { useUIStore } from "@/stores/ui-store";
 
 interface FileToolDetailsDialogProps {
   open: boolean;
@@ -65,7 +66,7 @@ export function FileToolDetailsDialog({
   result,
   error,
 }: FileToolDetailsDialogProps) {
-  const [highlightedResult, setHighlightedResult] = useState<string>("");
+  const { highlightedResult, setHighlightedResult } = useUIStore();
   const ActionIcon = getActionIcon(action);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { codeToHtml } from "shiki";
 import { format } from "prettier/standalone";
 import prettierPluginTypeScript from "prettier/plugins/typescript";
@@ -12,6 +12,7 @@ import {
 } from "./dialog";
 import { Loader2 } from "lucide-react";
 import { Badge } from "./badge";
+import { useUIStore } from "@/stores/ui-store";
 
 interface ScriptDetailsDialogProps {
   open: boolean;
@@ -34,8 +35,7 @@ export function ScriptDetailsDialog({
   result,
   error,
 }: ScriptDetailsDialogProps) {
-  const [highlightedCode, setHighlightedCode] = useState<string>("");
-  const [highlightedResult, setHighlightedResult] = useState<string>("");
+  const { highlightedCode, highlightedResult, setHighlightedCode, setHighlightedResult } = useUIStore();
 
   useEffect(() => {
     if (open && code) {

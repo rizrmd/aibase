@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useRef } from "react"
 import { toast } from "sonner"
+import { useUtilityStore } from "@/stores/utility-store"
 
 type UseCopyToClipboardProps = {
   text: string
@@ -10,7 +11,7 @@ export function useCopyToClipboard({
   text,
   copyMessage = "Copied to clipboard!",
 }: UseCopyToClipboardProps) {
-  const [isCopied, setIsCopied] = useState(false)
+  const { isCopied, setIsCopied, resetCopied } = useUtilityStore();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const handleCopy = useCallback(() => {
@@ -24,7 +25,7 @@ export function useCopyToClipboard({
           timeoutRef.current = null
         }
         timeoutRef.current = setTimeout(() => {
-          setIsCopied(false)
+          resetCopied()
         }, 2000)
       })
       .catch(() => {
