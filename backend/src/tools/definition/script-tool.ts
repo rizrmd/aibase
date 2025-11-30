@@ -213,42 +213,63 @@ PDF reader examples (extract text from PDF files):
       },
     });
 
-    // Create runtime with injected context
-    const runtime = new ScriptRuntime({
-      convId: this.convId,
-      projectId: this.projectId,
-      tools: this.toolsRegistry,
-      broadcast: this.broadcastFn,
-      toolCallId: this.currentToolCallId,
-      purpose: args.purpose,
-      code: args.code,
-    });
+    try {
+      // Create runtime with injected context
+      const runtime = new ScriptRuntime({
+        convId: this.convId,
+        projectId: this.projectId,
+        tools: this.toolsRegistry,
+        broadcast: this.broadcastFn,
+        toolCallId: this.currentToolCallId,
+        purpose: args.purpose,
+        code: args.code,
+      });
 
-    // Execute the script - let errors propagate to trigger error hook
-    const result = await runtime.execute(args.code);
+      // Execute the script
+      const result = await runtime.execute(args.code);
 
-    // Check if runtime returned an error object
-    if (result && result.error) {
-      throw new Error(result.error);
-    }
+      // Check if runtime returned an error object
+      if (result && result.error) {
+        throw new Error(result.error);
+      }
 
-    // Broadcast complete state
-    this.broadcastFn("tool_call", {
-      toolCallId: this.currentToolCallId,
-      toolName: "script",
-      args,
-      status: "complete",
-      result: {
+      // Broadcast complete state
+      this.broadcastFn("tool_call", {
+        toolCallId: this.currentToolCallId,
+        toolName: "script",
+        args,
+        status: "complete",
+        result: {
+          purpose: args.purpose,
+          result,
+        },
+      });
+
+      // Return success result with purpose
+      return {
         purpose: args.purpose,
         result,
-      },
-    });
+        status: "success",
+      };
+    } catch (error: any) {
+      // Broadcast error state
+      this.broadcastFn("tool_call", {
+        toolCallId: this.currentToolCallId,
+        toolName: "script",
+        args,
+        status: "error",
+        result: {
+          purpose: args.purpose,
+          error: error.message,
+        },
+      });
 
-    // Return success result with purpose
-    return {
-      purpose: args.purpose,
-      result,
-      status: "success",
-    };
+      // Return error result instead of throwing to prevent hanging
+      return {
+        purpose: args.purpose,
+        error: error.message,
+        status: "error",
+      };
+    }
   }
 }
