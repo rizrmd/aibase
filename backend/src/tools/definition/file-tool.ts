@@ -5,11 +5,11 @@ import * as path from "path";
 /**
  * File Tool - Built-in file operations
  * Actions: list, info, delete, rename, uploadUrl
- * All operations are restricted to /data/{proj-id}/*/files/* pattern
+ * All operations are restricted to /data/{proj-id}/{conv-id}/files/ pattern
  */
 export class FileTool extends Tool {
   name = "file";
-  description = "Perform file operations: list files in directory, get file info, delete file, rename/move file, or upload file from URL. All paths are relative to the project directory (/data/{proj-id}/) and must be within */files/* subdirectories.";
+  description = "Perform file operations: list files in directory, get file info, delete file, rename/move file, or upload file from URL. All paths are relative to the project directory (/data/{proj-id}/) and must be within {conv-id}/files/ subdirectories.";
   parameters = {
     type: "object",
     properties: {
@@ -20,7 +20,7 @@ export class FileTool extends Tool {
       },
       path: {
         type: "string",
-        description: "File or directory path relative to project directory (must be within */files/* pattern). For list action, defaults to listing all */files/* directories if not specified. For uploadUrl, this is the destination filename.",
+        description: "File or directory path relative to project directory (must be within {conv-id}/files/ subdirectories). For list action, defaults to listing all files across all conversations if not specified. For uploadUrl, this is the destination filename.",
       },
       newPath: {
         type: "string",
@@ -60,7 +60,7 @@ export class FileTool extends Tool {
 
   /**
    * Resolve and validate a path within the base directory
-   * Ensures path matches /data/{proj-id}/*/files/* pattern
+   * Ensures path matches /data/{proj-id}/{conv-id}/files/ pattern
    */
   private async resolvePath(userPath: string): Promise<string> {
     const baseDir = this.getBaseDir();
@@ -76,14 +76,14 @@ export class FileTool extends Tool {
       throw new Error("Access denied: Path is outside allowed directory");
     }
 
-    // Validate that path matches */files/* pattern
+    // Validate that path matches {conv-id}/files/ pattern
     const relativePath = path.relative(baseDir, resolvedPath);
     const pathParts = relativePath.split(path.sep);
 
     // Path should be: {conv-id}/files/{filename}
-    // So we need at least 3 parts, and second part must be "files"
+    // So we need at least 2 parts, and second part must be "files"
     if (pathParts.length < 2 || pathParts[1] !== "files") {
-      throw new Error("Access denied: Path must be within */files/* subdirectories");
+      throw new Error("Access denied: Path must be within {conv-id}/files/ subdirectories");
     }
 
     return resolvedPath;

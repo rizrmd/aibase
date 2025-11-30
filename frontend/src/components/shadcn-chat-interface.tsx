@@ -1136,15 +1136,23 @@ export function ShadcnChatInterface({
       if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
       console.log("[Tool Result] Received:", data);
 
-      // Update tool invocation to "result" state
+      // Update tool invocation to "result" or "error" state based on result content
       const existingInvocation = currentToolInvocationsRef.current.get(
         data.toolCallId
       );
       if (existingInvocation) {
+        // Check if result contains an error
+        const hasError = data.result && data.result.error;
+
+        if (hasError) {
+          console.log(`[Tool Result] Error detected in result for ${data.toolName}:`, data.result.error);
+        }
+
         const updatedInvocation = {
           ...existingInvocation,
-          state: "result" as const,
-          result: data.result,
+          state: hasError ? ("error" as const) : ("result" as const),
+          result: hasError ? undefined : data.result,
+          error: hasError ? data.result.error : undefined,
         };
         currentToolInvocationsRef.current.set(data.toolCallId, updatedInvocation);
 

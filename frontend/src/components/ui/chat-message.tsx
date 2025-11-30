@@ -287,6 +287,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           <time
             dateTime={createdAt.toISOString()}
             className={cn(
+              "t1",
               "mt-1 block px-1 text-xs opacity-50",
               animation !== "none" && "duration-500 animate-in fade-in-0"
             )}
@@ -305,20 +306,30 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     let currentFileParts: ToolInvocationPart[] = [];
 
     parts.forEach((part) => {
-      if (part.type === "tool-invocation" && part.toolInvocation.toolName === "memory") {
+      if (
+        part.type === "tool-invocation" &&
+        part.toolInvocation.toolName === "memory"
+      ) {
         // Flush file parts if any
         if (currentFileParts.length > 0) {
           groupedParts.push(
-            currentFileParts.length === 1 ? currentFileParts[0] : currentFileParts
+            currentFileParts.length === 1
+              ? currentFileParts[0]
+              : currentFileParts
           );
           currentFileParts = [];
         }
         currentMemoryParts.push(part as ToolInvocationPart);
-      } else if (part.type === "tool-invocation" && part.toolInvocation.toolName === "file") {
+      } else if (
+        part.type === "tool-invocation" &&
+        part.toolInvocation.toolName === "file"
+      ) {
         // Flush memory parts if any
         if (currentMemoryParts.length > 0) {
           groupedParts.push(
-            currentMemoryParts.length === 1 ? currentMemoryParts[0] : currentMemoryParts
+            currentMemoryParts.length === 1
+              ? currentMemoryParts[0]
+              : currentMemoryParts
           );
           currentMemoryParts = [];
         }
@@ -336,7 +347,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         // If we have accumulated file parts, push them as a group
         if (currentFileParts.length > 0) {
           groupedParts.push(
-            currentFileParts.length === 1 ? currentFileParts[0] : currentFileParts
+            currentFileParts.length === 1
+              ? currentFileParts[0]
+              : currentFileParts
           );
           currentFileParts = [];
         }
@@ -361,6 +374,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
     return groupedParts.map((partOrGroup, index) => {
       // Handle tool groups (memory or file)
+
       if (Array.isArray(partOrGroup)) {
         const invocations = partOrGroup.map((p) => {
           if (p.type === "tool-invocation") {
@@ -393,6 +407,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       const part = partOrGroup;
 
       if (part.type === "text") {
+        if (!part.text.trim()) return null;
         return (
           <div
             className={cn(
@@ -401,23 +416,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             )}
             key={`text-${index}`}
           >
-            {part.text.trim() && (
-              <div
-                className={cn("mo", chatBubbleVariants({ isUser, animation }))}
-              >
-                <MarkdownRenderer>{part.text}</MarkdownRenderer>
-                {actions ? (
-                  <div className="absolute -bottom-4 right-2 flex space-x-1 rounded-lg border bg-background p-1 text-foreground opacity-0 transition-opacity group-hover/message:opacity-100">
-                    {actions}
-                  </div>
-                ) : null}
-              </div>
-            )}
+            <div
+              className={cn("mo", chatBubbleVariants({ isUser, animation }))}
+            >
+              <MarkdownRenderer>{part.text}</MarkdownRenderer>
+              {actions ? (
+                <div className="absolute -bottom-4 right-2 flex space-x-1 rounded-lg border bg-background p-1 text-foreground opacity-0 transition-opacity group-hover/message:opacity-100">
+                  {actions}
+                </div>
+              ) : null}
+            </div>
 
             {showTimeStamp && createdAt ? (
               <time
                 dateTime={createdAt.toISOString()}
                 className={cn(
+                  "t2",
                   "mt-1 block px-1 text-xs opacity-50",
                   animation !== "none" && "duration-500 animate-in fade-in-0"
                 )}
@@ -514,6 +528,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         <time
           dateTime={createdAt.toISOString()}
           className={cn(
+            "t3",
             "mt-1 block px-1 text-xs opacity-50",
             animation !== "none" && "duration-500 animate-in fade-in-0"
           )}
@@ -658,17 +673,17 @@ function MemoryToolGroup({ invocations }: { invocations: ToolInvocation[] }) {
           latestState === "partial-call" ||
           latestState === "executing" ||
           latestState === "progress" ? (
-            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
           ) : hasError ? (
-            <Ban className="h-3 w-3 flex-shrink-0" />
+            <Ban className="h-3 w-3 shrink-0" />
           ) : (
-            <Code2 className="h-3 w-3 flex-shrink-0" />
+            <Code2 className="h-3 w-3 shrink-0" />
           )}
           <span className={cn("font-mono flex-1", getIconColorClasses())}>
             Memory ({invocations.length}{" "}
             {invocations.length === 1 ? "operation" : "operations"})
           </span>
-          <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90 flex-shrink-0" />
+          <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90 shrink-0" />
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -782,17 +797,17 @@ function FileToolGroup({ invocations }: { invocations: ToolInvocation[] }) {
           latestState === "partial-call" ||
           latestState === "executing" ||
           latestState === "progress" ? (
-            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
           ) : hasError ? (
-            <Ban className="h-3 w-3 flex-shrink-0" />
+            <Ban className="h-3 w-3 shrink-0" />
           ) : (
-            <Code2 className="h-3 w-3 flex-shrink-0" />
+            <Code2 className="h-3 w-3 shrink-0" />
           )}
           <span className={cn("font-mono flex-1", getIconColorClasses())}>
             File ({invocations.length}{" "}
             {invocations.length === 1 ? "operation" : "operations"})
           </span>
-          <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90 flex-shrink-0" />
+          <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90 shrink-0" />
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent>

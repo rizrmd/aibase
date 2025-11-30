@@ -32,8 +32,6 @@ function getActionIcon(action: string) {
       return Trash2;
     case "rename":
       return Edit3;
-    case "list_project_files":
-      return FolderSearch;
     default:
       return File;
   }
@@ -49,8 +47,6 @@ function getActionLabel(action: string) {
       return "Delete File";
     case "rename":
       return "Rename File";
-    case "list_project_files":
-      return "List Project Files";
     default:
       return action;
   }
