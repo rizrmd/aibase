@@ -40,7 +40,8 @@ export type MessageType =
   | "error"
   | "control_response"
   | "pong"
-  | "status";
+  | "status"
+  | "todo_update";
 
 export interface UserMessageData {
   text: string;

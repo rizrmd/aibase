@@ -2,8 +2,9 @@ import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { MainChat } from "./main-chat";
 import { MemoryEditor } from "./memory-editor";
 import { Button } from "./ui/button";
-import { MessageSquare, Database, TableProperties, Binary } from "lucide-react";
+import { MessageSquare, Database, TableProperties, Binary, ListTodo } from "lucide-react";
 import { Toaster } from "./ui/sonner";
+import { useState } from "react";
 
 interface AppRouterProps {
   wsUrl: string;
@@ -12,6 +13,7 @@ interface AppRouterProps {
 export function AppRouter({ wsUrl }: AppRouterProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isTodoPanelVisible, setIsTodoPanelVisible] = useState(true);
 
   return (
     <div className="flex h-screen flex-col">
@@ -33,12 +35,23 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           <Binary />
           {location.pathname === "/memory" && <>Memory</>}
         </Button>
+        {location.pathname === "/" && (
+          <Button
+            variant={isTodoPanelVisible ? "outline" : "ghost"}
+            size="sm"
+            onClick={() => setIsTodoPanelVisible(!isTodoPanelVisible)}
+            title={isTodoPanelVisible ? "Hide tasks" : "Show tasks"}
+          >
+            <ListTodo />
+            {isTodoPanelVisible && <>Tasks</>}
+          </Button>
+        )}
       </div>
 
       {/* Content Area */}
       <div className="flex-1 overflow-hidden">
         <Routes>
-          <Route path="/" element={<MainChat wsUrl={wsUrl} />} />
+          <Route path="/" element={<MainChat wsUrl={wsUrl} isTodoPanelVisible={isTodoPanelVisible} />} />
           <Route path="/memory" element={<MemoryEditor />} />
         </Routes>
       </div>

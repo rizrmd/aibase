@@ -19,33 +19,12 @@ interface TodoList {
 interface TodoPanelProps {
   todos: TodoList | null;
   isLoading?: boolean;
+  isVisible?: boolean;
 }
 
-export function TodoPanel({ todos, isLoading = false }: TodoPanelProps) {
-  if (isLoading) {
-    return (
-      <div className="w-80 h-full">
-        <div>
-          <h2 className="text-lg font-semibold">Tasks</h2>
-        </div>
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
-
+export function TodoPanel({ todos, isLoading = false, isVisible = true }: TodoPanelProps) {
   if (!todos || todos.items.length === 0) {
-    return (
-      <div className="w-80 h-full">
-        <div>
-          <h2 className="text-lg font-semibold">Tasks</h2>
-        </div>
-        <div>
-          <p className="text-sm text-muted-foreground">No tasks yet</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const total = todos.items.length;
@@ -53,41 +32,45 @@ export function TodoPanel({ todos, isLoading = false }: TodoPanelProps) {
   const pending = total - completed;
 
   return (
-    <div className="w-80 h-full flex flex-col">
-      <div className="pb-3">
-        <h2 className="text-lg font-semibold">Tasks</h2>
-        <div className="flex gap-4 text-sm text-muted-foreground">
-          <span>{pending} pending</span>
-          <span>{completed} completed</span>
+    <div className={`h-full flex transition-all duration-300 ${isVisible ? 'w-80' : 'w-0 opacity-0'}`}>
+      {isVisible && (
+        <div className="flex-1 flex flex-col">
+          <div className="flex justify-between items-center pr-4">
+            <h2 className="text-lg font-semibold">Tasks</h2>
+            <div className="flex gap-4 text-sm text-muted-foreground items-center">
+              <span>{pending} pending</span>
+              <span>{completed} completed</span>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden p-0">
+            <ScrollArea className="h-full pb-6">
+              <ul className="">
+                {todos.items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center gap-2 py-2 border-b last:border-0"
+                  >
+                    {item.checked ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-700/80 mt-0.5 shrink-0" />
+                    ) : (
+                      <Circle className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+                    )}
+                    <span
+                      className={`text-xs flex-1 flex items-center pr-4 ${
+                        item.checked
+                          ? "line-through text-green-700/80"
+                          : "text-foreground"
+                      }`}
+                    >
+                      {item.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
+          </div>
         </div>
-      </div>
-      <div className="flex-1 overflow-hidden p-0">
-        <ScrollArea className="h-full px-6 pb-6">
-          <ul className="space-y-2">
-            {todos.items.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-start gap-2 py-2 border-b last:border-0"
-              >
-                {item.checked ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                )}
-                <span
-                  className={`text-sm flex-1 ${
-                    item.checked
-                      ? "line-through text-muted-foreground"
-                      : "text-foreground"
-                  }`}
-                >
-                  {item.text}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
-      </div>
+      )}
     </div>
   );
 }

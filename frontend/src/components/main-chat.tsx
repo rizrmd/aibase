@@ -17,9 +17,11 @@ import { useMessageSubmission } from "@/hooks/use-message-submission";
 interface ShadcnChatInterfaceProps {
   wsUrl: string;
   className?: string;
+  isTodoPanelVisible?: boolean;
 }
 
-export function MainChat({ wsUrl, className }: ShadcnChatInterfaceProps) {
+export function MainChat({ wsUrl, className, isTodoPanelVisible = true }: ShadcnChatInterfaceProps) {
+
   // Zustand stores (reactive state only)
   const {
     messages,
@@ -131,6 +133,7 @@ export function MainChat({ wsUrl, className }: ShadcnChatInterfaceProps) {
       setMessages,
       setIsLoading,
       setError,
+      setTodos,
       setUploadProgress,
       isLoading,
       thinkingStartTimeRef,
@@ -148,6 +151,15 @@ export function MainChat({ wsUrl, className }: ShadcnChatInterfaceProps) {
     []
   );
 
+  const handleNewConversationWithConfirm = useCallback(() => {
+    const confirmed = window.confirm(
+      "Are you sure you want to start a new conversation? This will clear the current chat and todos."
+    );
+    if (confirmed) {
+      handleNewConversation();
+    }
+  }, [handleNewConversation]);
+
   const suggestions = [
     "What can you help me with?",
     "Tell me about your capabilities",
@@ -160,7 +172,7 @@ export function MainChat({ wsUrl, className }: ShadcnChatInterfaceProps) {
       {/* New Conversation Button - Absolute positioned top right (only show if messages exist) */}
       {messages.length > 0 && (
         <Button
-          onClick={handleNewConversation}
+          onClick={handleNewConversationWithConfirm}
           size="sm"
           variant="outline"
           className="absolute top-4 right-4 z-10 shadow-md"
@@ -171,9 +183,20 @@ export function MainChat({ wsUrl, className }: ShadcnChatInterfaceProps) {
         </Button>
       )}
 
+      {/* Conversation ID - Bottom left corner */}
+      <div className="absolute bottom-2 right-2 z-10 text-xs text-muted-foreground font-mono">
+        {convId}
+      </div>
+
       {/* Todo Panel - Sticky on left */}
-      {todos?.items?.length > 0 && (
-        <TodoPanel todos={todos} isLoading={false} />
+      {(todos?.items?.length > 0 || isLoading) && (
+        <div className="mt-[60px] ml-3.5">
+          <TodoPanel
+            todos={todos}
+            isLoading={isLoading && !todos?.items?.length}
+            isVisible={isTodoPanelVisible}
+          />
+        </div>
       )}
 
       {/* Main Chat Area */}

@@ -10,6 +10,7 @@ interface UseMessageSubmissionProps {
   setMessages: (updater: (prev: Message[]) => Message[]) => void;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setTodos: (todos: any) => void;
   setUploadProgress: (progress: number | null) => void;
   isLoading: boolean;
   thinkingStartTimeRef: React.MutableRefObject<number | null>;
@@ -27,6 +28,7 @@ export function useMessageSubmission({
   setMessages,
   setIsLoading,
   setError,
+  setTodos,
   setUploadProgress,
   isLoading,
   thinkingStartTimeRef,
@@ -270,6 +272,9 @@ export function useMessageSubmission({
     // Clear error
     setError(null);
 
+    // Clear todos
+    setTodos(null);
+
     // Reset loading state
     setIsLoading(false);
 
@@ -290,6 +295,7 @@ export function useMessageSubmission({
     setMessages,
     setInput,
     setError,
+    setTodos,
     setIsLoading,
     generateNewConvId,
     currentMessageRef,

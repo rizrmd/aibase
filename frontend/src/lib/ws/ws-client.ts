@@ -421,6 +421,10 @@ export class WSClient extends WSEventEmitter {
         // Heartbeat response
         break;
 
+      case "todo_update":
+        this.emit("todo_update", message.data);
+        break;
+
       default:
         this.emit("message", message);
     }
