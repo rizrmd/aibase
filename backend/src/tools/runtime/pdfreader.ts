@@ -69,9 +69,21 @@ export function createPDFReaderFunction(cwd?: string) {
       if (options.filePath) {
         let filePath = options.filePath;
 
-        // Resolve relative paths using cwd if provided
-        if (cwd && !filePath.startsWith('/') && !path.isAbsolute(filePath)) {
-          filePath = path.join(cwd, filePath);
+        // If path is absolute, use it as-is
+        if (filePath.startsWith('/') || path.isAbsolute(filePath)) {
+          // Use absolute path directly
+        } else if (cwd) {
+          // For relative paths, check if it's just a filename or includes subdirectories
+          // Extract just the filename if the path seems to include the conversation directory structure
+          const filename = path.basename(filePath);
+
+          // If the relative path includes directory separators and cwd is already the files directory,
+          // use just the filename to avoid duplication
+          if (filePath.includes('/') && cwd.endsWith('/files')) {
+            filePath = path.join(cwd, filename);
+          } else {
+            filePath = path.join(cwd, filePath);
+          }
         }
 
         dataBuffer = await fs.readFile(filePath);

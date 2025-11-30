@@ -245,6 +245,8 @@ EXAMPLES:
   "code": "const files = await file({ action: 'list' }); const pdfs = files.filter(f => f.name.endsWith('.pdf')); const results = []; for (const pdf of pdfs) { progress(\`Processing \${pdf.name}\`); const content = await pdfReader({ filePath: pdf.name }); results.push({ file: pdf.name, pages: content.totalPages, textLength: content.text.length, preview: content.text.substring(0, 200) }); } return { processed: results.length, results };"
 }
 
+IMPORTANT: When using pdfReader with files from file({ action: 'list' }), use ONLY the filename (pdf.name), NOT the full path (pdf.path)!
+
 Available: fetch, webSearch({ query, region?, safesearch?, timelimit?, maxResults? }), duckdb({ query, database?, format?, readonly? }), postgresql({ query, connectionUrl, format?, timeout? }), pdfReader({ filePath?, buffer?, password?, maxPages?, debug? }), progress(msg), file(...), todo(...), memory(...), convId, projectId, console
 
 MEMORY TOOL - TWO-LEVEL STRUCTURE:
@@ -275,9 +277,10 @@ Note: For Excel files use read_xlsx('file.xlsx', header=true, all_varchar=true, 
 
 PDF READING:
 To read PDF files, use the pdfReader() function in script tool:
-- Basic: pdfReader({ filePath: 'document.pdf' })
+- Basic: pdfReader({ filePath: 'document.pdf' })  // Use ONLY the filename!
 - Password-protected: pdfReader({ filePath: 'file.pdf', password: 'secret' })
 - Limit pages: pdfReader({ filePath: 'file.pdf', maxPages: 5 })
+- From file list: Use pdf.name (NOT pdf.path): pdfReader({ filePath: pdf.name })
 Returns: { text: string, totalPages: number, info?: object, version?: string }
 
 Write as async function body - NO import/export, just await and return!`;
