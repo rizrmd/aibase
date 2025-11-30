@@ -5,6 +5,8 @@ import { Button } from "./ui/button";
 import { MessageSquare, Database, TableProperties, Binary, ListTodo } from "lucide-react";
 import { Toaster } from "./ui/sonner";
 import { useState } from "react";
+import { useChatStore } from "@/stores/chat-store";
+import { useShallow } from "zustand/react/shallow";
 
 interface AppRouterProps {
   wsUrl: string;
@@ -14,6 +16,12 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [isTodoPanelVisible, setIsTodoPanelVisible] = useState(true);
+
+  const { todos } = useChatStore(
+    useShallow((state) => ({
+      todos: state.todos,
+    }))
+  );
 
   return (
     <div className="flex h-screen flex-col">
@@ -35,7 +43,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           <Binary />
           {location.pathname === "/memory" && <>Memory</>}
         </Button>
-        {location.pathname === "/" && (
+        {location.pathname === "/" && todos?.items?.length > 0 && (
           <Button
             variant={isTodoPanelVisible ? "outline" : "ghost"}
             size="sm"
