@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { codeToHtml } from "shiki";
 import { format } from "prettier/standalone";
 import prettierPluginTypeScript from "prettier/plugins/typescript";
@@ -10,8 +10,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "./dialog";
-import { Loader2 } from "lucide-react";
+import { Loader2, Copy, Check } from "lucide-react";
 import { Badge } from "./badge";
+import { Button } from "./button";
 import { useUIStore } from "@/stores/ui-store";
 
 interface ScriptDetailsDialogProps {
@@ -41,6 +42,24 @@ export function ScriptDetailsDialog({
     setHighlightedCode,
     setHighlightedResult,
   } = useUIStore();
+
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedResult, setCopiedResult] = useState(false);
+
+  const copyToClipboard = async (text: string, type: "code" | "result") => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (type === "code") {
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+      } else {
+        setCopiedResult(true);
+        setTimeout(() => setCopiedResult(false), 2000);
+      }
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   useEffect(() => {
     if (open && code) {
@@ -163,7 +182,21 @@ export function ScriptDetailsDialog({
             <div className="grid grid-cols-2 gap-4 h-full min-h-0">
               {/* Script Code - Left */}
               <div className="flex flex-col min-h-0 h-[80vh]">
-                <h3 className="text-sm font-semibold mb-2">Code</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold">Code</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => copyToClipboard(code, "code")}
+                  >
+                    {copiedCode ? (
+                      <Check className="h-3.5 w-3.5 text-green-600" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
                 <div className="flex-1 flex text-[11px]">
                   {highlightedCode ? (
                     <div
@@ -182,7 +215,28 @@ export function ScriptDetailsDialog({
               <div className="flex flex-col min-h-0">
                 {result && state === "result" && (
                   <>
-                    <h3 className="text-sm font-semibold mb-2">Result</h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold">Result</h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() =>
+                          copyToClipboard(
+                            typeof result === "string"
+                              ? result
+                              : JSON.stringify(result, null, 2),
+                            "result"
+                          )
+                        }
+                      >
+                        {copiedResult ? (
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
                     <div className="flex-1 flex text-[11px]">
                       {highlightedResult ? (
                         <div

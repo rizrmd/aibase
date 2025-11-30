@@ -537,10 +537,6 @@ export class WSServer extends WSEventEmitter {
         // Calculate elapsed time for this chunk
         const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
 
-        console.log(
-          `[Backend Chunk ${chunkCount}] Received ${chunk.length} chars, total now: ${fullResponse.length}, elapsed: ${elapsedSeconds}s`
-        );
-
         // Add chunk to streaming manager
         this.streamingManager.addChunk(
           connectionInfo.convId,

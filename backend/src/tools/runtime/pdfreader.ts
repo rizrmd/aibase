@@ -91,22 +91,33 @@ export function createPDFReaderFunction(cwd?: string) {
         dataBuffer = options.buffer!;
       }
 
-      // Parse PDF options
-      const parseOptions: any = {};
+      // Create PDFParse instance with the buffer data
+      const pdfParser = new PDFParse({
+        data: dataBuffer,
+        password: options.password,
+      });
+
+      // Parse options for text extraction
+      const parseParams: any = {};
 
       if (options.maxPages && options.maxPages > 0) {
-        parseOptions.max = options.maxPages;
+        parseParams.first = options.maxPages;
       }
 
-      // Parse the PDF
-      const pdfParse = new PDFParse();
-      const data = await pdfParse.parse(dataBuffer, parseOptions);
+      // Extract text from the PDF
+      const textResult = await pdfParser.getText(parseParams);
+
+      // Get document info
+      const infoResult = await pdfParser.getInfo();
+
+      // Clean up
+      await pdfParser.destroy();
 
       return {
-        text: data.text,
-        totalPages: data.numpages,
-        info: data.info,
-        version: data.version,
+        text: textResult.text,
+        totalPages: textResult.total,
+        info: infoResult.info,
+        version: undefined, // pdf-parse v2 doesn't expose version in the same way
       };
     } catch (error: any) {
       throw new Error(`PDF reading failed: ${error.message}`);

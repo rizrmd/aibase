@@ -9,14 +9,12 @@ import { ScriptRuntime } from "../runtime/script-runtime";
  * - Complex multi-step workflows
  * - Data transformation pipelines
  * - Programmatic tool composition
- * - Web search capabilities via DuckDuckGo
  * - SQL queries on CSV/Excel/Parquet files via DuckDB
  *
  * Available in execution scope:
  * - All registered tools as async functions
  * - progress(message, data?) for status updates
- * - webSearch(options) for DuckDuckGo web searches
- *   Options: { query, region?, safesearch?, timelimit?, maxResults? }
+ *   Note: timelimit values: 'd', 'w', 'm', 'y' (auto-converts to MCP format)
  * - duckdb(options) for SQL queries on data files
  *   Options: { query, database?, format?, readonly? }
  * - postgresql(options) for PostgreSQL database queries
@@ -33,7 +31,7 @@ export class ScriptTool extends Tool {
 
   description = `Execute TypeScript code with programmatic access to other tools.
 Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
-Available functions: progress(message, data?), webSearch(options), duckdb(options), postgresql(options), pdfReader(options), and all registered tools as async functions.
+Available functions: progress(message, data?), duckdb(options), postgresql(options), pdfReader(options), and all registered tools as async functions.
 Context variables: convId, projectId.`;
 
   parameters = {
@@ -54,16 +52,6 @@ Example:
     // process file...
   }
   return { processed: files.length };
-
-Web search example (uses DuckDuckGo):
-  const results = await webSearch({
-    query: "latest TypeScript features",
-    region: "us-en",
-    safesearch: "moderate",
-    timelimit: "w",
-    maxResults: 5
-  });
-  return results;
 
 DuckDB query examples (read CSV/Excel/Parquet files):
   // Query a CSV file

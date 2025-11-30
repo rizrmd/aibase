@@ -1,123 +1,40 @@
-"use client";
-
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Chat } from "@/components/ui/chat";
-import type { Message } from "@/components/ui/chat-message";
-import { TodoPanel } from "@/components/todo-panel";
-import { useConvId } from "@/lib/conv-id";
-import { useWSConnection } from "@/lib/ws/ws-connection-manager";
-import { activeTabManager } from "@/lib/ws/active-tab-manager";
-import { uploadFilesWithProgress } from "@/lib/file-upload";
-import { useChatStore } from "@/stores/chat-store";
-import { useFileStore } from "@/stores/file-store";
-import { AlertCircle, Plus } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  type ChangeEvent,
-} from "react";
+import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
-import { Button } from "@/components/ui/button";
+import type { Message } from "@/components/ui/chat-message";
+import { activeTabManager } from "@/lib/ws/active-tab-manager";
+import type { WSClient } from "@/lib/ws/ws-connection-manager";
 
-interface ShadcnChatInterfaceProps {
-  wsUrl: string;
-  className?: string;
+interface UseWebSocketHandlersProps {
+  wsClient: WSClient | null;
+  convId: string;
+  componentRef: React.MutableRefObject<{}>;
+  setMessages: (updater: (prev: Message[]) => Message[]) => void;
+  setIsLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  setTodos: (todos: any) => void;
+  isLoading: boolean;
+  thinkingStartTimeRef: React.MutableRefObject<number | null>;
+  currentMessageRef: React.MutableRefObject<string | null>;
+  currentMessageIdRef: React.MutableRefObject<string | null>;
+  currentToolInvocationsRef: React.MutableRefObject<Map<string, any>>;
+  currentPartsRef: React.MutableRefObject<any[]>;
 }
 
-export function ShadcnChatInterface({
-  wsUrl,
-  className,
-}: ShadcnChatInterfaceProps) {
-  // Zustand stores (reactive state only)
-  const {
-    messages,
-    input,
-    isLoading,
-    error,
-    todos,
-    setMessages,
-    setInput,
-    setIsLoading,
-    setError,
-    setTodos,
-  } = useChatStore();
-
-  const { uploadProgress, setUploadProgress } = useFileStore();
-
-  // Use the client ID management hook
-  const { convId, generateNewConvId } = useConvId();
-
-  // Use WebSocket connection manager - this ensures only one connection even with Strict Mode
-  const wsClient = useWSConnection({
-    url: wsUrl,
-    reconnectAttempts: 5,
-    reconnectDelay: 1000,
-    heartbeatInterval: 30000,
-    timeout: 10000,
-  });
-
-  // Keep refs as regular useRef (non-reactive tracking for streaming)
-  const currentMessageRef = useRef<string | null>(null);
-  const currentMessageIdRef = useRef<string | null>(null);
-  const currentToolInvocationsRef = useRef<Map<string, any>>(new Map());
-  const currentPartsRef = useRef<any[]>([]);
-
-  // Create a stable component reference for tab management
-  const componentRef = useRef({});
-
-  // Track thinking indicator start time
-  const thinkingStartTimeRef = useRef<number | null>(null);
-
-  // Track if we're currently submitting to prevent double submissions
-  const isSubmittingRef = useRef(false);
-
-  // Update thinking indicator seconds every second
-  useEffect(() => {
-    // Only set interval if thinking indicator exists
-    const hasThinking = messages.some((m) => m.isThinking);
-
-    if (!hasThinking || thinkingStartTimeRef.current === null) {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      const elapsedSeconds = Math.floor(
-        (Date.now() - thinkingStartTimeRef.current!) / 1000
-      );
-
-      setMessages((prev) => {
-        const thinkingIndex = prev.findIndex((m) => m.isThinking);
-        if (thinkingIndex === -1) return prev;
-
-        const updated = [...prev];
-        updated[thinkingIndex] = {
-          ...updated[thinkingIndex],
-          content: `Thinking... ${elapsedSeconds}s`,
-        };
-        return updated;
-      });
-    }, 1000);
-
-    return () => clearInterval(intervalId);
-  }, [messages.some((m) => m.isThinking), thinkingStartTimeRef.current]);
-
-  // Debug: Track messages state changes
-  useEffect(() => {
-    console.log(`[State-Effect] Messages state changed:`, {
-      count: messages.length,
-      messages: messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        contentLength: m.content.length,
-        contentPreview: m.content.substring(0, 50),
-        completionTime: m.completionTime,
-        isThinking: m.isThinking,
-      })),
-    });
-  }, [messages]);
-
-  // Set up WebSocket event handlers using the managed connection
+export function useWebSocketHandlers({
+  wsClient,
+  convId,
+  componentRef,
+  setMessages,
+  setIsLoading,
+  setError,
+  setTodos,
+  isLoading,
+  thinkingStartTimeRef,
+  currentMessageRef,
+  currentMessageIdRef,
+  currentToolInvocationsRef,
+  currentPartsRef,
+}: UseWebSocketHandlersProps) {
   useEffect(() => {
     if (!wsClient) return;
 
@@ -157,7 +74,7 @@ export function ShadcnChatInterface({
     }) => {
       // Only active tab processes chunks
       if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
-      console.log("ShadcnChatInterface: handleLLMChunk called with:", data);
+      console.log("handleLLMChunk called with:", data);
 
       // Don't process null/undefined chunks, but DO process whitespace chunks (they may be important formatting)
       if (!data.chunk) {
@@ -464,7 +381,7 @@ export function ShadcnChatInterface({
     }) => {
       // Only active tab processes completion
       if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
-      console.log("ShadcnChatInterface: handleLLMComplete called with:", {
+      console.log("handleLLMComplete called with:", {
         messageId: data.messageId,
         contentLength: data.fullText.length,
         isAccumulated: data.isAccumulated,
@@ -1235,364 +1152,5 @@ export function ShadcnChatInterface({
       wsClient.off("tool_result", handleToolResult);
       wsClient.off("todo_update", handleTodoUpdate);
     };
-  }, [wsClient, convId]); // Include wsClient and convId in dependencies
-
-  const handleSubmit = useCallback(
-    async (
-      e?: { preventDefault?: () => void },
-      options?: { experimental_attachments?: FileList }
-    ) => {
-      e?.preventDefault?.();
-
-      console.log(
-        "[Submit] Called with input:",
-        input?.substring(0, 50),
-        "isConnected:",
-        wsClient?.isConnected(),
-        "attachments:",
-        options?.experimental_attachments?.length || 0
-      );
-
-      if (!input.trim() || !wsClient?.isConnected()) {
-        console.log("[Submit] Skipping - no input or not connected");
-        return;
-      }
-
-      // Prevent double submissions
-      if (isSubmittingRef.current) {
-        console.log(
-          "[Submit] Already submitting, ignoring duplicate submission"
-        );
-        return;
-      }
-
-      // Mark as submitting
-      isSubmittingRef.current = true;
-      console.log("[Submit] Marked as submitting");
-
-      // If already loading, abort the previous request first
-      if (isLoading) {
-        console.log(
-          "[Submit] Aborting previous request before sending new message"
-        );
-
-        // Clear thinking start time
-        thinkingStartTimeRef.current = null;
-        // Clear tool invocations
-        currentToolInvocationsRef.current.clear();
-        // Save the aborted message ID
-        const abortedMessageId = currentMessageIdRef.current;
-        // Clear current message refs
-        currentMessageRef.current = null;
-        currentMessageIdRef.current = null;
-        // Reset loading state to allow new submission
-        setIsLoading(false);
-
-        // Mark message as aborted and remove thinking indicator
-        setMessages((prev) => {
-          const filtered = prev.filter((m) => !m.isThinking);
-          if (abortedMessageId) {
-            return filtered.map((m) =>
-              m.id === abortedMessageId ? { ...m, aborted: true } : m
-            );
-          }
-          return filtered;
-        });
-
-        // Send abort to backend
-        wsClient.abort();
-
-        // Wait longer for abort to fully process on backend before sending new message
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      }
-
-      // Store the message text and clear input immediately for better UX
-      const messageText = input.trim();
-      setInput("");
-      setError(null);
-
-      try {
-        let uploadedFiles: any[] | undefined = undefined;
-        let fileListText = "";
-
-        // Upload files FIRST if any are attached
-        if (options?.experimental_attachments && options.experimental_attachments.length > 0) {
-          console.log("[Submit] Uploading", options.experimental_attachments.length, "files");
-          setUploadProgress(0);
-
-          try {
-            const filesArray = Array.from(options.experimental_attachments);
-
-            uploadedFiles = await uploadFilesWithProgress(filesArray, {
-              onProgress: (progress) => {
-                console.log("[Upload Progress]", progress.percentage + "%");
-                setUploadProgress(progress.percentage);
-              }
-            });
-
-            console.log("[Submit] Files uploaded successfully:", uploadedFiles);
-            setUploadProgress(null);
-
-            // Create a simple text list for the backend
-            fileListText = "\n\n[Files: " +
-              uploadedFiles.map(f => f.name).join(", ") +
-              "]";
-          } catch (uploadError) {
-            console.error("[Submit] File upload failed:", uploadError);
-            setUploadProgress(null);
-            setError(uploadError instanceof Error ? uploadError.message : "File upload failed");
-            // Restore the input since upload failed
-            setInput(messageText);
-            // Don't proceed if upload failed
-            return;
-          }
-        }
-
-        // Create user message AFTER successful upload with file metadata
-        const userMessage: Message = {
-          id: `msg_${Date.now()}_user`,
-          role: "user",
-          content: messageText,
-          createdAt: new Date(),
-          ...(uploadedFiles && uploadedFiles.length > 0 && { attachments: uploadedFiles }),
-        };
-
-        const thinkingMessage: Message = {
-          id: `thinking_${Date.now()}`,
-          role: "assistant",
-          content: "Thinking...",
-          createdAt: new Date(),
-          isThinking: true,
-        };
-
-        // Set thinking start time for interval updates
-        thinkingStartTimeRef.current = Date.now();
-
-        // Add messages to UI
-        setMessages((prev) => [...prev, userMessage, thinkingMessage]);
-        setIsLoading(true);
-
-        console.log(
-          "[Submit] Sending message to backend:",
-          messageText.substring(0, 50)
-        );
-        // Send message with file list to backend (for context)
-        await wsClient.sendMessage(messageText + fileListText);
-        console.log("[Submit] Message sent successfully");
-      } catch (error) {
-        console.log("[Submit] Error sending message:", error);
-        setIsLoading(false);
-        setError(
-          error instanceof Error ? error.message : "Failed to send message"
-        );
-
-        // Remove the last two messages (user message and thinking indicator) if send failed
-        setMessages((prev) => prev.slice(0, -2));
-      } finally {
-        // Reset submitting flag after a short delay to allow state updates to complete
-        setTimeout(() => {
-          console.log("[Submit] Clearing submitting flag");
-          isSubmittingRef.current = false;
-        }, 100);
-      }
-    },
-    [input, wsClient]
-  );
-
-  const handleInputChange = useCallback(
-    (e: ChangeEvent<HTMLTextAreaElement>) => {
-      setInput(e.target.value);
-    },
-    []
-  );
-
-  const abort = useCallback(() => {
-    console.log("[Abort] User manually aborted request");
-    setIsLoading(false);
-    const abortedMessageId = currentMessageIdRef.current;
-    currentMessageRef.current = null;
-    currentMessageIdRef.current = null;
-    // Clear thinking start time
-    thinkingStartTimeRef.current = null;
-    // Clear tool invocations
-    currentToolInvocationsRef.current.clear();
-    // Clear submitting flag to allow new messages
-    isSubmittingRef.current = false;
-    // Mark the current message as aborted and remove thinking indicator
-    setMessages((prev) => {
-      const filtered = prev.filter((m) => !m.isThinking);
-      // Mark the aborted message
-      if (abortedMessageId) {
-        return filtered.map((m) =>
-          m.id === abortedMessageId ? { ...m, aborted: true } : m
-        );
-      }
-      return filtered;
-    });
-    wsClient?.abort();
-  }, [wsClient]);
-
-  const append = useCallback((message: { role: "user"; content: string }) => {
-    const newMessage: Message = {
-      id: `msg_${Date.now()}_user`,
-      role: message.role,
-      content: message.content,
-      createdAt: new Date(),
-    };
-    setMessages((prev) => [...prev, newMessage]);
-  }, []);
-
-  const handleNewConversation = useCallback(() => {
-    console.log("[New Conversation] Clearing all messages and starting fresh");
-
-    // Clear all messages
-    setMessages([]);
-
-    // Clear input
-    setInput("");
-
-    // Clear error
-    setError(null);
-
-    // Reset loading state
-    setIsLoading(false);
-
-    // Clear all refs
-    currentMessageRef.current = null;
-    currentMessageIdRef.current = null;
-    currentToolInvocationsRef.current.clear();
-    currentPartsRef.current = [];
-    thinkingStartTimeRef.current = null;
-    isSubmittingRef.current = false;
-
-    // Generate new conversation ID and store in local storage
-    const newConvId = generateNewConvId();
-    console.log("[New Conversation] Generated new conversation ID:", newConvId);
-
-    console.log("[New Conversation] Successfully cleared conversation");
-  }, [setMessages, setInput, setError, setIsLoading, generateNewConvId]);
-
-  const suggestions = [
-    "What can you help me with?",
-    "Tell me about your capabilities",
-    "Help me write a function",
-    "Explain machine learning",
-  ];
-
-  return (
-    <div className={`flex h-screen ${className} relative`}>
-      {/* New Conversation Button - Absolute positioned top right (only show if messages exist) */}
-      {messages.length > 0 && (
-        <Button
-          onClick={handleNewConversation}
-          size="sm"
-          variant="outline"
-          className="absolute top-4 right-4 z-10 shadow-md"
-          title="Start a new conversation"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New
-        </Button>
-      )}
-
-      {/* Todo Panel - Sticky on left */}
-      {todos?.items?.length > 0 && <TodoPanel todos={todos} isLoading={false} />}
-
-
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Error Alert */}
-        {error && (
-          <Alert className="mx-4 mb-2 border-red-200 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              {error}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Upload Progress */}
-        {uploadProgress !== null && (
-          <Alert className="mx-4 mb-2 border-blue-200 bg-blue-50">
-            <AlertDescription className="text-blue-800">
-              <div className="flex items-center gap-2">
-                <span>Uploading files... {uploadProgress}%</span>
-                <div className="flex-1 h-2 bg-blue-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <Chat
-          messages={messages}
-          input={input}
-          handleInputChange={handleInputChange}
-          handleSubmit={handleSubmit}
-          isGenerating={isLoading}
-          stop={abort}
-          setMessages={setMessages}
-          append={append}
-          suggestions={messages.length === 0 ? suggestions : []}
-          className="h-full"
-          uploadProgress={uploadProgress}
-        />
-      </div>
-
-      {/* <div className="flex-1 px-4 pb-4 min-h-0">
-        <div className="flex flex-rpw">
-
-          <div className="p-4 border-t bg-background">
-            <div className="flex gap-2 justify-end">
-
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="flex items-center gap-1">
-                  {isConnected ? (
-                    <Wifi className="w-3 h-3" />
-                  ) : (
-                    <WifiOff className="w-3 h-3" />
-                  )}
-                  {getStatusText(connectionStatus)}
-                </Badge>
-                <div className={`w-2 h-2 rounded-full ${getStatusColor(connectionStatus)}`} />
-              </div>
-
-              {isLoading ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={abort}
-                  disabled={!isConnected}
-                  title="Stop generation"
-                >
-                  <Square className="h-4 w-4 mr-2" />
-                  Stop
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={clearHistory}
-                disabled={messages.length === 0 || !isConnected}
-                title="Clear conversation"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Clear
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div className="h-full bg-white flex flex-col">
-          <div className="flex-1">
-          </div>
-        </div>
-      </div> */}
-    </div>
-  );
+  }, [wsClient, convId, componentRef, setMessages, setIsLoading, setError, setTodos, isLoading, thinkingStartTimeRef, currentMessageRef, currentMessageIdRef, currentToolInvocationsRef, currentPartsRef]);
 }

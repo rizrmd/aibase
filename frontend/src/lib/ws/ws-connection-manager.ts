@@ -7,6 +7,9 @@
 import { WSClient } from "./ws-client";
 import type { WSClientOptions } from "../types/model";
 
+// Export WSClient for use in other modules
+export type { WSClient };
+
 interface ConnectionInfo {
   client: WSClient;
   refCount: number;

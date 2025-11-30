@@ -1081,14 +1081,22 @@ function ToolCall({
           let toolName = (
             <span className="font-mono text-xs">
               {invocation.toolName !== "script" && (
-                <span className="capitalize">{invocation.toolName}</span>
+                <span className="capitalize">{invocation.toolName}:</span>
               )}
               {invocation.toolName === "script" && invocation.args?.purpose ? (
                 <span className="">{invocation.args.purpose}</span>
               ) : (
-                <span className="capitalize ml-1">
-                  {invocation.args?.action || "tool"}
-                </span>
+                <>
+                  {invocation.args?.action
+                    .split("_")
+                    .map((e: string, i: number) => {
+                      return (
+                        <span className="capitalize ml-1" key={i}>
+                          {e}
+                        </span>
+                      );
+                    }) || "tool"}
+                </>
               )}
             </span>
           );
@@ -1209,19 +1217,7 @@ function ToolCall({
                 >
                   <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
                     <Ban className="h-3 w-3" />
-                    <span className="font-mono">
-                      <span className="capitalize">{invocation.toolName}</span>
-                      {invocation.toolName === "script" &&
-                      invocation.args?.purpose ? (
-                        <span className="ml-1">
-                          - {invocation.args.purpose}
-                        </span>
-                      ) : (
-                        <span className="capitalize ml-1">
-                          {invocation.args?.action || "tool"}
-                        </span>
-                      )}
-                    </span>
+                    {toolName}
                   </div>
                 </div>
               );

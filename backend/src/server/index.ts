@@ -36,6 +36,7 @@ export { Conversation, Tool } from "../llm/conversation";
 import type { WSClientOptions, WSServerOptions } from "../ws/types";
 import { WSServer } from "../ws/entry";
 import { handleFileUpload, handleFileDownload } from "./upload-handler";
+import { handleGetMemory, handleSetMemory, handleDeleteMemory } from "./memory-handler";
 
 /**
  * Convenience function to create a WebSocket server
@@ -123,6 +124,17 @@ export class WebSocketServer {
         // Handle file download (GET /api/files/{convId}/{fileName})
         if (url.pathname.startsWith("/api/files/") && req.method === "GET") {
           return handleFileDownload(req);
+        }
+
+        // Memory API endpoints
+        if (url.pathname === "/api/memory") {
+          if (req.method === "GET") {
+            return handleGetMemory(req);
+          } else if (req.method === "POST") {
+            return handleSetMemory(req);
+          } else if (req.method === "DELETE") {
+            return handleDeleteMemory(req);
+          }
         }
 
         // Health check endpoint

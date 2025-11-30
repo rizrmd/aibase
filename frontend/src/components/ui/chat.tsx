@@ -1,12 +1,7 @@
 "use client";
 
 import { ArrowDown, ThumbsDown, ThumbsUp } from "lucide-react";
-import {
-  forwardRef,
-  useCallback,
-  useRef,
-  type ReactElement,
-} from "react";
+import { forwardRef, useCallback, useRef, type ReactElement } from "react";
 
 import { Button } from "@/components/ui/button";
 import { type Message } from "@/components/ui/chat-message";
@@ -37,17 +32,9 @@ interface ChatPropsBase {
   uploadProgress?: number | null;
 }
 
-interface ChatPropsWithoutSuggestions extends ChatPropsBase {
-  append?: never;
-  suggestions?: never;
-}
-
-interface ChatPropsWithSuggestions extends ChatPropsBase {
+interface ChatProps extends ChatPropsBase {
   append: (message: { role: "user"; content: string }) => void;
-  suggestions: string[];
 }
-
-type ChatProps = ChatPropsWithoutSuggestions | ChatPropsWithSuggestions;
 
 export function Chat({
   messages,
@@ -57,7 +44,6 @@ export function Chat({
   stop,
   isGenerating,
   append,
-  suggestions,
   className,
   onRateResponse,
   setMessages,
@@ -194,7 +180,7 @@ export function Chat({
 
   return (
     <ChatContainer className={className}>
-      {isEmpty && append && suggestions ? (
+      {isEmpty ? (
         <div className="flex flex-1 items-center justify-center">Welcome</div>
       ) : null}
 

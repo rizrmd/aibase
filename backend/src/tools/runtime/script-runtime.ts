@@ -1,8 +1,8 @@
 import type { Tool } from "../../llm/conversation";
-import { createWebSearchFunction } from "./web-search";
 import { createDuckDBFunction } from "./duckdb";
 import { createPostgreSQLFunction } from "./postgresql";
 import { createPDFReaderFunction } from "./pdfreader";
+import { createWebSearchFunction } from "./web-search";
 
 /**
  * Context provided to the script execution environment
@@ -31,20 +31,27 @@ export class ScriptRuntime {
    * Execute TypeScript code in a controlled scope
    */
   async execute(code: string): Promise<any> {
-    // Build execution scope with injected functions and context
-    const scope = this.buildScope();
+    try {
+      // Build execution scope with injected functions and context
+      const scope = this.buildScope();
 
-    // Execute using AsyncFunction constructor with controlled scope
-    const AsyncFunction = (async function () {}).constructor as any;
-    const argNames = Object.keys(scope);
-    const argValues = Object.values(scope);
+      // Execute using AsyncFunction constructor with controlled scope
+      const AsyncFunction = (async function () {}).constructor as any;
+      const argNames = Object.keys(scope);
+      const argValues = Object.values(scope);
 
-    // Create and execute the function
-    // Code runs directly as async function body - Bun handles TypeScript syntax
-    const fn = new AsyncFunction(...argNames, code);
-    const result = await fn(...argValues);
+      // Create and execute the function
+      // Code runs directly as async function body - Bun handles TypeScript syntax
+      const fn = new AsyncFunction(...argNames, code);
+      console.log('[ScriptRuntime] Executing code...');
+      const result = await fn(...argValues);
+      console.log('[ScriptRuntime] Execution completed successfully');
 
-    return result;
+      return result;
+    } catch (error: any) {
+      console.error('[ScriptRuntime] Execution error:', error);
+      throw error;
+    }
   }
 
   /**
@@ -65,9 +72,6 @@ export class ScriptRuntime {
       // Inject progress function for status updates
       progress: this.createProgressFunction(),
 
-      // Inject web search function
-      webSearch: this.createWebSearchFunction(),
-
       // Inject DuckDB query function
       duckdb: this.createDuckDBFunction(),
 
@@ -76,6 +80,9 @@ export class ScriptRuntime {
 
       // Inject PDF reader function
       pdfReader: this.createPDFReaderFunction(),
+
+      // Inject web search function
+      webSearch: this.createWebSearchFunction(),
     };
 
     // Inject all registered tools as callable functions
@@ -104,14 +111,6 @@ export class ScriptRuntime {
   }
 
   /**
-   * Get the webSearch function using DuckDuckGo
-   */
-  private createWebSearchFunction() {
-    // Return the web search function from the modular implementation
-    return createWebSearchFunction();
-  }
-
-  /**
    * Get the DuckDB query function
    */
   private createDuckDBFunction() {
@@ -137,6 +136,14 @@ export class ScriptRuntime {
     const cwd = `data/${this.context.projectId}/${this.context.convId}/files`;
     // Return the PDF reader function from the modular implementation
     return createPDFReaderFunction(cwd);
+  }
+
+  /**
+   * Get the web search function
+   */
+  private createWebSearchFunction() {
+    // Return the web search function from the modular implementation
+    return createWebSearchFunction();
   }
 
   /**
