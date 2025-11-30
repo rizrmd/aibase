@@ -4,7 +4,8 @@ import * as path from "path";
 
 /**
  * Memory Tool - Project-level persistent key-value storage
- * Actions: list, read, set, remove, categories, keys
+ * Memory is always visible in the context - no need to read it!
+ * Actions: set, remove
  * Memory is stored per project in /data/{proj-id}/memory.json
  * Structure: { category: { key: value } }
  */
@@ -17,31 +18,31 @@ export interface MemoryStore {
 
 export class MemoryTool extends Tool {
   name = "memory";
-  description = "Manage project-level memory: store and retrieve knowledge that persists across all conversations. Two-level structure: category -> key -> value. Actions: list (all data), read (category or specific key), set (create or update key-value), remove (key or category), categories (list all), keys (list keys in category).";
+  description = "Store and update project-level memory that persists across all conversations. Memory is ALWAYS visible in your context - you never need to read it! Structure: category -> key -> value. Actions: set (create or update), remove (delete key or category).";
   parameters = {
     type: "object",
     properties: {
       action: {
         type: "string",
-        enum: ["list", "read", "set", "remove", "categories", "keys"],
-        description: "The action to perform",
+        enum: ["set", "remove"],
+        description: "The action to perform: 'set' to store/update data, 'remove' to delete",
       },
       category: {
         type: "string",
-        description: "Category name (required for read, set, remove, keys actions)",
+        description: "Category name (required for both set and remove actions)",
       },
       key: {
         type: "string",
-        description: "Key name (required for read with category, set, remove actions)",
+        description: "Key name (required for set action, optional for remove - if omitted, removes entire category)",
       },
       value: {
         description: "Value to store (required for set action). Can be any JSON-serializable value.",
       },
     },
-    required: ["action"],
+    required: ["action", "category"],
   };
 
-  private projectId: string = "default";
+  private projectId: string = "A1";
 
   /**
    * Set the project ID for this tool instance
@@ -97,8 +98,8 @@ export class MemoryTool extends Tool {
   }
 
   async execute(args: {
-    action: "list" | "read" | "set" | "remove" | "categories" | "keys";
-    category?: string;
+    action: "set" | "remove";
+    category: string;
     key?: string;
     value?: any;
   }): Promise<string> {
@@ -106,64 +107,8 @@ export class MemoryTool extends Tool {
       const memory = await this.loadMemory();
 
       switch (args.action) {
-        case "list":
-          // Return all memory
-          return JSON.stringify(memory, null, 2);
-
-        case "categories":
-          // Return list of all categories
-          return JSON.stringify({
-            categories: Object.keys(memory),
-            count: Object.keys(memory).length,
-          }, null, 2);
-
-        case "keys":
-          // Return list of keys in a category
-          if (!args.category) {
-            throw new Error("category is required for keys action");
-          }
-          const categoryData = memory[args.category];
-          if (!categoryData) {
-            throw new Error(`Category '${args.category}' not found`);
-          }
-          return JSON.stringify({
-            category: args.category,
-            keys: Object.keys(categoryData),
-            count: Object.keys(categoryData).length,
-          }, null, 2);
-
-        case "read":
-          // Read entire category or specific key
-          if (!args.category) {
-            throw new Error("category is required for read action");
-          }
-          const readCategoryData = memory[args.category];
-          if (!readCategoryData) {
-            throw new Error(`Category '${args.category}' not found`);
-          }
-          if (args.key) {
-            // Read specific key
-            if (!(args.key in readCategoryData)) {
-              throw new Error(`Key '${args.key}' not found in category '${args.category}'`);
-            }
-            return JSON.stringify({
-              category: args.category,
-              key: args.key,
-              value: readCategoryData[args.key],
-            }, null, 2);
-          } else {
-            // Read entire category
-            return JSON.stringify({
-              category: args.category,
-              data: readCategoryData,
-            }, null, 2);
-          }
-
         case "set":
           // Set key-value (create or update)
-          if (!args.category) {
-            throw new Error("category is required for set action");
-          }
           if (!args.key) {
             throw new Error("key is required for set action");
           }
@@ -197,9 +142,6 @@ export class MemoryTool extends Tool {
 
         case "remove":
           // Remove key from category or entire category
-          if (!args.category) {
-            throw new Error("category is required for remove action");
-          }
           const removeCategoryData = memory[args.category];
           if (!removeCategoryData) {
             throw new Error(`Category '${args.category}' not found`);

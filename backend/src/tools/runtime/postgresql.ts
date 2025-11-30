@@ -1,5 +1,4 @@
 import { SQL } from "bun";
-import { MemoryTool } from "../definition/memory-tool.ts";
 
 /**
  * PostgreSQL query options
@@ -7,16 +6,12 @@ import { MemoryTool } from "../definition/memory-tool.ts";
 export interface PostgreSQLOptions {
   /** SQL query to execute */
   query: string;
-  /** Optional connection URL (if not provided, reads from memory tool) */
-  connectionUrl?: string;
+  /** PostgreSQL connection URL */
+  connectionUrl: string;
   /** Return format: 'json' (default), 'raw' */
   format?: "json" | "raw";
   /** Query timeout in milliseconds (default: 30000) */
   timeout?: number;
-  /** Memory category to read connection URL from (required when connectionUrl not provided) */
-  memoryCategory?: string;
-  /** Memory key to read connection URL from (required when connectionUrl not provided) */
-  memoryKey?: string;
 }
 
 /**
@@ -36,65 +31,50 @@ export interface PostgreSQLResult {
 }
 
 /**
- * Create a PostgreSQL query function that reads connection URL from memory tool
+ * Create a PostgreSQL query function using direct connection URL
  *
  * Uses Bun's native SQL API for PostgreSQL database queries.
- * Connection URL can be read from memory by specifying memoryCategory and memoryKey,
- * or provided directly via connectionUrl parameter.
  *
  * Usage in script tool:
  *
- * // 1. First, store the PostgreSQL connection URL in memory:
- * await memory({
- *   action: 'set',
- *   category: 'database',
- *   key: 'postgresql_url',
- *   value: 'postgresql://user:password@localhost:5432/mydb'
- * });
- *
- * // 2. Query the database (connection URL read from memory):
+ * // Query the database:
  * const users = await postgresql({
  *   query: 'SELECT * FROM users WHERE active = true LIMIT 10',
- *   memoryCategory: 'database',
- *   memoryKey: 'postgresql_url'
+ *   connectionUrl: 'postgresql://user:password@localhost:5432/mydb'
  * });
  * console.log(`Found ${users.rowCount} users`);
  * console.log(users.data); // Array of user objects
  *
- * // 3. Query with aggregation:
+ * // Query with aggregation:
  * const stats = await postgresql({
  *   query: 'SELECT status, COUNT(*) as count FROM orders GROUP BY status',
- *   memoryCategory: 'database',
- *   memoryKey: 'postgresql_url'
+ *   connectionUrl: 'postgresql://user:password@localhost:5432/mydb'
  * });
  *
- * // 4. Override connection URL (bypass memory):
- * const products = await postgresql({
- *   query: 'SELECT * FROM products WHERE price > 100',
- *   connectionUrl: 'postgresql://user:pass@another-host:5432/shop'
- * });
- *
- * // 5. Query with custom timeout:
+ * // Query with custom timeout:
  * const large = await postgresql({
  *   query: 'SELECT * FROM large_table',
- *   memoryCategory: 'database',
- *   memoryKey: 'postgresql_url',
+ *   connectionUrl: 'postgresql://user:password@localhost:5432/mydb',
  *   timeout: 60000 // 60 seconds
  * });
- *
- * @param projectId - Project ID for memory tool (injected automatically in script runtime)
  */
-export function createPostgreSQLFunction(projectId?: string) {
+export function createPostgreSQLFunction() {
   return async (options: PostgreSQLOptions): Promise<PostgreSQLResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
-        "postgresql requires an options object. Usage: postgresql({ query: 'SELECT * FROM users' })"
+        "postgresql requires an options object. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: 'postgresql://...' })"
       );
     }
 
     if (!options.query) {
       throw new Error(
-        "postgresql requires 'query' parameter. Usage: postgresql({ query: 'SELECT * FROM users' })"
+        "postgresql requires 'query' parameter. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: 'postgresql://...' })"
+      );
+    }
+
+    if (!options.connectionUrl) {
+      throw new Error(
+        "postgresql requires 'connectionUrl' parameter. Usage: postgresql({ query: '...', connectionUrl: 'postgresql://user:pass@host:5432/db' })"
       );
     }
 
@@ -103,49 +83,7 @@ export function createPostgreSQLFunction(projectId?: string) {
     const startTime = Date.now();
 
     try {
-      // Get connection URL
-      let connectionUrl = options.connectionUrl;
-
-      // If not provided, read from memory tool
-      if (!connectionUrl) {
-        // Require memoryCategory and memoryKey when reading from memory
-        if (!options.memoryCategory || !options.memoryKey) {
-          throw new Error(
-            "postgresql requires 'memoryCategory' and 'memoryKey' parameters when 'connectionUrl' is not provided. " +
-            "Usage: postgresql({ query: '...', memoryCategory: 'database', memoryKey: 'postgresql_url' })"
-          );
-        }
-
-        const memoryCategory = options.memoryCategory;
-        const memoryKey = options.memoryKey;
-        const memoryTool = new MemoryTool();
-        if (projectId) {
-          memoryTool.setProjectId(projectId);
-        }
-
-        try {
-          const result = await memoryTool.execute({
-            action: "read",
-            category: memoryCategory,
-            key: memoryKey,
-          });
-
-          // Parse the result to extract the connection URL
-          const parsed = JSON.parse(result);
-          connectionUrl = parsed.value;
-
-          if (!connectionUrl) {
-            throw new Error(
-              `Connection URL not found in memory at ${memoryCategory}.${memoryKey}`
-            );
-          }
-        } catch (error: any) {
-          throw new Error(
-            `Failed to read PostgreSQL connection URL from memory (${memoryCategory}.${memoryKey}): ${error.message}. ` +
-            `Please store it using: memory({ action: 'set', category: '${memoryCategory}', key: '${memoryKey}', value: 'postgresql://...' })`
-          );
-        }
-      }
+      const connectionUrl = options.connectionUrl;
 
       // Create PostgreSQL connection using Bun's SQL
       const db = new SQL(connectionUrl);
@@ -226,11 +164,10 @@ export function createPostgreSQLFunction(projectId?: string) {
  * Helper function to test PostgreSQL connection
  */
 export async function testPostgreSQLConnection(
-  connectionUrl?: string,
-  projectId?: string
+  connectionUrl: string
 ): Promise<{ connected: boolean; version?: string; error?: string }> {
   try {
-    const pgQuery = createPostgreSQLFunction(projectId);
+    const pgQuery = createPostgreSQLFunction();
     const result = await pgQuery({
       query: "SELECT version()",
       connectionUrl,
@@ -253,12 +190,11 @@ export async function testPostgreSQLConnection(
  */
 export function queryPostgreSQL(
   table: string,
+  connectionUrl: string,
   options?: {
     where?: string;
     limit?: number;
     orderBy?: string;
-    connectionUrl?: string;
-    projectId?: string;
   }
 ) {
   const where = options?.where ? `WHERE ${options.where}` : "";
@@ -267,8 +203,8 @@ export function queryPostgreSQL(
 
   const query = `SELECT * FROM ${table} ${where} ${orderBy} ${limit}`.trim();
 
-  return createPostgreSQLFunction(options?.projectId)({
+  return createPostgreSQLFunction()({
     query,
-    connectionUrl: options?.connectionUrl,
+    connectionUrl,
   });
 }

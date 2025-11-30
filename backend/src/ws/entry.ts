@@ -841,7 +841,7 @@ export class WSServer extends WSEventEmitter {
             const todosPath = path.join(
               process.cwd(),
               "data",
-              "default",
+              "A1",
               connectionInfo.convId,
               "todos.json"
             );
@@ -948,7 +948,7 @@ Always be helpful and conversational.`;
       initialHistory,
       tools,
       convId,
-      projectId: "default",
+      projectId: "A1",
       hooks: {
         message: {
           before: async (message: string) => {

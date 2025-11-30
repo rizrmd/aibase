@@ -24,19 +24,16 @@ interface MemoryStore {
  * Get the path to the todos file
  */
 function getTodosFilePath(convId: string, projectId: string): string {
-  return path.join(
-    process.cwd(),
-    "data",
-    projectId,
-    convId,
-    "todos.json"
-  );
+  return path.join(process.cwd(), "data", projectId, convId, "todos.json");
 }
 
 /**
  * Load todos from file
  */
-async function loadTodos(convId: string, projectId: string): Promise<TodoList | null> {
+async function loadTodos(
+  convId: string,
+  projectId: string
+): Promise<TodoList | null> {
   const todosPath = getTodosFilePath(convId, projectId);
 
   try {
@@ -61,9 +58,14 @@ function formatTodosForContext(todoList: TodoList): string {
   if (todoList.items.length === 0) {
     context += "\n- No todos yet";
   } else {
-    context += "\n" + todoList.items.map((item) =>
-      `- [${item.checked ? 'x' : ' '}] ${item.text} (id: ${item.id})`
-    ).join("\n");
+    context +=
+      "\n" +
+      todoList.items
+        .map(
+          (item) =>
+            `- [${item.checked ? "x" : " "}] ${item.text} (id: ${item.id})`
+        )
+        .join("\n");
   }
 
   return context;
@@ -73,12 +75,7 @@ function formatTodosForContext(todoList: TodoList): string {
  * Get the path to the memory file
  */
 function getMemoryFilePath(projectId: string): string {
-  return path.join(
-    process.cwd(),
-    "data",
-    projectId,
-    "memory.json"
-  );
+  return path.join(process.cwd(), "data", projectId, "memory.json");
 }
 
 /**
@@ -106,7 +103,7 @@ function formatMemoryForContext(memory: MemoryStore): string {
     return "";
   }
 
-  let context = `\n\nProject Memory (shared across all conversations):`;
+  let context = `\n\nProject Memory (shared across all conversations, two-level structure: category -> key: value):`;
 
   for (const category of categories) {
     const categoryData = memory[category];
@@ -114,11 +111,12 @@ function formatMemoryForContext(memory: MemoryStore): string {
 
     const keys = Object.keys(categoryData);
     if (keys.length > 0) {
-      context += `\n\n[${category}]`;
+      context += `\n\n[${category}] ← category (first level)`;
       for (const key of keys) {
         const value = categoryData[key];
-        const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
-        context += `\n  ${key}: ${valueStr}`;
+        const valueStr =
+          typeof value === "string" ? value : JSON.stringify(value);
+        context += `\n  ${key}: ${valueStr} ← key: value (second level)`;
       }
     }
   }
@@ -129,7 +127,10 @@ function formatMemoryForContext(memory: MemoryStore): string {
 /**
  * Get default context with existing todos and memory appended
  */
-export const defaultContext = async (convId: string = "default", projectId: string = "default"): Promise<string> => {
+export const defaultContext = async (
+  convId: string,
+  projectId: string
+): Promise<string> => {
   let context = `use todo tool to track step/phases/stages/parts etc. add/remove/check/uncheck multiple time at once instead of one-by-one.
 
 SCRIPT TOOL - Execute code with fetch, tools, and context!
@@ -157,13 +158,13 @@ EXAMPLES:
 3. BATCH PROCESS FILES:
 {
   "purpose": "Count exports in TypeScript files",
-  "code": "progress('Listing...'); const files = await file({ action: 'list_project_files' }); const tsFiles = files.filter(f => f.name.endsWith('.ts')); let count = 0; for (const f of tsFiles) { progress(\`Reading \${f.name}\`); const content = await file({ action: 'read_file', path: f.path }); count += (content.match(/export /g) || []).length; } return { analyzed: tsFiles.length, totalExports: count };"
+  "code": "progress('Listing...'); const files = await file({ action: 'list' }); const tsFiles = files.filter(f => f.name.endsWith('.ts')); let count = 0; for (const f of tsFiles) { progress(\`Reading \${f.name}\`); const content = await file({ action: 'read_file', path: f.path }); count += (content.match(/export /g) || []).length; } return { analyzed: tsFiles.length, totalExports: count };"
 }
 
 4. MULTI-TOOL WORKFLOWS:
 {
   "purpose": "Create todos for files",
-  "code": "const files = await file({ action: 'list_project_files' }); progress(\`Found \${files.length} files\`); const texts = files.slice(0, 10).map(f => \`Review: \${f.name}\`); await todo({ action: 'add', texts }); return { created: texts.length };"
+  "code": "const files = await file({ action: 'list' }); progress(\`Found \${files.length} files\`); const texts = files.slice(0, 10).map(f => \`Review: \${f.name}\`); await todo({ action: 'add', texts }); return { created: texts.length };"
 }
 
 5. WEB SEARCH:
@@ -205,22 +206,40 @@ EXAMPLES:
 11. POSTGRESQL QUERY (IMPORTANT - Use postgresql(), NOT DuckDB!):
 {
   "purpose": "Query PostgreSQL database for active users",
-  "code": "progress('Querying PostgreSQL...'); const result = await postgresql({ query: 'SELECT * FROM users WHERE active = true LIMIT 10' }); progress(\`Found \${result.rowCount} users\`); return { count: result.rowCount, users: result.data };"
+  "code": "progress('Querying PostgreSQL...'); const result = await postgresql({ query: 'SELECT * FROM users WHERE active = true LIMIT 10', connectionUrl: 'postgresql://user:pass@localhost:5432/mydb' }); progress(\`Found \${result.rowCount} users\`); return { count: result.rowCount, users: result.data };"
 }
 
 12. POSTGRESQL WITH AGGREGATION:
 {
   "purpose": "Get order statistics from PostgreSQL",
-  "code": "progress('Analyzing orders...'); const stats = await postgresql({ query: 'SELECT status, COUNT(*) as count, SUM(total) as revenue FROM orders GROUP BY status ORDER BY revenue DESC' }); return { breakdown: stats.data, totalStatuses: stats.rowCount };"
+  "code": "progress('Analyzing orders...'); const stats = await postgresql({ query: 'SELECT status, COUNT(*) as count, SUM(total) as revenue FROM orders GROUP BY status ORDER BY revenue DESC', connectionUrl: 'postgresql://user:pass@localhost:5432/mydb' }); return { breakdown: stats.data, totalStatuses: stats.rowCount };"
 }
 
-13. POSTGRESQL WITH CUSTOM CONNECTION:
+13. POSTGRESQL WITH TIMEOUT:
 {
-  "purpose": "Query specific PostgreSQL database",
-  "code": "progress('Connecting to database...'); const result = await postgresql({ query: 'SELECT * FROM products WHERE price > 100 ORDER BY price DESC', connectionUrl: 'postgresql://user:pass@localhost:5432/shop' }); return { products: result.rowCount, data: result.data };"
+  "purpose": "Query PostgreSQL with custom timeout",
+  "code": "progress('Querying large table...'); const result = await postgresql({ query: 'SELECT * FROM products WHERE price > 100 ORDER BY price DESC', connectionUrl: 'postgresql://user:pass@localhost:5432/shop', timeout: 60000 }); return { products: result.rowCount, data: result.data };"
 }
 
-Available: fetch, webSearch({ query, region?, safesearch?, timelimit?, maxResults? }), duckdb({ query, database?, format?, readonly? }), postgresql({ query, connectionUrl?, format?, timeout? }), progress(msg), file(...), todo(...), memory(...), convId, projectId, console
+Available: fetch, webSearch({ query, region?, safesearch?, timelimit?, maxResults? }), duckdb({ query, database?, format?, readonly? }), postgresql({ query, connectionUrl, format?, timeout? }), progress(msg), file(...), todo(...), memory(...), convId, projectId, console
+
+MEMORY TOOL - TWO-LEVEL STRUCTURE:
+Memory has TWO levels: [category] -> key: value
+- First level: CATEGORY (e.g., "database", "settings", "api_keys")
+- Second level: KEY: VALUE pairs within that category
+
+To use memory tool:
+- SET: memory({ action: "set", category: "database", key: "postgresql_url", value: "postgresql://..." })
+- REMOVE KEY: memory({ action: "remove", category: "database", key: "postgresql_url" })
+- REMOVE CATEGORY: memory({ action: "remove", category: "database" })
+- READ: Just look at your context! Memory is ALWAYS appended below - you never need to read it.
+
+Example memory structure:
+[database] ← category
+  postgresql_url: postgresql://user:pass@localhost:5432/mydb ← key: value
+  last_connected: 2024-01-15 ← key: value
+[api_keys] ← category
+  openai: sk-... ← key: value
 
 CRITICAL DATABASE USAGE:
 - DuckDB: Use ONLY for CSV, Excel, Parquet, JSON files (local data files)
@@ -233,7 +252,7 @@ Write as async function body - NO import/export, just await and return!`;
 
   // Try to load project memory (shared across all conversations)
   const memory = await loadMemory(projectId);
-
+  console.log("memory", memory, projectId);
   if (memory && Object.keys(memory).length > 0) {
     context += formatMemoryForContext(memory);
   }

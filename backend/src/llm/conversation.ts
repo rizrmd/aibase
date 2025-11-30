@@ -240,7 +240,7 @@ export class Conversation {
     // Initialize history with system prompt
     // Start with default context and append custom systemPrompt if provided
     const convId = options.convId || "default";
-    const projectId = options.projectId || "default";
+    const projectId = options.projectId || "A1";
     const baseContext = await defaultContext(convId, projectId);
     const systemPrompt = options.systemPrompt
       ? `${baseContext}\n\n${options.systemPrompt}`

@@ -121,9 +121,8 @@ export class ScriptRuntime {
    * Get the PostgreSQL query function
    */
   private createPostgreSQLFunction() {
-    // Return the PostgreSQL function with project context
-    // Connection URL will be read from memory at database.postgresql_url
-    return createPostgreSQLFunction(this.context.projectId);
+    // Return the PostgreSQL function (requires direct connection URL)
+    return createPostgreSQLFunction();
   }
 
   /**

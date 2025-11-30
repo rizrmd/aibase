@@ -7,7 +7,7 @@ import { MemoryTool } from "./definition/memory-tool";
 /**
  * Get all built-in tools for a specific conversation
  */
-export function getBuiltinTools(convId: string = "default", projectId: string = "A1"): Tool[] {
+export function getBuiltinTools(convId: string = "A1", projectId: string = "A1"): Tool[] {
   const fileTool = new FileTool();
   fileTool.setConvId(convId);
   fileTool.setProjectId(projectId);

@@ -55,7 +55,7 @@ export class TodoTool extends Tool {
   };
 
   private convId: string = "default";
-  private projectId: string = "default";
+  private projectId: string = "A1";
   private broadcastCallback?: (convId: string, todos: TodoList) => void;
 
   /**

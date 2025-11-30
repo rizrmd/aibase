@@ -7,7 +7,7 @@ import { MemoryTool } from "../tools/definition/memory-tool";
  */
 export async function detectAndStorePostgreSQLUrl(
   message: string,
-  projectId: string = "default"
+  projectId: string = "A1"
 ): Promise<{ detected: boolean; tested: boolean; stored: boolean; error?: string }> {
   // Regex to match PostgreSQL connection URLs
   const pgUrlPattern = /\b(postgres(?:ql)?|pg):\/\/[^\s<>"{}|\\^`\[\]]+/gi;
