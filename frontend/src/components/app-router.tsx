@@ -1,8 +1,9 @@
 import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { MainChat } from "./main-chat";
 import { MemoryEditor } from "./memory-editor";
+import { ContextEditor } from "./context-editor";
 import { Button } from "./ui/button";
-import { MessageSquare, Database, TableProperties, Binary, ListTodo } from "lucide-react";
+import { MessageSquare, Database, TableProperties, Binary, ListTodo, FileText } from "lucide-react";
 import { Toaster } from "./ui/sonner";
 import { useState } from "react";
 import { useChatStore } from "@/stores/chat-store";
@@ -43,6 +44,14 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           <Binary />
           {location.pathname === "/memory" && <>Memory</>}
         </Button>
+        <Button
+          variant={location.pathname === "/context" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => navigate("/context")}
+        >
+          <FileText />
+          {location.pathname === "/context" && <>Context</>}
+        </Button>
         {location.pathname === "/" && todos?.items?.length > 0 && (
           <Button
             variant={isTodoPanelVisible ? "outline" : "ghost"}
@@ -61,6 +70,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
         <Routes>
           <Route path="/" element={<MainChat wsUrl={wsUrl} isTodoPanelVisible={isTodoPanelVisible} />} />
           <Route path="/memory" element={<MemoryEditor />} />
+          <Route path="/context" element={<ContextEditor />} />
         </Routes>
       </div>
 

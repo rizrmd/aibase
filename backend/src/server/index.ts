@@ -37,6 +37,7 @@ import type { WSClientOptions, WSServerOptions } from "../ws/types";
 import { WSServer } from "../ws/entry";
 import { handleFileUpload, handleFileDownload } from "./upload-handler";
 import { handleGetMemory, handleSetMemory, handleDeleteMemory } from "./memory-handler";
+import { handleGetContext, handleUpdateContext } from "./context-handler";
 
 /**
  * Convenience function to create a WebSocket server
@@ -134,6 +135,15 @@ export class WebSocketServer {
             return handleSetMemory(req);
           } else if (req.method === "DELETE") {
             return handleDeleteMemory(req);
+          }
+        }
+
+        // Context API endpoints
+        if (url.pathname === "/api/context") {
+          if (req.method === "GET") {
+            return handleGetContext(req);
+          } else if (req.method === "PUT") {
+            return handleUpdateContext(req);
           }
         }
 
