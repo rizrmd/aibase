@@ -2,6 +2,49 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 
 /**
+ * Load tool examples from tool definition files
+ */
+async function loadToolExamples(): Promise<string> {
+  try {
+    // Import examples from tool definition files
+    const { SCRIPT_TOOL_EXAMPLES } = await import("../tools/definition/script-tool");
+    const { FILE_TOOL_EXAMPLES } = await import("../tools/definition/file-tool");
+    const { TODO_TOOL_EXAMPLES } = await import("../tools/definition/todo-tool");
+    const { MEMORY_TOOL_EXAMPLES } = await import("../tools/definition/memory-tool");
+
+    // Combine all tool examples in logical order
+    const examples: string[] = [];
+
+    if (SCRIPT_TOOL_EXAMPLES) examples.push(SCRIPT_TOOL_EXAMPLES);
+    if (FILE_TOOL_EXAMPLES) examples.push(FILE_TOOL_EXAMPLES);
+    if (TODO_TOOL_EXAMPLES) examples.push(TODO_TOOL_EXAMPLES);
+    if (MEMORY_TOOL_EXAMPLES) examples.push(MEMORY_TOOL_EXAMPLES);
+
+    return examples.join("\n\n");
+  } catch (error) {
+    console.error("Failed to load tool examples:", error);
+    return "";
+  }
+}
+
+/**
+ * Expand template placeholders (for UI display)
+ */
+async function expandTemplate(template: string): Promise<string> {
+  let expanded = template;
+
+  // Replace tool examples placeholder
+  const toolExamples = await loadToolExamples();
+  expanded = expanded.replace("{{TOOL_EXAMPLES}}", toolExamples);
+
+  // Remove other placeholders for UI (they're only used at runtime)
+  expanded = expanded.replace("{{MEMORY}}", "");
+  expanded = expanded.replace("{{TODOS}}", "");
+
+  return expanded;
+}
+
+/**
  * Get the context template directory path for a project
  */
 function getContextDir(projectId: string): string {
@@ -107,10 +150,13 @@ export async function handleGetContext(req: Request): Promise<Response> {
  */
 export async function handleGetDefaultContext(req: Request): Promise<Response> {
   try {
+    // Expand template placeholders so users see actual content, not {{PLACEHOLDERS}}
+    const expandedTemplate = await expandTemplate(DEFAULT_TEMPLATE);
+
     return Response.json({
       success: true,
       data: {
-        content: DEFAULT_TEMPLATE,
+        content: expandedTemplate,
         isDefault: true,
       },
     });
