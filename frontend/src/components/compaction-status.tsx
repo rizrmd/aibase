@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useWSConnection } from "@/lib/ws/ws-connection-manager";
+import type { WSClient } from "@/lib/ws/ws-connection-manager";
 import { Zap, Loader2 } from "lucide-react";
 
-interface CompactionStatus {
+interface CompactionStatusData {
   shouldCompact: boolean;
   currentTokens: number;
   threshold: number;
   utilizationPercent: number;
 }
 
-export function CompactionStatus() {
-  const { wsClient } = useWSConnection();
-  const [status, setStatus] = useState<CompactionStatus | null>(null);
+interface CompactionStatusProps {
+  wsClient: WSClient | null;
+}
+
+export function CompactionStatus({ wsClient }: CompactionStatusProps) {
+  const [status, setStatus] = useState<CompactionStatusData | null>(null);
   const [isCompacting, setIsCompacting] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<number>(0);
 

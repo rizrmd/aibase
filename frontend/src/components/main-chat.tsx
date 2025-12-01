@@ -235,7 +235,7 @@ export function MainChat({ wsUrl, className, isTodoPanelVisible = true }: Shadcn
         {/* Compaction Status - Show when messages exist */}
         {messages.length > 0 && (
           <div className="mx-4 mb-2">
-            <CompactionStatus />
+            <CompactionStatus wsClient={wsClient} />
           </div>
         )}
 
