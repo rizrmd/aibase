@@ -6,6 +6,7 @@
 
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
+import { chatCompaction } from "../storage/chat-compaction";
 
 export interface ConvMessageHistory {
   convId: string;
@@ -218,5 +219,56 @@ export class MessagePersistence {
    */
   getClientMessageCount(convId: string): number {
     return this.convHistories[convId]?.messageCount || 0;
+  }
+
+  /**
+   * Check if compaction is needed and perform it
+   * This should be called after adding messages
+   */
+  async checkAndCompact(projectId: string, convId: string): Promise<{
+    compacted: boolean;
+    newChatFile?: string;
+    tokensSaved?: number;
+  }> {
+    try {
+      // Check if compaction is needed
+      const shouldCompact = await chatCompaction.shouldCompact(projectId, convId);
+
+      if (!shouldCompact) {
+        return { compacted: false };
+      }
+
+      // Get current messages
+      const messages = await this.getClientHistory(convId);
+
+      // Perform compaction
+      const result = await chatCompaction.compactChat(projectId, convId, messages);
+
+      if (result.compacted && result.newChatFile) {
+        console.log(`[MessagePersistence] Compacted ${result.messagesCompacted} messages for ${convId}`);
+        console.log(`[MessagePersistence] Saved approximately ${result.tokensSaved} tokens`);
+        console.log(`[MessagePersistence] New chat file: ${result.newChatFile}`);
+
+        // Note: We don't automatically update the in-memory history here
+        // The compacted history will be loaded on next server restart
+        // or when the conversation is reloaded
+      }
+
+      return {
+        compacted: result.compacted,
+        newChatFile: result.newChatFile,
+        tokensSaved: result.tokensSaved
+      };
+    } catch (error) {
+      console.error(`[MessagePersistence] Error during compaction check for ${convId}:`, error);
+      return { compacted: false };
+    }
+  }
+
+  /**
+   * Get compaction status for a conversation
+   */
+  async getCompactionStatus(projectId: string, convId: string) {
+    return await chatCompaction.getCompactionStatus(projectId, convId);
   }
 }

@@ -3,6 +3,7 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Chat, type Message } from "@/components/ui/chat";
 import { TodoPanel } from "@/components/todo-panel";
+import { CompactionStatus } from "@/components/compaction-status";
 import { useConvId } from "@/lib/conv-id";
 import { useWSConnection } from "@/lib/ws/ws-connection-manager";
 import { useChatStore } from "@/stores/chat-store";
@@ -229,6 +230,13 @@ export function MainChat({ wsUrl, className, isTodoPanelVisible = true }: Shadcn
               </div>
             </AlertDescription>
           </Alert>
+        )}
+
+        {/* Compaction Status - Show when messages exist */}
+        {messages.length > 0 && (
+          <div className="mx-4 mb-2">
+            <CompactionStatus />
+          </div>
         )}
 
         <Chat

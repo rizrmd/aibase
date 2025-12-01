@@ -660,6 +660,32 @@ export class WSServer extends WSEventEmitter {
         `[Backend Complete] Verification: Saved history has ${savedHistory.length} messages`
       );
 
+      // Check if compaction is needed (automatic)
+      try {
+        const compactionResult = await this.messagePersistence.checkAndCompact(
+          connectionInfo.projectId || "A1",
+          connectionInfo.convId
+        );
+        if (compactionResult.compacted) {
+          console.log(
+            `[Auto-Compaction] Compacted chat for ${connectionInfo.convId}, saved ~${compactionResult.tokensSaved} tokens`
+          );
+          // Optionally notify all clients about the compaction
+          this.broadcastToConversation(connectionInfo.convId, {
+            type: "notification",
+            id: `compaction_${Date.now()}`,
+            data: {
+              message: `Chat history compacted. Saved approximately ${compactionResult.tokensSaved} tokens.`,
+              severity: "info",
+            },
+            metadata: { timestamp: Date.now() },
+          });
+        }
+      } catch (error: any) {
+        console.error(`[Auto-Compaction] Error:`, error);
+        // Don't fail the main flow if compaction fails
+      }
+
       // Clean up assistant message ID from connection info
       delete (connectionInfo as any).assistantMsgId;
     } catch (error: any) {
@@ -887,6 +913,60 @@ export class WSServer extends WSEventEmitter {
             },
             metadata: { timestamp: Date.now() },
           });
+          break;
+
+        case "compact_chat":
+          console.log(`[Compaction] Manual compaction requested for convId: ${connectionInfo.convId}`);
+          try {
+            const compactionResult = await this.messagePersistence.checkAndCompact(
+              connectionInfo.projectId || "A1",
+              connectionInfo.convId
+            );
+
+            this.sendToWebSocket(ws, {
+              type: "control_response",
+              id: message.id,
+              data: {
+                status: "compacted",
+                type: control.type,
+                compacted: compactionResult.compacted,
+                newChatFile: compactionResult.newChatFile,
+                tokensSaved: compactionResult.tokensSaved,
+              },
+              metadata: { timestamp: Date.now() },
+            });
+
+            console.log(`[Compaction] Result:`, compactionResult);
+          } catch (error: any) {
+            console.error(`[Compaction] Error:`, error);
+            this.sendError(ws, "COMPACTION_ERROR", error.message);
+          }
+          break;
+
+        case "get_compaction_status":
+          console.log(`[Compaction] Status requested for convId: ${connectionInfo.convId}`);
+          try {
+            const status = await this.messagePersistence.getCompactionStatus(
+              connectionInfo.projectId || "A1",
+              connectionInfo.convId
+            );
+
+            this.sendToWebSocket(ws, {
+              type: "control_response",
+              id: message.id,
+              data: {
+                status: "compaction_status",
+                type: control.type,
+                ...status,
+              },
+              metadata: { timestamp: Date.now() },
+            });
+
+            console.log(`[Compaction] Status:`, status);
+          } catch (error: any) {
+            console.error(`[Compaction] Error getting status:`, error);
+            this.sendError(ws, "COMPACTION_STATUS_ERROR", error.message);
+          }
           break;
 
         default:

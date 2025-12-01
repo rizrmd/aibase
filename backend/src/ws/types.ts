@@ -33,11 +33,12 @@ export type MessageType =
   | 'error'
   | 'control_response'
   | 'pong'
-  | 'status';
+  | 'status'
+  | 'notification';
 
 // Control message types
 export interface ControlMessage {
-  type: 'abort' | 'pause' | 'resume' | 'clear_history' | 'get_history' | 'get_status';
+  type: 'abort' | 'pause' | 'resume' | 'clear_history' | 'get_history' | 'get_status' | 'compact_chat' | 'get_compaction_status';
   targetId?: string;
   data?: any;
 }

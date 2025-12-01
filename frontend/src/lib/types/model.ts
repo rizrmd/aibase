@@ -41,7 +41,8 @@ export type MessageType =
   | "control_response"
   | "pong"
   | "status"
-  | "todo_update";
+  | "todo_update"
+  | "notification";
 
 export interface UserMessageData {
   text: string;
@@ -94,7 +95,7 @@ export interface ConnectionState {
 
 // Enhanced types for the comprehensive WebSocket client
 export interface ControlMessage {
-  type: "abort" | "clear_history" | "get_history" | "get_status";
+  type: "abort" | "clear_history" | "get_history" | "get_status" | "compact_chat" | "get_compaction_status";
 }
 
 export interface ConnectionStats {
