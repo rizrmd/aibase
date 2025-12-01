@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Save, RefreshCw, RotateCcw } from "lucide-react";
+import { Save, Zap } from "lucide-react";
 import { toast } from "sonner";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 
 const API_URL =
-  (typeof window !== "undefined" && window.location.origin) || "http://localhost:5040";
+  (typeof window !== "undefined" && window.location.origin) ||
+  "http://localhost:5040";
 
 // Default project ID (could be made configurable later)
 const PROJECT_ID = "A1";
@@ -23,7 +24,9 @@ export function ContextEditor() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/context?projectId=${PROJECT_ID}`);
+      const response = await fetch(
+        `${API_URL}/api/context?projectId=${PROJECT_ID}`
+      );
       const data = await response.json();
 
       if (!data.success) {
@@ -83,7 +86,11 @@ export function ContextEditor() {
   };
 
   const handleResetToDefault = async () => {
-    if (!confirm("Reset to default template? This will discard all current content.")) {
+    if (
+      !confirm(
+        "Reset to default template? This will discard all current content."
+      )
+    ) {
       return;
     }
 
@@ -128,7 +135,6 @@ export function ContextEditor() {
             <p className="text-sm text-muted-foreground mt-2">{error}</p>
           </div>
           <Button onClick={loadContext} variant="outline">
-            <RefreshCw className="mr-2" />
             Retry
           </Button>
         </div>
@@ -162,12 +168,8 @@ export function ContextEditor() {
             size="sm"
             disabled={isLoading}
           >
-            <RotateCcw className="mr-1" />
-            Reset to Default
-          </Button>
-          <Button onClick={loadContext} variant="outline" size="sm" disabled={isLoading}>
-            <RefreshCw className={isLoading ? "animate-spin" : ""} />
-            Refresh
+            <Zap className="mr-1" />
+            Reset
           </Button>
           <Button
             onClick={handleSave}
@@ -183,7 +185,9 @@ export function ContextEditor() {
       {/* Editor */}
       {isLoading && !content ? (
         <div className="flex flex-1 items-center justify-center">
-          <div className="text-muted-foreground">Loading context template...</div>
+          <div className="text-muted-foreground">
+            Loading context template...
+          </div>
         </div>
       ) : (
         <div className="flex-1 overflow-auto rounded-lg border">
