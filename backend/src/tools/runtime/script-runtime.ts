@@ -1,6 +1,8 @@
 import type { Tool } from "../../llm/conversation";
 import { createDuckDBFunction } from "./duckdb";
 import { createPostgreSQLFunction } from "./postgresql";
+import { createClickHouseFunction } from "./clickhouse";
+import { createTrinoFunction } from "./trino";
 import { createPDFReaderFunction } from "./pdfreader";
 import { createWebSearchFunction } from "./web-search";
 
@@ -78,6 +80,12 @@ export class ScriptRuntime {
       // Inject PostgreSQL query function
       postgresql: this.createPostgreSQLFunction(),
 
+      // Inject ClickHouse query function
+      clickhouse: this.createClickHouseFunction(),
+
+      // Inject Trino query function
+      trino: this.createTrinoFunction(),
+
       // Inject PDF reader function
       pdfReader: this.createPDFReaderFunction(),
 
@@ -126,6 +134,22 @@ export class ScriptRuntime {
   private createPostgreSQLFunction() {
     // Return the PostgreSQL function (requires direct connection URL)
     return createPostgreSQLFunction();
+  }
+
+  /**
+   * Get the ClickHouse query function
+   */
+  private createClickHouseFunction() {
+    // Return the ClickHouse function (requires server URL)
+    return createClickHouseFunction();
+  }
+
+  /**
+   * Get the Trino query function
+   */
+  private createTrinoFunction() {
+    // Return the Trino function (requires server URL)
+    return createTrinoFunction();
   }
 
   /**
