@@ -1,9 +1,11 @@
 /**
  * Simple in-memory message persistence service
  * Stores conversation history per conversation ID using a Record structure
+ * Now also persists to disk via ChatHistoryStorage
  */
 
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { ChatHistoryStorage } from "../storage/chat-history-storage";
 
 export interface ConvMessageHistory {
   convId: string;
@@ -15,8 +17,11 @@ export interface ConvMessageHistory {
 export class MessagePersistence {
   private static instance: MessagePersistence;
   private convHistories: Record<string, ConvMessageHistory> = {};
+  private chatHistoryStorage: ChatHistoryStorage;
 
-  private constructor() {}
+  private constructor() {
+    this.chatHistoryStorage = ChatHistoryStorage.getInstance();
+  }
 
   /**
    * Get singleton instance
@@ -30,17 +35,49 @@ export class MessagePersistence {
 
   /**
    * Get message history for a conversation
+   * Loads from disk if not in memory
    */
-  getClientHistory(convId: string): ChatCompletionMessageParam[] {
+  async getClientHistory(convId: string): Promise<ChatCompletionMessageParam[]> {
+    const history = this.convHistories[convId];
+    if (history) {
+      return [...history.messages]; // Return a copy to prevent direct modification
+    }
+
+    // Try loading from disk
+    try {
+      const diskHistory = await this.chatHistoryStorage.loadChatHistory(convId);
+      if (diskHistory.length > 0) {
+        // Store in memory for faster access
+        this.convHistories[convId] = {
+          convId,
+          messages: diskHistory,
+          lastUpdated: Date.now(),
+          messageCount: diskHistory.length,
+        };
+        return [...diskHistory];
+      }
+    } catch (error) {
+      console.error(`[MessagePersistence] Error loading history for ${convId}:`, error);
+    }
+
+    return [];
+  }
+
+  /**
+   * Synchronous version of getClientHistory for backward compatibility
+   * Only returns in-memory history
+   */
+  getClientHistorySync(convId: string): ChatCompletionMessageParam[] {
     const history = this.convHistories[convId];
     if (!history) {
       return [];
     }
-    return [...history.messages]; // Return a copy to prevent direct modification
+    return [...history.messages];
   }
 
   /**
    * Set message history for a conversation
+   * Also saves to disk
    */
   setClientHistory(
     convId: string,
@@ -52,10 +89,16 @@ export class MessagePersistence {
       lastUpdated: Date.now(),
       messageCount: messages.length,
     };
+
+    // Asynchronously save to disk (don't wait)
+    this.chatHistoryStorage.saveChatHistory(convId, messages).catch(error => {
+      console.error(`[MessagePersistence] Error saving history for ${convId}:`, error);
+    });
   }
 
   /**
    * Add a message to conversation history
+   * Also saves to disk
    */
   addClientMessage(convId: string, message: ChatCompletionMessageParam): void {
     if (!this.convHistories[convId]) {
@@ -70,6 +113,12 @@ export class MessagePersistence {
     this.convHistories[convId].messages.push(message);
     this.convHistories[convId].lastUpdated = Date.now();
     this.convHistories[convId].messageCount++;
+
+    // Asynchronously save to disk (don't wait)
+    const messages = this.convHistories[convId].messages;
+    this.chatHistoryStorage.saveChatHistory(convId, messages).catch(error => {
+      console.error(`[MessagePersistence] Error saving history for ${convId}:`, error);
+    });
   }
 
   /**

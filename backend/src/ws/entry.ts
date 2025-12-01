@@ -362,7 +362,8 @@ export class WSServer extends WSEventEmitter {
     this.sessions.set(sessionId, sessionInfo);
 
     // Create conversation for this session with existing history
-    const existingHistory = this.messagePersistence.getClientHistory(convId);
+    // Load from disk if available
+    const existingHistory = await this.messagePersistence.getClientHistory(convId);
     const conversation = await this.createConversation(existingHistory, convId);
     connectionInfo.conversation = conversation;
 
@@ -652,7 +653,7 @@ export class WSServer extends WSEventEmitter {
       );
 
       // Verify it was saved
-      const savedHistory = this.messagePersistence.getClientHistory(
+      const savedHistory = await this.messagePersistence.getClientHistory(
         connectionInfo.convId
       );
       console.log(
@@ -807,7 +808,7 @@ export class WSServer extends WSEventEmitter {
           console.log(
             `Backend: Getting history for convId: ${connectionInfo.convId}`
           );
-          const history = this.messagePersistence.getClientHistory(
+          const history = await this.messagePersistence.getClientHistory(
             connectionInfo.convId
           );
 
