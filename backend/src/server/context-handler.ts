@@ -112,6 +112,30 @@ export async function handleGetContext(req: Request): Promise<Response> {
 }
 
 /**
+ * Handle GET /api/context/default - Get default context template
+ */
+export async function handleGetDefaultContext(req: Request): Promise<Response> {
+  try {
+    return Response.json({
+      success: true,
+      data: {
+        content: DEFAULT_TEMPLATE,
+        isDefault: true,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting default context:", error);
+    return Response.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to get default context",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * Handle PUT /api/context - Update context template
  */
 export async function handleUpdateContext(req: Request): Promise<Response> {

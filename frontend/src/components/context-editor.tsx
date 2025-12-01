@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Save, RefreshCw } from "lucide-react";
+import { Save, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
@@ -82,6 +82,35 @@ export function ContextEditor() {
     }
   };
 
+  const handleResetToDefault = async () => {
+    if (!confirm("Reset to default template? This will discard all current content.")) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/context/default`);
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to load default template");
+      }
+
+      setContent(data.data.content);
+      toast.success("Reset to default template", {
+        description: "Don't forget to save your changes",
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Failed to reset to default", {
+        description: errorMessage,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadContext();
   }, []);
@@ -124,6 +153,15 @@ export function ContextEditor() {
             disabled={!hasChanges || isLoading}
           >
             Reset
+          </Button>
+          <Button
+            onClick={handleResetToDefault}
+            variant="outline"
+            size="sm"
+            disabled={isLoading}
+          >
+            <RotateCcw className="mr-1" />
+            Reset to Default
           </Button>
           <Button onClick={loadContext} variant="outline" size="sm" disabled={isLoading}>
             <RefreshCw className={isLoading ? "animate-spin" : ""} />
