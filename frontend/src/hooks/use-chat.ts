@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from "react";
 import { WSClient } from "@/lib/ws/ws-client";
-import type { Message } from "@/components/ui/chat-message";
+import type { Message } from "@/components/ui/chat";
 import { uploadFiles } from "@/lib/file-upload";
 import { useChatStore } from "@/stores/chat-store";
 

@@ -1,0 +1,16 @@
+layout {
+    pane split_direction="vertical" {
+        pane {
+            name "backend"
+            command "bun"
+            args "--hot" "src/server/index.ts"
+            cwd "backend"
+        }
+        pane {
+            name "frontend"
+            command "bun"
+            args "run" "dev"
+            cwd "frontend"
+        }
+    }
+}

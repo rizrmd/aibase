@@ -1,6 +1,6 @@
 import { File, FileText, FileImage, FileVideo, FileAudio, FileCode, FileArchive } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { UploadedFileAttachment } from "./chat-message";
+import type { UploadedFileAttachment } from "./chat";
 
 interface FileAttachmentProps {
   file: UploadedFileAttachment;

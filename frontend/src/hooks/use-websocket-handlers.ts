@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
-import type { Message } from "@/components/ui/chat-message";
+import type { Message } from "@/components/ui/chat";
 import { activeTabManager } from "@/lib/ws/active-tab-manager";
 import type { WSClient } from "@/lib/ws/ws-connection-manager";
 

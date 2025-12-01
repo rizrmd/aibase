@@ -17,10 +17,19 @@ interface FileToolDetails {
   error?: string;
 }
 
+interface GenericToolDetails {
+  toolName: string;
+  args?: Record<string, any>;
+  state: "call" | "executing" | "progress" | "result" | "error";
+  result?: any;
+  error?: string;
+}
+
 interface UIStore {
   // Dialog states
   selectedScript: ScriptDetails | null;
   selectedFileTool: FileToolDetails | null;
+  selectedGenericTool: GenericToolDetails | null;
   showInterruptPrompt: boolean;
 
   // Collapsible states
@@ -29,6 +38,7 @@ interface UIStore {
   // Syntax highlighting states
   highlightedCode: string;
   highlightedResult: string;
+  highlightedArgs: string;
 
   // Textarea state
   textAreaHeight: number;
@@ -36,6 +46,7 @@ interface UIStore {
   // Actions for dialogs
   setSelectedScript: (script: ScriptDetails | null) => void;
   setSelectedFileTool: (fileTool: FileToolDetails | null) => void;
+  setSelectedGenericTool: (tool: GenericToolDetails | null) => void;
   setShowInterruptPrompt: (show: boolean) => void;
   closeAllDialogs: () => void;
 
@@ -45,6 +56,7 @@ interface UIStore {
   // Actions for highlighting
   setHighlightedCode: (code: string) => void;
   setHighlightedResult: (result: string) => void;
+  setHighlightedArgs: (args: string) => void;
 
   // Actions for textarea
   setTextAreaHeight: (height: number) => void;
@@ -54,19 +66,23 @@ export const useUIStore = create<UIStore>((set) => ({
   // Initial state
   selectedScript: null,
   selectedFileTool: null,
+  selectedGenericTool: null,
   showInterruptPrompt: false,
   isReasoningOpen: false,
   highlightedCode: "",
   highlightedResult: "",
+  highlightedArgs: "",
   textAreaHeight: 0,
 
   // Dialog actions
   setSelectedScript: (script) => set({ selectedScript: script }),
   setSelectedFileTool: (fileTool) => set({ selectedFileTool: fileTool }),
+  setSelectedGenericTool: (tool) => set({ selectedGenericTool: tool }),
   setShowInterruptPrompt: (show) => set({ showInterruptPrompt: show }),
   closeAllDialogs: () => set({
     selectedScript: null,
     selectedFileTool: null,
+    selectedGenericTool: null,
     showInterruptPrompt: false
   }),
 
@@ -76,6 +92,7 @@ export const useUIStore = create<UIStore>((set) => ({
   // Highlighting actions
   setHighlightedCode: (code) => set({ highlightedCode: code }),
   setHighlightedResult: (result) => set({ highlightedResult: result }),
+  setHighlightedArgs: (args) => set({ highlightedArgs: args }),
 
   // Textarea actions
   setTextAreaHeight: (height) => set({ textAreaHeight: height }),

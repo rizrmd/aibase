@@ -6,6 +6,7 @@ import type {
   ChatCompletionAssistantMessageParam,
 } from "openai/resources/chat/completions";
 import { defaultContext } from "./context";
+import { updateTokenUsage } from "./conversation-info";
 
 /**
  * Type for function tool calls (excludes custom tool calls)
@@ -208,6 +209,8 @@ export class Conversation {
     top_p?: number;
   } = {};
   private currentAbortController: AbortController | null = null;
+  private convId: string = "default";
+  private projectId: string = "A1";
 
   /**
    * Create a new Conversation instance
@@ -230,6 +233,10 @@ export class Conversation {
     this.hooks = options.hooks || {};
     this.maxHistoryLength = options.maxHistoryLength || 0;
 
+    // Set conversation identifiers
+    this.convId = options.convId || "default";
+    this.projectId = options.projectId || "A1";
+
     // Set model parameters
     if (options.temperature !== undefined)
       this.modelParams.temperature = options.temperature;
@@ -239,9 +246,7 @@ export class Conversation {
 
     // Initialize history with system prompt
     // Start with default context and append custom systemPrompt if provided
-    const convId = options.convId || "default";
-    const projectId = options.projectId || "A1";
-    const baseContext = await defaultContext(convId, projectId);
+    const baseContext = await defaultContext(this.convId, this.projectId);
     const systemPrompt = options.systemPrompt
       ? `${baseContext}\n\n${options.systemPrompt}`
       : baseContext;
@@ -482,6 +487,7 @@ export class Conversation {
     let currentToolCalls: FunctionToolCall[] = [];
     let isToolCallResponse = false;
     let assistantMessageIndex = -1; // Track the assistant message index for updates
+    let usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
 
     const stream = await this.client.chat.completions.create(
       {
@@ -489,6 +495,7 @@ export class Conversation {
         messages: this._history,
         tools: this.getOpenAITools(),
         stream: true,
+        stream_options: { include_usage: true },
         ...this.modelParams,
       },
       {
@@ -504,6 +511,11 @@ export class Conversation {
         }
 
         const delta = chunk.choices[0]?.delta;
+
+        // Capture usage information if present
+        if (chunk.usage) {
+          usage = chunk.usage;
+        }
 
         if (delta?.content) {
           fullText += delta.content;
@@ -562,6 +574,20 @@ export class Conversation {
     // Only add to history if not aborted
     if (abortController.signal.aborted) {
       return;
+    }
+
+    // Store token usage if available
+    if (usage) {
+      try {
+        await updateTokenUsage(this.convId, this.projectId, {
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens,
+        });
+      } catch (error) {
+        // Log error but don't fail the conversation
+        console.error("Failed to update token usage:", error);
+      }
     }
 
     // Add assistant's response to history

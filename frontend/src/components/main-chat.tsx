@@ -1,8 +1,7 @@
 "use client";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Chat } from "@/components/ui/chat";
-import type { Message } from "@/components/ui/chat-message";
+import { Chat, type Message } from "@/components/ui/chat";
 import { TodoPanel } from "@/components/todo-panel";
 import { useConvId } from "@/lib/conv-id";
 import { useWSConnection } from "@/lib/ws/ws-connection-manager";

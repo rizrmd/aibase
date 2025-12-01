@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import type { Message } from "@/components/ui/chat-message";
+import type { Message } from "@/components/ui/chat";
 import type { WSClient } from "@/lib/ws/ws-connection-manager";
 import { uploadFilesWithProgress } from "@/lib/file-upload";
 

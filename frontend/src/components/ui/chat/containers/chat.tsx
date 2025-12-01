@@ -5,7 +5,7 @@ import { forwardRef, useCallback, useRef, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
-import { type Message } from "@/components/ui/chat-message";
+import { type Message } from "../messages";
 import { CopyButton } from "@/components/ui/copy-button";
 import { MessageInput } from "@/components/ui/message-input";
 import { MessageList } from "@/components/ui/message-list";

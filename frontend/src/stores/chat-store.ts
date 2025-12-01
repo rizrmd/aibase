@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Message } from "@/components/ui/chat-message";
+import type { Message } from "@/components/ui/chat";
 
 interface ChatStore {
   // Messages and input

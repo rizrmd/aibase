@@ -3,7 +3,7 @@
  * Handles localStorage-based message storage and retrieval
  */
 
-import type { Message } from "@/components/ui/chat-message";
+import type { Message } from "@/components/ui/chat";
 
 export class MessagePersistence {
   private static readonly MESSAGES_KEY = 'chat_messages';
