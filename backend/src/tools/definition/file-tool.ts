@@ -3,6 +3,33 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
+ * Examples for the File tool
+ */
+export const FILE_TOOL_EXAMPLES = `## FILE TOOL - Manage files in conversation
+
+All file paths are relative to the conversation's files directory.
+
+**Available actions:** list, info, delete, rename, uploadUrl
+
+### Examples:
+\`\`\`typescript
+// List all files in current conversation
+await file({ action: 'list' });
+
+// Get file information
+await file({ action: 'info', path: 'document.pdf' });
+
+// Delete a file
+await file({ action: 'delete', path: 'old-file.txt' });
+
+// Rename/move a file
+await file({ action: 'rename', path: 'old-name.txt', newPath: 'new-name.txt' });
+
+// Upload file from URL
+await file({ action: 'uploadUrl', url: 'https://example.com/file.pdf', path: 'downloaded.pdf' });
+\`\`\``;
+
+/**
  * File Tool - Built-in file operations
  * Actions: list, info, delete, rename, uploadUrl
  * All operations are restricted to /data/{proj-id}/{conv-id}/files/ pattern

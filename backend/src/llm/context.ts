@@ -131,16 +131,7 @@ const DEFAULT_TEMPLATE = `# AI Assistant Context
 
 use todo tool to track step/phases/stages/parts etc. add/remove/check/uncheck multiple time at once instead of one-by-one.
 
-## SCRIPT TOOL - Execute code with fetch, tools, and context!
-
-Use for: API calls, batch operations, complex workflows, data transformations.
-
-**CRITICAL: Code executes as async function BODY. Write like this:**
-- ✓ CORRECT: \`return { result: data }\`
-- ✓ CORRECT: \`const x = await fetch(url); return x.json()\`
-- ✗ WRONG: \`export const x = ...\` (NO export/import!)
-
-**Available:** fetch, duckdb({ query, database?, format?, readonly? }), postgresql({ query, connectionUrl, format?, timeout? }), clickhouse({ query, serverUrl, database?, username?, password?, format?, timeout?, params? }), trino({ query, serverUrl, catalog?, schema?, username?, password?, format?, timeout? }), pdfReader({ filePath?, buffer?, password?, maxPages?, debug? }), webSearch({ search_query, count?, location?, content_size?, search_recency_filter?, search_domain_filter? }), progress(msg), file(...), todo(...), memory(...), convId, projectId, console
+{{TOOL_EXAMPLES}}
 
 ## MEMORY TOOL - TWO-LEVEL STRUCTURE:
 
@@ -217,13 +208,55 @@ async function loadContextTemplate(projectId: string): Promise<string> {
 }
 
 /**
+ * Load tool examples from tool definition files
+ */
+async function loadToolExamples(): Promise<string> {
+  try {
+    // Import examples from tool definition files
+    const { SCRIPT_TOOL_EXAMPLES } = await import("../tools/definition/script-tool");
+    const { FILE_TOOL_EXAMPLES } = await import("../tools/definition/file-tool");
+    const { TODO_TOOL_EXAMPLES } = await import("../tools/definition/todo-tool");
+    const { MEMORY_TOOL_EXAMPLES } = await import("../tools/definition/memory-tool");
+
+    // Combine all tool examples in logical order
+    const examples: string[] = [];
+
+    // Script tool examples (most comprehensive)
+    if (SCRIPT_TOOL_EXAMPLES) {
+      examples.push(SCRIPT_TOOL_EXAMPLES);
+    }
+
+    // File tool examples
+    if (FILE_TOOL_EXAMPLES) {
+      examples.push(FILE_TOOL_EXAMPLES);
+    }
+
+    // Todo tool examples
+    if (TODO_TOOL_EXAMPLES) {
+      examples.push(TODO_TOOL_EXAMPLES);
+    }
+
+    // Memory tool examples
+    if (MEMORY_TOOL_EXAMPLES) {
+      examples.push(MEMORY_TOOL_EXAMPLES);
+    }
+
+    // Join all examples with newlines
+    return examples.join("\n\n");
+  } catch (error) {
+    console.error("Failed to load tool examples:", error);
+    return "";
+  }
+}
+
+/**
  * Replace placeholders in template with dynamic content
  */
-function injectDynamicContent(
+async function injectDynamicContent(
   template: string,
   memory: MemoryStore | null,
   todoList: TodoList | null
-): string {
+): Promise<string> {
   let context = template;
 
   // Replace memory placeholder
@@ -241,6 +274,10 @@ function injectDynamicContent(
   } else {
     context = context.replace("{{TODOS}}", "");
   }
+
+  // Replace tool examples placeholder
+  const toolExamples = await loadToolExamples();
+  context = context.replace("{{TOOL_EXAMPLES}}", toolExamples);
 
   return context;
 }
@@ -262,8 +299,8 @@ export const defaultContext = async (
   // const todoList = await loadTodos(convId, projectId);
   const todoList = null;
 
-  // Inject dynamic content into template
-  const context = injectDynamicContent(template, memory, todoList);
+  // Inject dynamic content into template (now async because it loads tool examples)
+  const context = await injectDynamicContent(template, memory, todoList);
 
   return context;
 };

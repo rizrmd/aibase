@@ -22,16 +22,7 @@ const DEFAULT_TEMPLATE = `# AI Assistant Context
 
 use todo tool to track step/phases/stages/parts etc. add/remove/check/uncheck multiple time at once instead of one-by-one.
 
-## SCRIPT TOOL - Execute code with fetch, tools, and context!
-
-Use for: API calls, batch operations, complex workflows, data transformations.
-
-**CRITICAL: Code executes as async function BODY. Write like this:**
-- ✓ CORRECT: \`return { result: data }\`
-- ✓ CORRECT: \`const x = await fetch(url); return x.json()\`
-- ✗ WRONG: \`export const x = ...\` (NO export/import!)
-
-**Available:** fetch, duckdb({ query, database?, format?, readonly? }), postgresql({ query, connectionUrl, format?, timeout? }), clickhouse({ query, serverUrl, database?, username?, password?, format?, timeout?, params? }), trino({ query, serverUrl, catalog?, schema?, username?, password?, format?, timeout? }), pdfReader({ filePath?, buffer?, password?, maxPages?, debug? }), webSearch({ search_query, count?, location?, content_size?, search_recency_filter?, search_domain_filter? }), progress(msg), file(...), todo(...), memory(...), convId, projectId, console
+{{TOOL_EXAMPLES}}
 
 ## MEMORY TOOL - TWO-LEVEL STRUCTURE:
 

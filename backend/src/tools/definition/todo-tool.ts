@@ -3,6 +3,39 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
+ * Examples for the Todo tool
+ */
+export const TODO_TOOL_EXAMPLES = `## TODO TOOL - Track tasks and progress
+
+Todos are stored per conversation and shown in the context automatically.
+
+**Available actions:** list, add, check, uncheck, remove, clear, finish
+
+### Examples:
+\`\`\`typescript
+// Add a single todo
+await todo({ action: 'add', text: 'Review pull request' });
+
+// Add multiple todos at once
+await todo({ action: 'add', texts: ['Write tests', 'Update documentation', 'Fix bug'] });
+
+// Check off completed items (by ID from list)
+await todo({ action: 'check', ids: ['todo-id-1', 'todo-id-2'] });
+
+// Uncheck items
+await todo({ action: 'uncheck', ids: ['todo-id-1'] });
+
+// Remove specific todos
+await todo({ action: 'remove', ids: ['todo-id-1'] });
+
+// Finish - remove completed items with summary
+await todo({ action: 'finish', summary: 'Completed Phase 1 implementation' });
+
+// Clear all todos
+await todo({ action: 'clear' });
+\`\`\``;
+
+/**
  * Todo Tool - Built-in todo list management
  * Actions: list, add, check, uncheck, remove, clear, finish
  * Todos are stored per conversation in /data/{proj-id}/{conv-id}/todos.json

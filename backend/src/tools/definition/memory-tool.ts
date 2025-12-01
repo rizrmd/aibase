@@ -3,6 +3,42 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
+ * Examples for the Memory tool
+ */
+export const MEMORY_TOOL_EXAMPLES = `## MEMORY TOOL - Project-wide persistent storage
+
+Memory has TWO levels: [category] -> key: value
+- First level: CATEGORY (e.g., "database", "settings", "api_keys")
+- Second level: KEY: VALUE pairs within that category
+
+**IMPORTANT:** Memory is ALWAYS visible in your context - you never need to read it!
+
+### Examples:
+\`\`\`typescript
+// Set a value in memory
+await memory({ action: 'set', category: 'database', key: 'postgresql_url', value: 'postgresql://user:pass@localhost:5432/mydb' });
+
+// Set multiple values (one at a time)
+await memory({ action: 'set', category: 'api_keys', key: 'openai', value: 'sk-...' });
+await memory({ action: 'set', category: 'api_keys', key: 'github', value: 'ghp_...' });
+
+// Remove a specific key
+await memory({ action: 'remove', category: 'database', key: 'postgresql_url' });
+
+// Remove entire category
+await memory({ action: 'remove', category: 'api_keys' });
+\`\`\`
+
+### Memory structure example:
+\`\`\`
+[database] ← category
+  postgresql_url: postgresql://user:pass@localhost:5432/mydb ← key: value
+  last_connected: 2024-01-15
+[api_keys] ← category
+  openai: sk-... ← key: value
+\`\`\``;
+
+/**
  * Memory Tool - Project-level persistent key-value storage
  * Memory is always visible in the context - no need to read it!
  * Actions: set, remove
