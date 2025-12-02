@@ -6,19 +6,35 @@ import { join, dirname } from "path";
  */
 async function loadToolExamples(): Promise<string> {
   try {
-    // Import examples from tool definition files
-    const { SCRIPT_TOOL_EXAMPLES } = await import("../tools/definition/script-tool");
-    const { FILE_TOOL_EXAMPLES } = await import("../tools/definition/file-tool");
-    const { TODO_TOOL_EXAMPLES } = await import("../tools/definition/todo-tool");
-    const { MEMORY_TOOL_EXAMPLES } = await import("../tools/definition/memory-tool");
+    // Import context functions from tool definition files
+    const scriptTool = await import("../tools/definition/script-tool");
+    const fileTool = await import("../tools/definition/file-tool");
+    const todoTool = await import("../tools/definition/todo-tool");
+    const memoryTool = await import("../tools/definition/memory-tool");
 
     // Combine all tool examples in logical order
     const examples: string[] = [];
 
-    if (SCRIPT_TOOL_EXAMPLES) examples.push(SCRIPT_TOOL_EXAMPLES);
-    if (FILE_TOOL_EXAMPLES) examples.push(FILE_TOOL_EXAMPLES);
-    if (TODO_TOOL_EXAMPLES) examples.push(TODO_TOOL_EXAMPLES);
-    if (MEMORY_TOOL_EXAMPLES) examples.push(MEMORY_TOOL_EXAMPLES);
+    // Call each context function and collect the results
+    if (scriptTool.context) {
+      const scriptContext = await scriptTool.context();
+      examples.push(scriptContext);
+    }
+
+    if (fileTool.context) {
+      const fileContext = await fileTool.context();
+      examples.push(fileContext);
+    }
+
+    if (todoTool.context) {
+      const todoContext = await todoTool.context();
+      examples.push(todoContext);
+    }
+
+    if (memoryTool.context) {
+      const memoryContext = await memoryTool.context();
+      examples.push(memoryContext);
+    }
 
     return examples.join("\n\n");
   } catch (error) {
@@ -33,9 +49,9 @@ async function loadToolExamples(): Promise<string> {
 async function expandTemplate(template: string): Promise<string> {
   let expanded = template;
 
-  // Replace tool examples placeholder
-  const toolExamples = await loadToolExamples();
-  expanded = expanded.replace("{{TOOL_EXAMPLES}}", toolExamples);
+  // Replace tool context placeholder
+  const toolContext = await loadToolExamples();
+  expanded = expanded.replace("{{TOOL_CONTEXT}}", toolContext);
 
   // Remove other placeholders for UI (they're only used at runtime)
   expanded = expanded.replace("{{MEMORY}}", "");
@@ -63,27 +79,8 @@ function getContextFilePath(projectId: string): string {
  */
 const DEFAULT_TEMPLATE = `# AI Assistant Context
 
-use todo tool to track step/phases/stages/parts etc. add/remove/check/uncheck multiple time at once instead of one-by-one.
+{{TOOL_CONTEXT}}
 
-{{TOOL_EXAMPLES}}
-
-## MEMORY TOOL - TWO-LEVEL STRUCTURE:
-
-Memory has TWO levels: [category] -> key: value
-- First level: CATEGORY (e.g., "database", "settings", "api_keys")
-- Second level: KEY: VALUE pairs within that category
-
-### To use memory tool:
-- **SET:** \`memory({ action: "set", category: "database", key: "postgresql_url", value: "postgresql://..." })\`
-- **REMOVE KEY:** \`memory({ action: "remove", category: "database", key: "postgresql_url" })\`
-- **REMOVE CATEGORY:** \`memory({ action: "remove", category: "database" })\`
-- **READ:** Just look at your context! Memory is ALWAYS appended below - you never need to read it.
-
-Write as async function body - NO import/export, just await and return!
-
-{{MEMORY}}
-
-{{TODOS}}
 `;
 
 /**
