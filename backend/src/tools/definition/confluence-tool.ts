@@ -3,6 +3,13 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
+ * Context for the Confluence tool
+ */
+export const context = async () => {
+  return ``;
+};
+
+/**
  * Confluence Tool - Interact with Confluence Cloud using REST API v2
  *
  * Retrieves authentication credentials from memory:

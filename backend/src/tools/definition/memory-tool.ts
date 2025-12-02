@@ -3,9 +3,10 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
- * Examples for the Memory tool
+ * Context for the Memory tool
  */
-export const MEMORY_TOOL_EXAMPLES = `## MEMORY TOOL - Project-wide persistent storage
+export const context = async () => {
+  return `## MEMORY TOOL - Project-wide persistent storage
 
 Memory has TWO levels: [category] -> key: value
 - First level: CATEGORY (e.g., "database", "settings", "api_keys")
@@ -37,6 +38,7 @@ await memory({ action: 'remove', category: 'api_keys' });
 [api_keys] ← category
   openai: sk-... ← key: value
 \`\`\``;
+};
 
 /**
  * Memory Tool - Project-level persistent key-value storage

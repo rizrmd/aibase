@@ -3,11 +3,14 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
- * Examples for the Todo tool
+ * Context for the Todo tool
  */
-export const TODO_TOOL_EXAMPLES = `## TODO TOOL - Track tasks and progress
+export const context = async () => {
+  return `## TODO TOOL - Track tasks and progress
 
 Todos are stored per conversation and shown in the context automatically.
+Use todo tool to track step/phases/stages/parts etc.
+add/remove/check/uncheck multiple time at once instead of one-by-one.
 
 **Available actions:** list, add, check, uncheck, remove, clear, finish
 
@@ -34,6 +37,7 @@ await todo({ action: 'finish', summary: 'Completed Phase 1 implementation' });
 // Clear all todos
 await todo({ action: 'clear' });
 \`\`\``;
+};
 
 /**
  * Todo Tool - Built-in todo list management

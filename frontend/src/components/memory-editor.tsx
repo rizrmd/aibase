@@ -269,7 +269,7 @@ export function MemoryEditor() {
       )}
 
       {/* Memory List */}
-      <div className="flex-1 space-y-4 overflow-y-auto">
+      <div className="flex flex-wrap items-start flex-1 gap-[15px] overflow-y-auto">
         {isLoading && Object.keys(memory).length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-muted-foreground">Loading memory...</div>
@@ -292,7 +292,7 @@ export function MemoryEditor() {
           </Card>
         ) : (
           Object.entries(filteredMemory).map(([category, entries]) => (
-            <Card key={category}>
+            <Card key={category} className="w-[calc(30%-30px)]">
               <CardContent>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

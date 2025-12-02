@@ -129,27 +129,8 @@ function formatMemoryForContext(memory: MemoryStore): string {
  */
 const DEFAULT_TEMPLATE = `# AI Assistant Context
 
-use todo tool to track step/phases/stages/parts etc. add/remove/check/uncheck multiple time at once instead of one-by-one.
+{{TOOL_CONTEXT}}
 
-{{TOOL_EXAMPLES}}
-
-## MEMORY TOOL - TWO-LEVEL STRUCTURE:
-
-Memory has TWO levels: [category] -> key: value
-- First level: CATEGORY (e.g., "database", "settings", "api_keys")
-- Second level: KEY: VALUE pairs within that category
-
-### To use memory tool:
-- **SET:** \`memory({ action: "set", category: "database", key: "postgresql_url", value: "postgresql://..." })\`
-- **REMOVE KEY:** \`memory({ action: "remove", category: "database", key: "postgresql_url" })\`
-- **REMOVE CATEGORY:** \`memory({ action: "remove", category: "database" })\`
-- **READ:** Just look at your context! Memory is ALWAYS appended below - you never need to read it.
-
-Write as async function body - NO import/export, just await and return!
-
-{{MEMORY}}
-
-{{TODOS}}
 `;
 
 /**
@@ -212,33 +193,33 @@ async function loadContextTemplate(projectId: string): Promise<string> {
  */
 async function loadToolExamples(): Promise<string> {
   try {
-    // Import examples from tool definition files
-    const { SCRIPT_TOOL_EXAMPLES } = await import("../tools/definition/script-tool");
-    const { FILE_TOOL_EXAMPLES } = await import("../tools/definition/file-tool");
-    const { TODO_TOOL_EXAMPLES } = await import("../tools/definition/todo-tool");
-    const { MEMORY_TOOL_EXAMPLES } = await import("../tools/definition/memory-tool");
+    // Import context functions from tool definition files
+    const scriptTool = await import("../tools/definition/script-tool");
+    const fileTool = await import("../tools/definition/file-tool");
+    const todoTool = await import("../tools/definition/todo-tool");
+    const memoryTool = await import("../tools/definition/memory-tool");
 
     // Combine all tool examples in logical order
     const examples: string[] = [];
 
     // Script tool examples (most comprehensive)
-    if (SCRIPT_TOOL_EXAMPLES) {
-      examples.push(SCRIPT_TOOL_EXAMPLES);
+    if (scriptTool.context) {
+      examples.push(await scriptTool.context());
     }
 
     // File tool examples
-    if (FILE_TOOL_EXAMPLES) {
-      examples.push(FILE_TOOL_EXAMPLES);
+    if (fileTool.context) {
+      examples.push(await fileTool.context());
     }
 
     // Todo tool examples
-    if (TODO_TOOL_EXAMPLES) {
-      examples.push(TODO_TOOL_EXAMPLES);
+    if (todoTool.context) {
+      examples.push(await todoTool.context());
     }
 
     // Memory tool examples
-    if (MEMORY_TOOL_EXAMPLES) {
-      examples.push(MEMORY_TOOL_EXAMPLES);
+    if (memoryTool.context) {
+      examples.push(await memoryTool.context());
     }
 
     // Join all examples with newlines
@@ -259,25 +240,21 @@ async function injectDynamicContent(
 ): Promise<string> {
   let context = template;
 
-  // Replace memory placeholder
+  // Replace tool context placeholder
+  const toolContext = await loadToolExamples();
+  context = context.replace("{{TOOL_CONTEXT}}", toolContext);
+
+  // Append memory if it exists
   if (memory && Object.keys(memory).length > 0) {
     const memoryContent = formatMemoryForContext(memory);
-    context = context.replace("{{MEMORY}}", memoryContent);
-  } else {
-    context = context.replace("{{MEMORY}}", "");
+    context += memoryContent;
   }
 
-  // Replace todos placeholder
+  // Append todos if they exist
   if (todoList && todoList.items.length > 0) {
     const todosContent = formatTodosForContext(todoList);
-    context = context.replace("{{TODOS}}", todosContent);
-  } else {
-    context = context.replace("{{TODOS}}", "");
+    context += todosContent;
   }
-
-  // Replace tool examples placeholder
-  const toolExamples = await loadToolExamples();
-  context = context.replace("{{TOOL_EXAMPLES}}", toolExamples);
 
   return context;
 }

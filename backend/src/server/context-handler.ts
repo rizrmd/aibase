@@ -147,13 +147,10 @@ export async function handleGetContext(req: Request): Promise<Response> {
  */
 export async function handleGetDefaultContext(req: Request): Promise<Response> {
   try {
-    // Expand template placeholders so users see actual content, not {{PLACEHOLDERS}}
-    const expandedTemplate = await expandTemplate(DEFAULT_TEMPLATE);
-
     return Response.json({
       success: true,
       data: {
-        content: expandedTemplate,
+        content: DEFAULT_TEMPLATE,
         isDefault: true,
       },
     });
@@ -175,7 +172,7 @@ export async function handleGetDefaultContext(req: Request): Promise<Response> {
 export async function handleUpdateContext(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { content, projectId = "A1" } = body;
+    const { content, projectId = "A1" } = body as any;
 
     if (typeof content !== "string") {
       return Response.json(

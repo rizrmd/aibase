@@ -2,9 +2,10 @@ import { Tool } from "../../llm/conversation";
 import { ScriptRuntime } from "../runtime/script-runtime";
 
 /**
- * Examples for the Script tool
+ * Context for the Script tool
  */
-export const SCRIPT_TOOL_EXAMPLES = `## SCRIPT TOOL - Execute code with fetch, tools, and context!
+export const context = async () => {
+  return `## SCRIPT TOOL - Execute code with fetch, tools, and context!
 
 Use for: API calls, batch operations, complex workflows, data transformations.
 
@@ -194,6 +195,7 @@ Use for: API calls, batch operations, complex workflows, data transformations.
 **IMPORTANT:** When using pdfReader with files from \`file({ action: 'list' })\`, use ONLY the filename (pdf.name), NOT the full path (pdf.path)!
 
 **Available:** fetch, duckdb({ query, database?, format?, readonly? }), postgresql({ query, connectionUrl, format?, timeout? }), clickhouse({ query, serverUrl, database?, username?, password?, format?, timeout?, params? }), trino({ query, serverUrl, catalog?, schema?, username?, password?, format?, timeout? }), pdfReader({ filePath?, buffer?, password?, maxPages?, debug? }), webSearch({ search_query, count?, location?, content_size?, search_recency_filter?, search_domain_filter? }), progress(msg), file(...), todo(...), memory(...), convId, projectId, console`;
+};
 
 /**
  * Script Tool - Execute TypeScript code with programmatic access to other tools

@@ -124,6 +124,24 @@ export function ContextEditor() {
 
   const hasChanges = content !== originalContent;
 
+  // Add keyboard shortcut for Ctrl/Cmd+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+S (Windows/Linux) or Cmd+S (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault(); // Prevent browser's default save dialog
+
+        // Only save if there are changes and not already saving
+        if (hasChanges && !isSaving && !isLoading) {
+          handleSave();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasChanges, isSaving, isLoading]); // Re-attach listener when these change
+
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-4">

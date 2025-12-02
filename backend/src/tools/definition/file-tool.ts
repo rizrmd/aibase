@@ -3,9 +3,10 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
- * Examples for the File tool
+ * Context for the File tool
  */
-export const FILE_TOOL_EXAMPLES = `## FILE TOOL - Manage files in conversation
+export const context = async () => {
+  return `## FILE TOOL - Manage files in conversation
 
 All file paths are relative to the conversation's files directory.
 
@@ -28,6 +29,7 @@ await file({ action: 'rename', path: 'old-name.txt', newPath: 'new-name.txt' });
 // Upload file from URL
 await file({ action: 'uploadUrl', url: 'https://example.com/file.pdf', path: 'downloaded.pdf' });
 \`\`\``;
+};
 
 /**
  * File Tool - Built-in file operations

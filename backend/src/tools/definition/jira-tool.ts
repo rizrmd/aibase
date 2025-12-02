@@ -3,6 +3,13 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
+ * Context for the Jira tool
+ */
+export const context = async () => {
+  return ``;
+};
+
+/**
  * Jira Tool - Interact with Jira Cloud using REST API v3
  *
  * Retrieves authentication credentials from memory:
