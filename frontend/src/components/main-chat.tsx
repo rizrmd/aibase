@@ -12,6 +12,7 @@ import { useFileStore } from "@/stores/file-store";
 import { AlertCircle, Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { PageActionButton, PageActionGroup } from "@/components/ui/page-action-button";
 import { useWebSocketHandlers } from "@/hooks/use-websocket-handlers";
 import { useMessageSubmission } from "@/hooks/use-message-submission";
 import { useShallow } from "zustand/react/shallow";
@@ -163,29 +164,21 @@ export function MainChat({
     []
   );
 
-  const handleNewConversationWithConfirm = useCallback(() => {
-    const confirmed = window.confirm(
-      "Are you sure you want to start a new conversation? This will clear the current chat and todos."
-    );
-    if (confirmed) {
-      handleNewConversation();
-    }
-  }, [handleNewConversation]);
-
   return (
     <div className={`flex h-screen ${className} relative`}>
       {/* New Conversation Button - Absolute positioned top right (only show if messages exist) */}
       {messages.length > 0 && (
-        <Button
-          onClick={handleNewConversationWithConfirm}
-          size="sm"
-          variant="outline"
-          className="absolute top-4 right-4 z-10 shadow-md"
-          title="Start a new conversation"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New
-        </Button>
+        <PageActionGroup>
+          <PageActionButton
+            icon={Plus}
+            label="New"
+            onClick={handleNewConversation}
+            variant="outline"
+            size="sm"
+            confirmMessage="Are you sure you want to start a new conversation? This will clear the current chat and todos."
+            title="Start a new conversation"
+          />
+        </PageActionGroup>
       )}
 
       {/* Conversation ID - Bottom left corner */}

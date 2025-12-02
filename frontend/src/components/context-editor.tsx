@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Save, Zap } from "lucide-react";
+import {
+  PageActionButton,
+  PageActionGroup,
+} from "@/components/ui/page-action-button";
+import { Save, Zap, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
@@ -88,21 +92,11 @@ export function ContextEditor() {
   };
 
   const handleReset = () => {
-    if (confirm("Discard all unsaved changes?")) {
-      setContent(originalContent);
-      toast.info("Changes discarded");
-    }
+    setContent(originalContent);
+    toast.info("Changes discarded");
   };
 
   const handleResetToDefault = async () => {
-    if (
-      !confirm(
-        "Reset to default template? This will discard all current content."
-      )
-    ) {
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -161,16 +155,19 @@ export function ContextEditor() {
             </h3>
             <p className="text-sm text-muted-foreground mt-2">{error}</p>
           </div>
-          <Button onClick={loadContext} variant="outline">
-            Retry
-          </Button>
+          <PageActionButton
+            icon={RefreshCw}
+            label="Retry"
+            onClick={loadContext}
+            variant="outline"
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
+    <div className="flex h-full flex-col gap-3 px-4 pt-14">
       {/* Header */}
       <div className="flex items-center justify-end gap-4 shrink-0">
         {hasChanges && (
@@ -178,35 +175,38 @@ export function ContextEditor() {
             You have unsaved changes
           </span>
         )}
-        <div className="flex gap-2">
+        <PageActionGroup>
           {hasChanges && (
-            <Button
+            <PageActionButton
+              icon={RefreshCw}
+              label="Discard Changes"
               onClick={handleReset}
               variant="outline"
               size="sm"
               disabled={isLoading}
-            >
-              Discard Changes
-            </Button>
+              confirmMessage="Discard all unsaved changes?"
+            />
           )}
-          <Button
+          <PageActionButton
+            icon={Zap}
+            label="Reset"
             onClick={handleResetToDefault}
             variant="outline"
             size="sm"
             disabled={isLoading}
-          >
-            <Zap className="mr-1" />
-            Reset
-          </Button>
-          <Button
+            isLoading={isLoading}
+            confirmMessage="Reset to default template? This will discard all current content."
+          />
+          <PageActionButton
+            icon={Save}
+            label="Save Changes"
             onClick={handleSave}
             size="sm"
-            disabled={isSaving || !hasChanges || isLoading}
-          >
-            <Save />
-            {isSaving ? "Saving..." : "Save Changes"}
-          </Button>
-        </div>
+            disabled={!hasChanges || isLoading}
+            isLoading={isSaving}
+            loadingText="Saving..."
+          />
+        </PageActionGroup>
       </div>
 
       {/* Editor */}

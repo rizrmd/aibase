@@ -2,6 +2,10 @@ import { useState } from "react";
 import { useMemory } from "@/hooks/use-memory";
 import { Button } from "@/components/ui/button";
 import {
+  PageActionButton,
+  PageActionGroup,
+} from "@/components/ui/page-action-button";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -161,10 +165,12 @@ export function MemoryEditor() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={refresh} variant="outline">
-              <RefreshCw className="mr-2" />
-              Retry
-            </Button>
+            <PageActionButton
+              icon={RefreshCw}
+              label="Retry"
+              onClick={refresh}
+              variant="outline"
+            />
           </CardContent>
         </Card>
       </div>
@@ -172,21 +178,23 @@ export function MemoryEditor() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-2">
+    <div className="flex h-full flex-col gap-4 px-4 pt-14 mb-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div></div>
-        <div className="flex gap-2">
-          <Button onClick={refresh} variant="outline" disabled={isLoading}>
-            <RefreshCw className={isLoading ? "animate-spin" : ""} />
-            Refresh
-          </Button>
-          <Button onClick={handleAddNew}>
-            <Plus />
-            Add Entry
-          </Button>
-        </div>
-      </div>
+      <PageActionGroup>
+        <PageActionButton
+          icon={RefreshCw}
+          label="Refresh"
+          onClick={refresh}
+          variant="outline"
+          isLoading={isLoading}
+          spinIcon={true}
+        />
+        <PageActionButton
+          icon={Plus}
+          label="Add Entry"
+          onClick={handleAddNew}
+        />
+      </PageActionGroup>
 
       {/* Search */}
       <div className="flex gap-2">
@@ -283,10 +291,11 @@ export function MemoryEditor() {
                   : "No memory entries yet"}
               </p>
               {!searchQuery && (
-                <Button onClick={handleAddNew}>
-                  <Plus />
-                  Add First Entry
-                </Button>
+                <PageActionButton
+                  icon={Plus}
+                  label="Add First Entry"
+                  onClick={handleAddNew}
+                />
               )}
             </CardContent>
           </Card>

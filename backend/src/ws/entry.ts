@@ -9,6 +9,7 @@ import type {
   ControlMessage,
   UserMessageData,
 } from "./types";
+import type { ChatCompletionAssistantMessageParam } from "openai/resources/chat/completions";
 import { Conversation, Tool } from "../llm/conversation";
 import { getBuiltinTools } from "../tools";
 import { WSEventEmitter } from "./events";
@@ -17,17 +18,16 @@ import { detectAndStorePostgreSQLUrl } from "../llm/postgresql-detector";
 import * as fs from "fs/promises";
 import * as path from "path";
 
+// Extended message type with custom properties for persistence
+interface ExtendedAssistantMessage extends ChatCompletionAssistantMessageParam {
+  id?: string;
+  completionTime?: number;
+  aborted?: boolean;
+}
+
 // Use Bun's built-in WebSocket type for compatibility
 // This matches Bun's ServerWebSocket interface
 type ServerWebSocket = any; // Bun's ServerWebSocket type
-
-// WebSocket ready states
-const WebSocketReadyState = {
-  CONNECTING: 0,
-  OPEN: 1,
-  CLOSING: 2,
-  CLOSED: 3,
-} as const;
 
 // Streaming chunk accumulator for broadcasting to new connections
 interface StreamingState {
@@ -282,7 +282,7 @@ export class WSServer extends WSEventEmitter {
    * Only sends currently active (incomplete) streams
    * Note: Completed message history is sent via get_history control message
    */
-  private sendAccumulatedChunks(ws: ServerWebSocket, convId: string): void {
+  private async sendAccumulatedChunks(ws: ServerWebSocket, convId: string): Promise<void> {
     const activeStreams = this.streamingManager.getActiveStreamsForConv(convId);
 
     console.log(
@@ -307,6 +307,35 @@ export class WSServer extends WSEventEmitter {
             timestamp: stream.lastChunkTime,
             convId: stream.convId,
             isAccumulated: true,
+          },
+        });
+      }
+    }
+
+    // If there are no active streams but history has an incomplete message,
+    // send a completion event to close it out on the frontend
+    if (activeStreams.length === 0) {
+      const history = await this.messagePersistence.getClientHistory(convId);
+      const lastMessage = history[history.length - 1] as ExtendedAssistantMessage | undefined;
+
+      if (lastMessage &&
+          lastMessage.role === "assistant" &&
+          !lastMessage.completionTime &&
+          !lastMessage.aborted &&
+          lastMessage.content) {
+        console.log(
+          `sendAccumulatedChunks: Found incomplete message in history without active stream, sending completion for ${lastMessage.id}`
+        );
+        this.sendToWebSocket(ws, {
+          type: "llm_complete",
+          id: lastMessage.id || this.generateMessageId(),
+          data: {
+            fullText: lastMessage.content,
+            completionTime: 0,
+          },
+          metadata: {
+            timestamp: Date.now(),
+            convId,
           },
         });
       }
@@ -402,7 +431,7 @@ export class WSServer extends WSEventEmitter {
     this.startHeartbeat(ws);
 
     // Send accumulated chunks from active streams for this conversation
-    this.sendAccumulatedChunks(ws, convId);
+    await this.sendAccumulatedChunks(ws, convId);
 
     // Send welcome message
     this.sendToWebSocket(ws, {
@@ -516,9 +545,9 @@ export class WSServer extends WSEventEmitter {
   }
 
   private async processUserMessageAsync(
-    ws: ServerWebSocket,
+    _ws: ServerWebSocket,
     connectionInfo: ConnectionInfo,
-    originalMessage: WSMessage,
+    _originalMessage: WSMessage,
     userData: UserMessageData
   ): Promise<void> {
     const conversation = connectionInfo.conversation;
@@ -904,7 +933,7 @@ export class WSServer extends WSEventEmitter {
           console.log(
             `Backend: Checking for active streams to send accumulated chunks`
           );
-          this.sendAccumulatedChunks(ws, connectionInfo.convId);
+          await this.sendAccumulatedChunks(ws, connectionInfo.convId);
 
           this.sendToWebSocket(ws, {
             type: "control_response",
