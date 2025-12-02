@@ -45,6 +45,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const formattedTime = createdAt?.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 
   // If this is a thinking indicator, show animated thinking message

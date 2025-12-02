@@ -87,21 +87,26 @@ export function MainChat({
   // Create a stable component reference for tab management
   const componentRef = useRef({});
 
-  // Track thinking indicator start time
+  // Track thinking indicator start time (server sends this timestamp)
   const thinkingStartTimeRef = useRef<number | null>(null);
 
-  // Update thinking indicator seconds every second
+  // Update thinking indicator seconds every second based on server startTime
   useEffect(() => {
     // Only set interval if thinking indicator exists
     const hasThinking = messages.some((m) => m.isThinking);
 
-    if (!hasThinking || thinkingStartTimeRef.current === null) {
+    if (!hasThinking) {
       return;
     }
 
     const intervalId = setInterval(() => {
+      // Check if we have startTime from server (may arrive after first render)
+      if (thinkingStartTimeRef.current === null) {
+        return;
+      }
+
       const elapsedSeconds = Math.floor(
-        (Date.now() - thinkingStartTimeRef.current!) / 1000
+        (Date.now() - thinkingStartTimeRef.current) / 1000
       );
 
       setMessages((prev) => {
@@ -118,7 +123,7 @@ export function MainChat({
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [messages.some((m) => m.isThinking), thinkingStartTimeRef.current]);
+  }, [messages.some((m) => m.isThinking), setMessages]);
 
   // Set up WebSocket event handlers
   useWebSocketHandlers({
@@ -141,6 +146,7 @@ export function MainChat({
   const { handleSubmit, abort, append, handleNewConversation } =
     useMessageSubmission({
       wsClient,
+      projectId: currentProject?.id,
       input,
       setInput,
       setMessages,

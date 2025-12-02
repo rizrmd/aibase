@@ -70,14 +70,21 @@ export function useWebSocketHandlers({
       messageId?: string;
       sequence?: number;
       isAccumulated?: boolean;
-      elapsedTime?: number;
+      startTime?: number;
     }) => {
       // Only active tab processes chunks
       if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
       console.log("handleLLMChunk called with:", data);
 
-      // Don't process null/undefined chunks, but DO process whitespace chunks (they may be important formatting)
-      if (!data.chunk) {
+      // Store start time from server in ref for interval calculation
+      if (data.startTime && thinkingStartTimeRef.current === null) {
+        thinkingStartTimeRef.current = data.startTime;
+        console.log("[ThinkingTime] Stored startTime from server:", data.startTime);
+      }
+
+      // Don't process null/undefined chunks, but DO process empty string and whitespace chunks
+      // Empty accumulated chunks are sent to provide startTime for thinking indicator
+      if (data.chunk === null || data.chunk === undefined) {
         console.log("Skipping null/undefined chunk");
         return;
       }
@@ -111,13 +118,27 @@ export function useWebSocketHandlers({
       flushSync(() => {
         setMessages((prevMessages) => {
           // Separate thinking indicator from other messages
-          const thinkingMsg = prevMessages.find((m) => m.isThinking);
+          let thinkingMsg = prevMessages.find((m) => m.isThinking);
           const otherMessages = prevMessages.filter((m) => !m.isThinking);
 
-          console.log(`[Chunk] Found thinking indicator: ${!!thinkingMsg}`);
-          console.log(
-            `[State] Other messages count: ${otherMessages.length}, isAccumulated: ${data.isAccumulated}`
-          );
+          // If we don't have a thinking indicator yet, create one
+          // This happens after page refresh when streaming is still active
+          if (!thinkingMsg) {
+            console.log("[Chunk] Creating thinking indicator (no existing one found)");
+            thinkingMsg = {
+              id: `thinking_${Date.now()}`,
+              role: "assistant",
+              content: "Thinking...",
+              createdAt: new Date(),
+              isThinking: true,
+            };
+          }
+
+          console.log(`[Chunk] Found/Created thinking indicator: ${!!thinkingMsg}`);
+          if (thinkingMsg) {
+            console.log(`[Chunk] Thinking message:`, thinkingMsg);
+          }
+          console.log(`[Chunk] Total prevMessages: ${prevMessages.length}, otherMessages: ${otherMessages.length}, isAccumulated: ${data.isAccumulated}`);
 
           const prev = otherMessages;
 
@@ -178,7 +199,8 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk-Accumulated] Returning ${updatedMessages.length} messages`
               );
-              return updatedMessages;
+              // Add thinking indicator back (setInterval will update the time)
+              return thinkingMsg ? [...updatedMessages, thinkingMsg] : updatedMessages;
             } else {
               // Create new message with accumulated content
               console.log(
@@ -206,6 +228,7 @@ export function useWebSocketHandlers({
                 } messages (added new)`
               );
               const resultArray = [...prev, newMessage];
+              // Add thinking indicator back (setInterval will update the time)
               return thinkingMsg ? [...resultArray, thinkingMsg] : resultArray;
             }
           } else {
@@ -269,7 +292,10 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk] Returning new array with ${newArray.length} messages`
               );
-              return thinkingMsg ? [...newArray, thinkingMsg] : newArray;
+              // Add thinking indicator back (setInterval will update the time)
+              const finalArray = thinkingMsg ? [...newArray, thinkingMsg] : newArray;
+              console.log(`[Chunk] Final array has ${finalArray.length} messages (with thinking: ${!!thinkingMsg})`);
+              return finalArray;
             } else {
               // Append to existing message
               const existingMessage = prev[existingIndex];
@@ -360,10 +386,8 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk] Returning updated array with ${updatedArray.length} messages`
               );
-              // Add thinking indicator back at the end if it exists
-              return thinkingMsg
-                ? [...updatedArray, thinkingMsg]
-                : updatedArray;
+              // Add thinking indicator back (setInterval will update the time)
+              return thinkingMsg ? [...updatedArray, thinkingMsg] : updatedArray;
             }
           }
         });
@@ -513,8 +537,9 @@ export function useWebSocketHandlers({
       // Status update
     };
 
-    const handleHistoryResponse = (data: { messages?: any[] }) => {
+    const handleHistoryResponse = (data: { messages?: any[]; hasActiveStream?: boolean }) => {
       console.log("handleHistoryResponse called with:", data);
+      console.log("[History] hasActiveStream from backend:", data.hasActiveStream);
       if (data.messages && Array.isArray(data.messages)) {
         console.log("Converting messages:", data.messages);
 
@@ -770,19 +795,28 @@ export function useWebSocketHandlers({
           !lastMessage.completionTime &&
           !lastMessage.aborted;
 
+        // Backend tells us if there's an active stream (more reliable than checking last message)
+        const shouldShowThinking = data.hasActiveStream || isLastMessageIncomplete;
+
         console.log("[History] Last message incomplete?", isLastMessageIncomplete, lastMessage);
+        console.log("[History] shouldShowThinking?", shouldShowThinking, "(hasActiveStream:", data.hasActiveStream, "isLastMessageIncomplete:", isLastMessageIncomplete, ")");
 
         // IMPORTANT: Merge with current state instead of replacing it
         // This prevents history from overwriting streamed content
         setMessages((prev) => {
+          // Check if there's an existing thinking indicator
+          const existingThinkingIndicator = prev.find((m) => m.isThinking);
+          console.log("[History] Merging - prev.length:", prev.length, "existingThinkingIndicator:", !!existingThinkingIndicator);
+          console.log("[History] shouldShowThinking:", shouldShowThinking);
+
           // If we have no current messages, just use server messages
           if (prev.length === 0) {
             console.log(
               "[History] No existing messages, using server messages"
             );
 
-            // Add thinking indicator if last message is incomplete
-            if (isLastMessageIncomplete) {
+            // Add thinking indicator if streaming is active
+            if (shouldShowThinking) {
               console.log("[History] Adding thinking indicator for incomplete message");
               const thinkingMessage: Message = {
                 id: `thinking_${Date.now()}`,
@@ -806,6 +840,12 @@ export function useWebSocketHandlers({
           // For each existing message, check if it has MORE content than the server version
           // This handles the case where streaming accumulated more content than what's in history
           prev.forEach((existingMsg) => {
+            // Skip thinking indicators - we'll handle them separately
+            if (existingMsg.isThinking) {
+              console.log("[History] Preserving thinking indicator from existing messages");
+              return;
+            }
+
             const serverMsgIndex = merged.findIndex(
               (m) => m.id === existingMsg.id
             );
@@ -832,9 +872,12 @@ export function useWebSocketHandlers({
             }
           });
 
-          // Add thinking indicator if last message is incomplete
-          if (isLastMessageIncomplete) {
-            console.log("[History] Adding thinking indicator for incomplete message after merge");
+          // Add thinking indicator if:
+          // 1. Backend says there's an active stream, OR
+          // 2. Last message is incomplete (still streaming), OR
+          // 3. We had a thinking indicator before history loaded (chunks arrived before history)
+          if (shouldShowThinking || existingThinkingIndicator) {
+            console.log("[History] Adding thinking indicator for incomplete message after merge (shouldShowThinking:", shouldShowThinking, "existing:", !!existingThinkingIndicator, ")");
             const thinkingMessage: Message = {
               id: `thinking_${Date.now()}`,
               role: "assistant",
@@ -842,20 +885,28 @@ export function useWebSocketHandlers({
               createdAt: new Date(),
               isThinking: true,
             };
-            return [...merged, thinkingMessage];
+            const finalMessages = [...merged, thinkingMessage];
+            console.log("[History] Returning", finalMessages.length, "messages WITH thinking indicator");
+            return finalMessages;
           }
 
+          console.log("[History] Returning", merged.length, "messages WITHOUT thinking indicator");
           return merged;
         });
 
-        // Set loading state if last message is incomplete
-        if (isLastMessageIncomplete) {
-          console.log("[History] Setting loading state to true for incomplete message");
+        // Set loading state if streaming is active
+        if (shouldShowThinking) {
+          console.log("[History] Setting loading state to true for active stream");
           setIsLoading(true);
-          thinkingStartTimeRef.current = Date.now();
-          // Set the current message ID ref so new chunks can be appended
-          currentMessageIdRef.current = lastMessage.id;
-          console.log("[History] Set currentMessageIdRef to:", lastMessage.id);
+          // Don't set thinkingStartTimeRef here - wait for the next chunk with startTime from server
+          thinkingStartTimeRef.current = null;
+          // Set the current message ID ref so new chunks can be appended (if we have an assistant message)
+          if (lastMessage && lastMessage.role === "assistant") {
+            currentMessageIdRef.current = lastMessage.id;
+            console.log("[History] Set currentMessageIdRef to:", lastMessage.id);
+          } else {
+            console.log("[History] No assistant message to set as current (will be set when first chunk arrives)");
+          }
         }
       } else {
         console.log("No messages to process or messages is not an array");
@@ -867,7 +918,11 @@ export function useWebSocketHandlers({
       if (data.status === "history" || data.type === "history_response") {
         console.log("Processing history data:", data.history);
         console.log("Processing todos data:", data.todos);
-        handleHistoryResponse({ messages: data.history || [] });
+        console.log("Processing hasActiveStream:", data.hasActiveStream);
+        handleHistoryResponse({
+          messages: data.history || [],
+          hasActiveStream: data.hasActiveStream
+        });
 
         // Update todos state if provided
         if (data.todos) {

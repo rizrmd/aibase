@@ -38,7 +38,7 @@ export class MessagePersistence {
    * Get message history for a conversation
    * Loads from disk if not in memory
    */
-  async getClientHistory(convId: string): Promise<ChatCompletionMessageParam[]> {
+  async getClientHistory(convId: string, projectId: string): Promise<ChatCompletionMessageParam[]> {
     const history = this.convHistories[convId];
     if (history) {
       return [...history.messages]; // Return a copy to prevent direct modification
@@ -46,7 +46,7 @@ export class MessagePersistence {
 
     // Try loading from disk
     try {
-      const diskHistory = await this.chatHistoryStorage.loadChatHistory(convId);
+      const diskHistory = await this.chatHistoryStorage.loadChatHistory(convId, projectId);
       if (diskHistory.length > 0) {
         // Store in memory for faster access
         this.convHistories[convId] = {

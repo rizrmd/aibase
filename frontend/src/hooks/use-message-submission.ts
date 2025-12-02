@@ -5,6 +5,7 @@ import { uploadFilesWithProgress } from "@/lib/file-upload";
 
 interface UseMessageSubmissionProps {
   wsClient: WSClient | null;
+  projectId: string | undefined;
   input: string;
   setInput: (input: string) => void;
   setMessages: (updater: (prev: Message[]) => Message[]) => void;
@@ -23,6 +24,7 @@ interface UseMessageSubmissionProps {
 
 export function useMessageSubmission({
   wsClient,
+  projectId,
   input,
   setInput,
   setMessages,
@@ -127,7 +129,12 @@ export function useMessageSubmission({
           try {
             const filesArray = Array.from(options.experimental_attachments);
 
+            if (!projectId) {
+              throw new Error("Project ID is required for file uploads");
+            }
+
             uploadedFiles = await uploadFilesWithProgress(filesArray, {
+              projectId,
               onProgress: (progress) => {
                 console.log("[Upload Progress]", progress.percentage + "%");
                 setUploadProgress(progress.percentage);

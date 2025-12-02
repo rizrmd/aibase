@@ -356,7 +356,7 @@ export class WSClient extends WSEventEmitter {
           messageId: message.id,
           sequence: message.metadata?.sequence,
           isAccumulated: message.data?.isAccumulated || message.metadata?.isAccumulated || false,
-          elapsedTime: message.data?.elapsedTime,
+          startTime: message.data?.startTime,
         });
         break;
 

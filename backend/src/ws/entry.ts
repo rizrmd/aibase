@@ -282,7 +282,7 @@ export class WSServer extends WSEventEmitter {
    * Only sends currently active (incomplete) streams
    * Note: Completed message history is sent via get_history control message
    */
-  private async sendAccumulatedChunks(ws: ServerWebSocket, convId: string): Promise<void> {
+  private async sendAccumulatedChunks(ws: ServerWebSocket, convId: string, projectId: string): Promise<void> {
     const activeStreams = this.streamingManager.getActiveStreamsForConv(convId);
 
     console.log(
@@ -290,32 +290,32 @@ export class WSServer extends WSEventEmitter {
     );
 
     for (const stream of activeStreams) {
-      if (stream.fullResponse.length > 0) {
-        // Send the current accumulated response as a single chunk
-        console.log(
-          `Sending accumulated active stream: ${stream.messageId}, accumulated length: ${stream.fullResponse.length}`
-        );
-        this.sendToWebSocket(ws, {
-          type: "llm_chunk",
-          id: stream.messageId,
-          data: {
-            chunk: stream.fullResponse,
-            isComplete: false,
-            isAccumulated: true,
-          },
-          metadata: {
-            timestamp: stream.lastChunkTime,
-            convId: stream.convId,
-            isAccumulated: true,
-          },
-        });
-      }
+      // Always send accumulated chunks (or at least startTime) if there's an active stream
+      // Even if fullResponse is empty, client needs startTime to show "Thinking... 0s"
+      console.log(
+        `Sending accumulated active stream: ${stream.messageId}, accumulated length: ${stream.fullResponse.length}`
+      );
+      this.sendToWebSocket(ws, {
+        type: "llm_chunk",
+        id: stream.messageId,
+        data: {
+          chunk: stream.fullResponse, // May be empty string if stream just started
+          isComplete: false,
+          isAccumulated: true,
+          startTime: stream.startTime, // Include startTime for client interval calculation
+        },
+        metadata: {
+          timestamp: stream.lastChunkTime,
+          convId: stream.convId,
+          isAccumulated: true,
+        },
+      });
     }
 
     // If there are no active streams but history has an incomplete message,
     // send a completion event to close it out on the frontend
     if (activeStreams.length === 0) {
-      const history = await this.messagePersistence.getClientHistory(convId);
+      const history = await this.messagePersistence.getClientHistory(convId, projectId);
       const lastMessage = history[history.length - 1] as ExtendedAssistantMessage | undefined;
 
       if (lastMessage &&
@@ -414,7 +414,7 @@ export class WSServer extends WSEventEmitter {
 
     // Create conversation for this session with existing history
     // Load from disk if available
-    const existingHistory = await this.messagePersistence.getClientHistory(convId);
+    const existingHistory = await this.messagePersistence.getClientHistory(convId, projectId);
     const conversation = await this.createConversation(existingHistory, convId);
     connectionInfo.conversation = conversation;
 
@@ -431,7 +431,7 @@ export class WSServer extends WSEventEmitter {
     this.startHeartbeat(ws);
 
     // Send accumulated chunks from active streams for this conversation
-    await this.sendAccumulatedChunks(ws, convId);
+    await this.sendAccumulatedChunks(ws, convId, projectId);
 
     // Send welcome message
     this.sendToWebSocket(ws, {
@@ -596,14 +596,14 @@ export class WSServer extends WSEventEmitter {
           chunk
         );
 
-        // Create chunk message with elapsed time
+        // Create chunk message with start time
         const chunkMessage = {
           type: "llm_chunk" as const,
           id: assistantMsgId,
           data: {
             chunk,
             isComplete: false,
-            elapsedTime: elapsedSeconds,
+            startTime: startTime, // Send the original start time
           },
           metadata: {
             timestamp: Date.now(),
@@ -705,7 +705,8 @@ export class WSServer extends WSEventEmitter {
 
       // Verify it was saved
       const savedHistory = await this.messagePersistence.getClientHistory(
-        connectionInfo.convId
+        connectionInfo.convId,
+        connectionInfo.projectId
       );
       console.log(
         `[Backend Complete] Verification: Saved history has ${savedHistory.length} messages`
@@ -886,7 +887,8 @@ export class WSServer extends WSEventEmitter {
             `Backend: Getting history for convId: ${connectionInfo.convId}`
           );
           const history = await this.messagePersistence.getClientHistory(
-            connectionInfo.convId
+            connectionInfo.convId,
+            connectionInfo.projectId
           );
 
           // Filter out system messages - they should never be sent to client
@@ -933,7 +935,12 @@ export class WSServer extends WSEventEmitter {
           console.log(
             `Backend: Checking for active streams to send accumulated chunks`
           );
-          await this.sendAccumulatedChunks(ws, connectionInfo.convId);
+          await this.sendAccumulatedChunks(ws, connectionInfo.convId, connectionInfo.projectId);
+
+          // Check if there are active streams for this conversation
+          const activeStreams = this.streamingManager.getActiveStreamsForConv(connectionInfo.convId);
+          const hasActiveStream = activeStreams.length > 0;
+          console.log(`Backend: hasActiveStream for ${connectionInfo.convId}: ${hasActiveStream} (${activeStreams.length} streams)`);
 
           this.sendToWebSocket(ws, {
             type: "control_response",
@@ -942,6 +949,7 @@ export class WSServer extends WSEventEmitter {
               status: "history",
               history: clientHistory,
               todos: todos,
+              hasActiveStream: hasActiveStream, // Tell frontend if streaming is active
               type: control.type,
             },
             metadata: { timestamp: Date.now() },
