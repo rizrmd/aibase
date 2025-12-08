@@ -1,22 +1,25 @@
-import { useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
-import { useAdminStore } from "@/stores/admin-store";
-import { useAuthStore } from "@/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { CreateUserDialog } from "@/components/ui/create-user-dialog";
 import { UsersList } from "@/components/ui/users-list";
-import { UserPlus, Users } from "lucide-react";
-import type { User } from "@/stores/auth-store";
+import { useAuth } from "@/hooks/use-auth";
+import { useAdminStore } from "@/stores/admin-store";
+import { useAuthStore } from "@/stores/auth-store";
+import { ArrowLeft, UserPlus, Users } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
+import type { User } from "@/stores/auth-store";
 
 export function UserManagementPage() {
   const auth = useAuth();
+  const navigate = useNavigate();
   const token = useAuthStore((state) => state.token);
   const { deleteUser } = useAdminStore();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -76,17 +79,23 @@ export function UserManagementPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                <Users className="size-8" />
-                User Management
-              </h1>
-              <p className="text-muted-foreground mt-2">
-                Create and manage user accounts
-              </p>
-            </div>
-            <Button onClick={() => setCreateDialogOpen(true)}>
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mr-4 "
+              onClick={() => navigate("/")}
+              title="Back to Projects"
+            >
+              <ArrowLeft />
+            </Button>
+
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Users className="size-8" />
+              User Management
+            </h1>
+
+            <Button className="ml-10" onClick={() => setCreateDialogOpen(true)}>
               <UserPlus />
               Create User
             </Button>

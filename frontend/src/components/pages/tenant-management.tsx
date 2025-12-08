@@ -1,24 +1,28 @@
-import { useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
-import { useTenantStore } from "@/stores/tenant-store";
-import { useAuthStore } from "@/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { CreateTenantDialog } from "@/components/ui/create-tenant-dialog";
-import { EditTenantDialog } from "@/components/ui/edit-tenant-dialog";
-import { TenantUsersDialog } from "@/components/ui/tenant-users-dialog";
-import { TenantsList } from "@/components/ui/tenants-list";
-import { Building2, Plus } from "lucide-react";
-import type { Tenant } from "@/stores/tenant-store";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
+import { EditTenantDialog } from "@/components/ui/edit-tenant-dialog";
+import { TenantUsersDialog } from "@/components/ui/tenant-users-dialog";
+import { TenantsList } from "@/components/ui/tenants-list";
+import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/stores/auth-store";
+import type { Tenant } from "@/stores/tenant-store";
+import { useTenantStore } from "@/stores/tenant-store";
+import { ArrowLeft, Building2, Plus } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 
 export function TenantManagementPage() {
   const auth = useAuth();
+
+  const navigate = useNavigate();
   const token = useAuthStore((state) => state.token);
   const { deleteTenant } = useTenantStore();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -90,17 +94,23 @@ export function TenantManagementPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                <Building2 className="size-8" />
-                Tenant Management
-              </h1>
-              <p className="text-muted-foreground mt-2">
-                Create and manage tenants in the system
-              </p>
-            </div>
-            <Button onClick={() => setCreateDialogOpen(true)}>
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mr-4 "
+              onClick={() => navigate("/")}
+              title="Back to Projects"
+            >
+              <ArrowLeft />
+            </Button>
+
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Building2 className="size-8" />
+              Tenant Management
+            </h1>
+
+            <Button className="ml-10" onClick={() => setCreateDialogOpen(true)}>
               <Plus />
               Create Tenant
             </Button>
@@ -145,8 +155,9 @@ export function TenantManagementPage() {
             <DialogHeader>
               <DialogTitle>Delete Tenant</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete this tenant? This will also delete
-                all users associated with this tenant. This action cannot be undone.
+                Are you sure you want to delete this tenant? This will also
+                delete all users associated with this tenant. This action cannot
+                be undone.
               </DialogDescription>
             </DialogHeader>
 
