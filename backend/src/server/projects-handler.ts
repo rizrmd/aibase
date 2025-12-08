@@ -19,13 +19,8 @@ export async function handleGetProjects(req: Request): Promise<Response> {
       );
     }
 
-    // Root users can see all projects, others see only their own + shared
-    let projects;
-    if (auth.user.role === 'root') {
-      projects = projectStorage.getAll();
-    } else {
-      projects = projectStorage.getByUserId(auth.user.id, auth.user.tenant_id);
-    }
+    // All users (including root) only see their own projects + shared projects in their tenant
+    const projects = projectStorage.getByUserId(auth.user.id, auth.user.tenant_id);
 
     return Response.json({
       success: true,
