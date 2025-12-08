@@ -32,6 +32,7 @@ export interface UpdateUserData {
   email?: string;
   username?: string;
   password_hash?: string;
+  role?: UserRole;
 }
 
 export class UserStorage {
@@ -194,6 +195,10 @@ export class UserStorage {
     if (data.password_hash !== undefined) {
       updates.push('password_hash = ?');
       values.push(data.password_hash);
+    }
+    if (data.role !== undefined) {
+      updates.push('role = ?');
+      values.push(data.role);
     }
 
     if (updates.length === 0) {

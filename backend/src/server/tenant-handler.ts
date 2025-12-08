@@ -498,6 +498,13 @@ export async function handleUpdateTenantUser(req: Request, tenantId: string, use
     if (body.password !== undefined) {
       updateData.password_hash = await Bun.password.hash(body.password);
     }
+    if (body.role !== undefined) {
+      // Validate role
+      if (!['admin', 'user'].includes(body.role)) {
+        return Response.json({ error: "Invalid role. Must be 'admin' or 'user'" }, { status: 400 });
+      }
+      updateData.role = body.role;
+    }
 
     const user = await userStorage.update(userIdNum, updateData);
 

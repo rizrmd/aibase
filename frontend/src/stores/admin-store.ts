@@ -40,7 +40,7 @@ interface AdminStore {
     token: string,
     tenantId: number,
     userId: number,
-    data: { email?: string; username?: string; password?: string }
+    data: { email?: string; username?: string; password?: string; role?: "admin" | "user" }
   ) => Promise<boolean>;
   deleteTenantUser: (token: string, tenantId: number, userId: number) => Promise<boolean>;
 }
@@ -250,7 +250,7 @@ export const useAdminStore = create<AdminStore>((set, get) => ({
     token: string,
     tenantId: number,
     userId: number,
-    data: { email?: string; username?: string; password?: string }
+    data: { email?: string; username?: string; password?: string; role?: "admin" | "user" }
   ) => {
     set({ isLoading: true, error: null });
 

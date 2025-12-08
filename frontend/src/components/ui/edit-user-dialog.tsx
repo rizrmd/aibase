@@ -30,6 +30,7 @@ export function EditUserDialog({ open, onOpenChange, user, tenantId }: EditUserD
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState<"admin" | "user">("user");
 
   // Update form when user changes
   useEffect(() => {
@@ -38,6 +39,7 @@ export function EditUserDialog({ open, onOpenChange, user, tenantId }: EditUserD
       setUsername(user.username);
       setPassword("");
       setConfirmPassword("");
+      setRole(user.role === "admin" ? "admin" : "user");
     }
   }, [user]);
 
@@ -46,6 +48,7 @@ export function EditUserDialog({ open, onOpenChange, user, tenantId }: EditUserD
     if (user) {
       setEmail(user.email);
       setUsername(user.username);
+      setRole(user.role === "admin" ? "admin" : "user");
     }
     setPassword("");
     setConfirmPassword("");
@@ -72,7 +75,7 @@ export function EditUserDialog({ open, onOpenChange, user, tenantId }: EditUserD
       return;
     }
 
-    const updateData: { email?: string; username?: string; password?: string } = {};
+    const updateData: { email?: string; username?: string; password?: string; role?: "admin" | "user" } = {};
 
     // Only include changed fields
     if (email !== user.email) {
@@ -83,6 +86,9 @@ export function EditUserDialog({ open, onOpenChange, user, tenantId }: EditUserD
     }
     if (password) {
       updateData.password = password;
+    }
+    if (role !== user.role) {
+      updateData.role = role;
     }
 
     // If nothing changed, just close
@@ -174,6 +180,24 @@ export function EditUserDialog({ open, onOpenChange, user, tenantId }: EditUserD
               />
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label htmlFor="role">Role</Label>
+            <select
+              id="role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as "admin" | "user")}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              required
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {role === "user" && "Standard user with basic access"}
+              {role === "admin" && "Can create and manage users in this tenant"}
+            </p>
+          </div>
 
           <div className="flex gap-2">
             <Button
