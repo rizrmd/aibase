@@ -6,7 +6,7 @@ import { join } from "path";
 const memoryStorage = new Map<string, any>();
 
 // File storage directory for larger outputs
-const STORAGE_DIR = join(process.cwd(), ".output-storage");
+const STORAGE_DIR = join(process.cwd(), "data/output-storage");
 
 // Threshold for file vs memory storage (10MB)
 const FILE_STORAGE_THRESHOLD = 10 * 1024 * 1024;

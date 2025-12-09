@@ -428,7 +428,7 @@ export class WSServer extends WSEventEmitter {
     // Create conversation for this session with existing history
     // Load from disk if available
     const existingHistory = await this.messagePersistence.getClientHistory(convId, projectId);
-    const conversation = await this.createConversation(existingHistory, convId);
+    const conversation = await this.createConversation(existingHistory, convId, projectId);
     connectionInfo.conversation = conversation;
 
     // Hook into conversation to persist changes to MessagePersistence
@@ -1143,9 +1143,10 @@ export class WSServer extends WSEventEmitter {
 
   private async createConversation(
     initialHistory: any[] = [],
-    convId: string
+    convId: string,
+    projectId: string
   ): Promise<Conversation> {
-    const tools = await this.getDefaultTools(convId);
+    const tools = await this.getDefaultTools(convId, projectId);
     const defaultSystemPrompt = `You are a helpful AI assistant connected via WebSocket.
 You have access to tools that can help you provide better responses.
 Always be helpful and conversational.`;
@@ -1160,12 +1161,11 @@ Always be helpful and conversational.`;
       initialHistory,
       tools,
       convId,
-      projectId: "A1",
+      projectId,
       hooks: {
         message: {
           before: async (message: string) => {
             // Detect PostgreSQL URLs and test/store them in memory
-            const projectId = "A1"; // Match the project ID used for tools
             const result = await detectAndStorePostgreSQLUrl(message, projectId);
 
             if (result.detected) {
@@ -1268,9 +1268,7 @@ Always be helpful and conversational.`;
     });
   }
 
-  private async getDefaultTools(convId: string): Promise<Tool[]> {
-    // Use "A1" as project ID to match frontend upload configuration
-    const projectId = "A1";
+  private async getDefaultTools(convId: string, projectId: string): Promise<Tool[]> {
     const tools = getBuiltinTools(convId, projectId);
 
     // Set up broadcast callback for TodoTool
