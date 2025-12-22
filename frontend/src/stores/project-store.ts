@@ -8,6 +8,8 @@ export interface Project {
   user_id: number;
   tenant_id: number | null;
   is_shared: boolean;
+  is_embeddable: boolean;
+  embed_token: string | null;
   created_at: number;
   updated_at: number;
 }

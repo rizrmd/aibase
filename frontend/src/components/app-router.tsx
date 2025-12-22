@@ -7,10 +7,12 @@ import { ProjectSelectorPage } from "./pages/project-selector";
 import { UserManagementPage } from "./pages/user-management";
 import { TenantManagementPage } from "./pages/tenant-management";
 import { LoginPage } from "./pages/login";
+import { EmbedChatPage } from "./pages/embed-chat";
 import { ProjectRouteHandler } from "./project/project-route-handler";
 import { ProtectedRoute } from "./auth/protected-route";
 import { Button } from "./ui/button";
 import { UserMenu } from "./ui/user-menu";
+import { EmbedButton } from "./ui/embed-button";
 import {
   MessageSquare,
   Binary,
@@ -137,6 +139,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
               <>Context</>
             )}
           </Button>
+          <EmbedButton projectId={currentProject.id} />
           {location.pathname === `/projects/${currentProject.id}/chat` &&
             todos?.items?.length > 0 && (
               <Button
@@ -188,8 +191,9 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
       {/* Content Area */}
       <div className="flex-1 overflow-hidden">
         <Routes>
-          {/* Public route */}
+          {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/embed" element={<EmbedChatPage />} />
 
           {/* Protected routes */}
           <Route

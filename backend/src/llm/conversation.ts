@@ -181,6 +181,7 @@ export interface ConversationOptions {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  thinking?: { type: "disabled" | "enabled" };
 
   /**
    * Conversation ID for loading context-specific data
@@ -207,6 +208,7 @@ export class Conversation {
     temperature?: number;
     max_tokens?: number;
     top_p?: number;
+    thinking?: { type: "disabled" | "enabled" };
   } = {};
   private currentAbortController: AbortController | null = null;
   private convId: string = "default";
@@ -243,6 +245,8 @@ export class Conversation {
     if (options.maxTokens !== undefined)
       this.modelParams.max_tokens = options.maxTokens;
     if (options.topP !== undefined) this.modelParams.top_p = options.topP;
+    if (options.thinking !== undefined)
+      this.modelParams.thinking = options.thinking;
 
     // Check if initialHistory already contains a system message
     const hasSystemMessage = options.initialHistory?.some(

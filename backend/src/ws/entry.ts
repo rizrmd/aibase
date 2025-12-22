@@ -575,6 +575,29 @@ export class WSServer extends WSEventEmitter {
       .slice(2, 11)}`; // Generate unique ID for assistant
     const startTime = Date.now(); // Track start time for completion time calculation
 
+    // Apply per-message options if provided
+    const originalModelParams = { ...(conversation as any).modelParams };
+
+    if (userData.options) {
+      const messageModelParams: any = {};
+
+      if (userData.options.temperature !== undefined) {
+        messageModelParams.temperature = userData.options.temperature;
+      }
+      if (userData.options.maxTokens !== undefined) {
+        messageModelParams.max_tokens = userData.options.maxTokens;
+      }
+      if (userData.options.thinking !== undefined) {
+        messageModelParams.thinking = userData.options.thinking;
+      }
+
+      // Merge with existing params (per-message options take precedence)
+      (conversation as any).modelParams = {
+        ...originalModelParams,
+        ...messageModelParams,
+      };
+    }
+
     try {
       // Store assistant message ID in connection info for tool hooks to access
       (connectionInfo as any).assistantMsgId = assistantMsgId;
@@ -870,6 +893,11 @@ export class WSServer extends WSEventEmitter {
         metadata: { timestamp: Date.now() },
       };
       this.broadcastToConv(connectionInfo.convId, errorCompletionMessage);
+    } finally {
+      // Restore original modelParams after message completes
+      if (userData.options) {
+        (conversation as any).modelParams = originalModelParams;
+      }
     }
   }
 
@@ -1156,12 +1184,18 @@ Always be helpful and conversational.`;
       (msg) => msg.role === "system"
     );
 
+    // Read thinking mode from environment (default: disabled)
+    const thinkingMode = process.env.OPENAI_THINKING_MODE?.toLowerCase() === "enabled"
+      ? { type: "enabled" as const }
+      : { type: "disabled" as const };
+
     return await Conversation.create({
       systemPrompt: hasSystemMessage ? undefined : defaultSystemPrompt,
       initialHistory,
       tools,
       convId,
       projectId,
+      thinking: thinkingMode,
       hooks: {
         message: {
           before: async (message: string) => {

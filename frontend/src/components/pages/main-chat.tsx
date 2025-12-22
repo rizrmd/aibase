@@ -21,12 +21,14 @@ interface ShadcnChatInterfaceProps {
   wsUrl: string;
   className?: string;
   isTodoPanelVisible?: boolean;
+  isEmbedMode?: boolean;
 }
 
 export function MainChat({
   wsUrl,
   className,
   isTodoPanelVisible = true,
+  isEmbedMode = false,
 }: ShadcnChatInterfaceProps) {
   // Zustand stores (reactive state only)
   const {
@@ -237,8 +239,8 @@ export function MainChat({
 
   return (
     <div className={`flex h-screen ${className} relative`}>
-      {/* New Conversation Button - Absolute positioned top right (only show if messages exist) */}
-      {messages.length > 0 && (
+      {/* New Conversation Button - Absolute positioned top right (only show if messages exist and not in embed mode) */}
+      {!isEmbedMode && messages.length > 0 && (
         <PageActionGroup>
           <PageActionButton
             icon={Plus}
@@ -252,10 +254,12 @@ export function MainChat({
         </PageActionGroup>
       )}
 
-      {/* Token Status - Bottom right corner */}
-      <div className="absolute bottom-2 right-2 z-10">
-        <TokenStatus convId={convId} />
-      </div>
+      {/* Token Status - Bottom right corner (hide in embed mode) */}
+      {!isEmbedMode && (
+        <div className="absolute bottom-2 right-2 z-10">
+          <TokenStatus convId={convId} />
+        </div>
+      )}
 
       {/* Todo Panel - Sticky on left */}
       {(todos?.items?.length > 0 || isLoading) && (

@@ -74,6 +74,14 @@ import {
   handleUpdateTenantUser,
   handleDeleteTenantUser,
 } from "./tenant-handler";
+import {
+  handleGetEmbedInfo,
+  handleEnableEmbed,
+  handleDisableEmbed,
+  handleRegenerateEmbedToken,
+} from "./embed-handler";
+import { embedRateLimiter, embedWsRateLimiter, getClientIp } from "../middleware/rate-limiter";
+import { ProjectStorage } from "../storage/project-storage";
 
 /**
  * Convenience function to create a WebSocket server
@@ -138,6 +146,44 @@ export class WebSocketServer {
       fetch: async (req, server) => {
         const url = new URL(req.url);
 
+        // Handle public embed WebSocket upgrade requests
+        if (url.pathname.startsWith("/api/embed/ws")) {
+          // Rate limit embed WebSocket connections
+          const clientIp = getClientIp(req);
+          if (!embedWsRateLimiter.checkLimit(clientIp, 10)) {
+            return new Response("Rate limit exceeded", { status: 429 });
+          }
+
+          // Extract and validate embed parameters
+          const embedToken = url.searchParams.get("embedToken");
+          const projectId = url.searchParams.get("projectId");
+
+          if (!embedToken || !projectId) {
+            return new Response("Missing embedToken or projectId", { status: 400 });
+          }
+
+          // Verify project is embeddable and token matches
+          const projectStorage = ProjectStorage.getInstance();
+          const project = projectStorage.getById(projectId);
+
+          if (!project || !project.is_embeddable || project.embed_token !== embedToken) {
+            return new Response("Invalid embed configuration", { status: 403 });
+          }
+
+          // Generate a new conversation ID for embed (always new chat)
+          const convId = `embed_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+
+          // Upgrade to WebSocket with embed flag
+          const upgraded = server.upgrade(req, {
+            data: { convId, projectId, isEmbed: true }
+          });
+
+          if (upgraded) {
+            return undefined; // WebSocket connection established
+          }
+          return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+
         // Handle WebSocket upgrade requests
         if (url.pathname.startsWith("/api/ws")) {
           // Extract conversation ID and project ID from URL before upgrading
@@ -195,6 +241,35 @@ export class WebSocketServer {
           } else if (req.method === "DELETE") {
             return handleDeleteProject(req, projectId);
           }
+        }
+
+        // Embed management API endpoints (authenticated)
+        const embedEnableMatch = url.pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/enable$/);
+        if (embedEnableMatch && req.method === "POST") {
+          const projectId = embedEnableMatch[1];
+          return handleEnableEmbed(req, projectId);
+        }
+
+        const embedDisableMatch = url.pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/disable$/);
+        if (embedDisableMatch && req.method === "POST") {
+          const projectId = embedDisableMatch[1];
+          return handleDisableEmbed(req, projectId);
+        }
+
+        const embedRegenerateMatch = url.pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/regenerate$/);
+        if (embedRegenerateMatch && req.method === "POST") {
+          const projectId = embedRegenerateMatch[1];
+          return handleRegenerateEmbedToken(req, projectId);
+        }
+
+        // Public embed info endpoint (no auth required)
+        if (url.pathname === "/api/embed/info" && req.method === "GET") {
+          // Rate limit embed info requests
+          const clientIp = getClientIp(req);
+          if (!embedRateLimiter.checkLimit(clientIp, 20)) {
+            return Response.json({ success: false, error: "Rate limit exceeded" }, { status: 429 });
+          }
+          return handleGetEmbedInfo(req);
         }
 
         // Conversations API endpoints

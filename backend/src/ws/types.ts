@@ -51,6 +51,7 @@ export interface UserMessageData {
     temperature?: number;
     maxTokens?: number;
     tools?: string[];
+    thinking?: { type: "disabled" | "enabled" };
   };
 }
 

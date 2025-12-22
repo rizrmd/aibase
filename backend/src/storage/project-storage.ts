@@ -14,6 +14,8 @@ export interface Project {
   user_id: number; // Owner of the project
   tenant_id: number | null; // Tenant the project belongs to
   is_shared: boolean; // Whether project is shared within tenant
+  is_embeddable: boolean; // Whether project can be embedded publicly
+  embed_token: string | null; // Secret token for embed verification
   created_at: number;
   updated_at: number;
 }
@@ -80,6 +82,36 @@ export class ProjectStorage {
     this.db.run('CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_projects_tenant_id ON projects(tenant_id)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_projects_is_shared ON projects(is_shared)');
+
+    // Migration: Add embed fields if they don't exist
+    try {
+      const tableInfo = this.db.prepare('PRAGMA table_info(projects)').all() as any[];
+      const hasEmbeddableColumn = tableInfo.some((col: any) => col.name === 'is_embeddable');
+      const hasEmbedTokenColumn = tableInfo.some((col: any) => col.name === 'embed_token');
+
+      if (!hasEmbeddableColumn || !hasEmbedTokenColumn) {
+        console.log('[ProjectStorage] Migrating database: adding embed fields');
+        this.db.run('BEGIN TRANSACTION');
+
+        if (!hasEmbeddableColumn) {
+          this.db.run('ALTER TABLE projects ADD COLUMN is_embeddable INTEGER NOT NULL DEFAULT 0');
+        }
+
+        if (!hasEmbedTokenColumn) {
+          this.db.run('ALTER TABLE projects ADD COLUMN embed_token TEXT NULL');
+        }
+
+        // Create index for embed_token lookups
+        this.db.run('CREATE INDEX IF NOT EXISTS idx_projects_embed_token ON projects(embed_token)');
+
+        this.db.run('COMMIT');
+        console.log('[ProjectStorage] Migration completed: embed fields added');
+      }
+    } catch (error) {
+      console.error('[ProjectStorage] Embed fields migration failed:', error);
+      this.db.run('ROLLBACK');
+      throw error;
+    }
 
     // Migration: Remove is_default column if it exists
     try {
@@ -196,6 +228,7 @@ export class ProjectStorage {
     return {
       ...row,
       is_shared: row.is_shared === 1,
+      is_embeddable: row.is_embeddable === 1,
     };
   }
 
@@ -228,6 +261,7 @@ export class ProjectStorage {
     return rows.map(row => ({
       ...row,
       is_shared: row.is_shared === 1,
+      is_embeddable: row.is_embeddable === 1,
     }));
   }
 
@@ -241,6 +275,7 @@ export class ProjectStorage {
     return rows.map(row => ({
       ...row,
       is_shared: row.is_shared === 1,
+      is_embeddable: row.is_embeddable === 1,
     }));
   }
 
@@ -347,6 +382,104 @@ export class ProjectStorage {
   async ensureProjectDir(projectId: string): Promise<void> {
     const projectDir = this.getProjectDir(projectId);
     await fs.mkdir(projectDir, { recursive: true });
+  }
+
+  /**
+   * Generate a secure random embed token
+   */
+  private generateEmbedToken(): string {
+    const randomBytes = crypto.getRandomValues(new Uint8Array(32));
+    return Array.from(randomBytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * Enable embedding for a project
+   */
+  async enableEmbed(projectId: string, userId: number): Promise<string> {
+    const project = this.getById(projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    // Only owner can enable embedding
+    if (project.user_id !== userId) {
+      throw new Error('Only the project owner can enable embedding');
+    }
+
+    const embedToken = this.generateEmbedToken();
+    const stmt = this.db.prepare(`
+      UPDATE projects SET is_embeddable = 1, embed_token = ?, updated_at = ? WHERE id = ?
+    `);
+
+    stmt.run(embedToken, Date.now(), projectId);
+    console.log('[ProjectStorage] Enabled embedding for project:', projectId);
+    return embedToken;
+  }
+
+  /**
+   * Disable embedding for a project
+   */
+  async disableEmbed(projectId: string, userId: number): Promise<void> {
+    const project = this.getById(projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    // Only owner can disable embedding
+    if (project.user_id !== userId) {
+      throw new Error('Only the project owner can disable embedding');
+    }
+
+    const stmt = this.db.prepare(`
+      UPDATE projects SET is_embeddable = 0, embed_token = NULL, updated_at = ? WHERE id = ?
+    `);
+
+    stmt.run(Date.now(), projectId);
+    console.log('[ProjectStorage] Disabled embedding for project:', projectId);
+  }
+
+  /**
+   * Regenerate embed token for a project
+   */
+  async regenerateEmbedToken(projectId: string, userId: number): Promise<string> {
+    const project = this.getById(projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    // Only owner can regenerate token
+    if (project.user_id !== userId) {
+      throw new Error('Only the project owner can regenerate the embed token');
+    }
+
+    if (!project.is_embeddable) {
+      throw new Error('Embedding is not enabled for this project');
+    }
+
+    const embedToken = this.generateEmbedToken();
+    const stmt = this.db.prepare(`
+      UPDATE projects SET embed_token = ?, updated_at = ? WHERE id = ?
+    `);
+
+    stmt.run(embedToken, Date.now(), projectId);
+    console.log('[ProjectStorage] Regenerated embed token for project:', projectId);
+    return embedToken;
+  }
+
+  /**
+   * Get project by embed token (for public embed access)
+   */
+  getByEmbedToken(embedToken: string): Project | null {
+    const stmt = this.db.prepare('SELECT * FROM projects WHERE embed_token = ? AND is_embeddable = 1');
+    const row = stmt.get(embedToken) as any;
+
+    if (!row) return null;
+
+    return {
+      ...row,
+      is_shared: row.is_shared === 1,
+      is_embeddable: row.is_embeddable === 1,
+    };
   }
 
   /**
