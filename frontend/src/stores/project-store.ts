@@ -32,6 +32,7 @@ interface ProjectStore {
   // Async actions
   fetchProjects: () => Promise<void>;
   createProject: (name: string, description?: string, is_shared?: boolean) => Promise<Project | null>;
+  renameProject: (projectId: string, name: string, description?: string) => Promise<boolean>;
   deleteProject: (projectId: string) => Promise<boolean>;
   initializeProject: () => Promise<void>;
 }
@@ -139,6 +140,39 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     } catch (error) {
       state.setError(error instanceof Error ? error.message : "Failed to create project");
       return null;
+    } finally {
+      state.setIsLoading(false);
+    }
+  },
+
+  renameProject: async (projectId, name, description) => {
+    const state = get();
+    state.setIsLoading(true);
+    state.setError(null);
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        state.updateProject(projectId, {
+          name: data.data.project.name,
+          description: data.data.project.description,
+          updated_at: data.data.project.updated_at,
+        });
+        return true;
+      } else {
+        state.setError(data.error || "Failed to rename project");
+        return false;
+      }
+    } catch (error) {
+      state.setError(error instanceof Error ? error.message : "Failed to rename project");
+      return false;
     } finally {
       state.setIsLoading(false);
     }

@@ -12,12 +12,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ProjectCreateModal } from "@/components/project/project-create-modal";
-import { Folder, Plus, Trash2 } from "lucide-react";
+import { ProjectRenameModal } from "@/components/project/project-rename-modal";
+import { Folder, Plus, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import type { Project } from "@/stores/project-store";
 
 export function ProjectSelectorPage() {
   const navigate = useNavigate();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [projectToRename, setProjectToRename] = useState<Project | null>(null);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
     null
   );
@@ -27,6 +31,7 @@ export function ProjectSelectorPage() {
     currentProject,
     selectProject,
     deleteProject,
+    renameProject,
     isLoading,
     initializeProject,
   } = useProjectStore();
@@ -38,6 +43,12 @@ export function ProjectSelectorPage() {
   const handleSelectProject = (projectId: string) => {
     selectProject(projectId);
     navigate(`/projects/${projectId}/chat`);
+  };
+
+  const handleRenameProject = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    setProjectToRename(project);
+    setIsRenameModalOpen(true);
   };
 
   const handleDeleteProject = async (
@@ -113,19 +124,30 @@ export function ProjectSelectorPage() {
                       <Folder className="size-5 text-primary" />
                       <CardTitle className="text-xl">{project.name}</CardTitle>
                     </div>
-                    {projects.length > 1 && (
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) =>
-                          handleDeleteProject(e, project.id, project.name)
-                        }
+                        onClick={(e) => handleRenameProject(e, project)}
                         disabled={deletingProjectId === project.id}
                       >
-                        <Trash2 className="size-4 text-destructive" />
+                        <Pencil className="size-4" />
                       </Button>
-                    )}
+                      {projects.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) =>
+                            handleDeleteProject(e, project.id, project.name)
+                          }
+                          disabled={deletingProjectId === project.id}
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {project.description?.trim() && (
                     <CardDescription className="line-clamp-2">
@@ -181,6 +203,13 @@ export function ProjectSelectorPage() {
             handleProjectCreated();
           }
         }}
+      />
+
+      {/* Rename Project Modal */}
+      <ProjectRenameModal
+        open={isRenameModalOpen}
+        onOpenChange={setIsRenameModalOpen}
+        project={projectToRename}
       />
     </div>
   );
