@@ -64,6 +64,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
   // Check if we're on a chat-related route
   const isChatRoute = location.pathname.startsWith("/projects/");
   const isLoginRoute = location.pathname === "/login";
+  const isEmbedRoute = location.pathname === "/embed";
 
   return (
     <div className="flex h-screen flex-col">
@@ -155,8 +156,8 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
         </div>
       )}
 
-      {/* Top Right Navigation - Show on all pages except login */}
-      {!isLoginRoute && (
+      {/* Top Right Navigation - Show on all pages except login and embed */}
+      {!isLoginRoute && !isEmbedRoute && (
         <div className="absolute top-0 right-0 m-3 z-10 flex gap-2">
           {/* Tenants button (root only, not on chat routes) */}
           {isRoot && !isChatRoute && (
