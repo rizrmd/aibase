@@ -31,7 +31,6 @@ export function ProjectSelectorPage() {
     currentProject,
     selectProject,
     deleteProject,
-    renameProject,
     isLoading,
     initializeProject,
   } = useProjectStore();
