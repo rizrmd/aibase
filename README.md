@@ -26,6 +26,17 @@ AI-powered conversation system with multi-tenant support and vector storage.
 
    Open http://localhost:5040 in your browser
 
+4. **Create the first root user** (first-time setup only)
+
+   ```bash
+   bun run backend/src/scripts/create-root-user.ts <email> <username> <password>
+
+   # Example:
+   bun run backend/src/scripts/create-root-user.ts admin@example.com admin MySecurePassword123
+   ```
+
+   After creating the root user, you can login and create additional users, tenants, and admins through the web interface.
+
 ## What the start binary does
 
 The start binary automatically:
