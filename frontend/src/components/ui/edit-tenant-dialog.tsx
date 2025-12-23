@@ -13,9 +13,9 @@ import { Alert } from "./alert";
 import { useAuthStore } from "@/stores/auth-store";
 import { useTenantStore, type Tenant } from "@/stores/tenant-store";
 import { Upload, X, Trash2 } from "lucide-react";
+import { buildApiUrl } from "@/lib/base-path";
 
-// Use relative URL to leverage Vite's proxy in development
-const API_BASE_URL = "";
+const API_BASE_URL = buildApiUrl("");
 
 interface EditTenantDialogProps {
   open: boolean;

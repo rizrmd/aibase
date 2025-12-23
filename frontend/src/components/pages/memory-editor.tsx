@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMemory } from "@/hooks/use-memory";
+import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import {
   PageActionButton,
@@ -24,6 +25,8 @@ interface EditingEntry {
 }
 
 export function MemoryEditor() {
+  const { currentProject } = useProjectStore();
+
   const {
     memory,
     isLoading,
@@ -32,7 +35,7 @@ export function MemoryEditor() {
     deleteMemoryKey,
     deleteCategory,
     refresh,
-  } = useMemory();
+  } = useMemory({ projectId: currentProject?.id });
 
   const [editingEntry, setEditingEntry] = useState<EditingEntry | null>(null);
   const [newCategory, setNewCategory] = useState("");

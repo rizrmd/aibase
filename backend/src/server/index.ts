@@ -186,7 +186,9 @@ export class WebSocketServer {
 
         // Redirect root to base path if base path is set
         if (basePath && url.pathname === "/") {
-          return Response.redirect(`${url.origin}${basePath}/`, 307);
+          const host = req.headers.get("Host") || url.host;
+          const protocol = url.protocol;
+          return Response.redirect(`${protocol}//${host}${basePath}/`, 307);
         }
 
         // Strip base path from pathname for route matching

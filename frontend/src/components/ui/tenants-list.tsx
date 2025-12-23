@@ -3,9 +3,9 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useTenantStore, type Tenant } from "@/stores/tenant-store";
 import { Button } from "./button";
 import { Trash2, Building2, Globe, Edit, Users } from "lucide-react";
+import { buildApiUrl } from "@/lib/base-path";
 
-// Use relative URL to leverage Vite's proxy in development
-const API_BASE_URL = "";
+const API_BASE_URL = buildApiUrl("");
 
 interface TenantsListProps {
   onEditTenant?: (tenant: Tenant) => void;

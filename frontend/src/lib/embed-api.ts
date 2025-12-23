@@ -3,7 +3,9 @@
  * Handles embedding functionality for projects
  */
 
-const API_BASE_URL = "/api";
+import { buildApiUrl } from "@/lib/base-path";
+
+const API_BASE_URL = `${buildApiUrl("")}/api`;
 
 interface ApiResponse<T> {
   success: boolean;

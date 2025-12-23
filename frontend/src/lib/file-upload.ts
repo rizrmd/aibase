@@ -4,6 +4,9 @@
  */
 
 import { ConvIdManager } from "./conv-id";
+import { buildApiUrl } from "@/lib/base-path";
+
+const UPLOAD_ENDPOINT = `${buildApiUrl("")}/api/upload`;
 
 export interface UploadedFile {
   id: string;
@@ -25,8 +28,6 @@ export interface UploadOptions {
   signal?: AbortSignal;
   projectId: string; // Required project ID
 }
-
-const UPLOAD_ENDPOINT = "/api/upload"; // Use relative URL to leverage Vite proxy
 
 /**
  * Upload files using HTTP multipart/form-data
@@ -152,5 +153,5 @@ export function uploadFilesWithProgress(
  * Get file URL for display/download
  */
 export function getFileUrl(convId: string, fileName: string, projectId: string): string {
-  return `/api/files/${projectId}/${convId}/${fileName}`; // Use relative URL to leverage Vite proxy
+  return `${buildApiUrl("")}/api/files/${projectId}/${convId}/${fileName}`;
 }

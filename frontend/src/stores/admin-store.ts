@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import type { User } from "./auth-store";
+import { buildApiUrl } from "@/lib/base-path";
 
-// Use relative URL to leverage Vite's proxy in development
-const API_BASE_URL = "";
+const API_BASE_URL = buildApiUrl("");
 
 interface AdminStore {
   // State

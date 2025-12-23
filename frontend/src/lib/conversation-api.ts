@@ -3,6 +3,11 @@
  * Handles HTTP requests for conversation-related operations
  */
 
+import { buildApiUrl } from "@/lib/base-path";
+
+// Use buildApiUrl to support base path
+const API_BASE_URL = buildApiUrl("");
+
 export interface ConversationMetadata {
   convId: string;
   projectId: string;
@@ -29,7 +34,7 @@ export interface ConversationMessagesResponse {
 export async function fetchConversations(
   projectId: string
 ): Promise<ConversationWithTitle[]> {
-  const response = await fetch(`/api/conversations?projectId=${projectId}`);
+  const response = await fetch(`${API_BASE_URL}/api/conversations?projectId=${projectId}`);
   const data = await response.json();
 
   if (!data.success) {

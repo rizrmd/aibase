@@ -5,9 +5,9 @@ import type {
   MemorySetResponse,
   MemoryDeleteResponse,
 } from "@/types/memory";
+import { buildApiUrl } from "@/lib/base-path";
 
-// Use relative URL to leverage Vite's proxy in development
-const API_BASE_URL = "";
+const API_BASE_URL = buildApiUrl("");
 
 export interface UseMemoryOptions {
   projectId?: string;
@@ -27,7 +27,7 @@ export interface UseMemoryReturn {
 }
 
 export function useMemory(options: UseMemoryOptions = {}): UseMemoryReturn {
-  const { projectId = "A1", autoLoad = true } = options;
+  const { projectId, autoLoad = true } = options;
 
   const [memory, setMemory] = useState<MemoryStore>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +35,11 @@ export function useMemory(options: UseMemoryOptions = {}): UseMemoryReturn {
 
   // Load all memory
   const loadMemory = useCallback(async () => {
+    if (!projectId) {
+      setError("No project selected");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 

@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import { ProjectManager } from "@/lib/project-manager";
+import { buildApiUrl } from "@/lib/base-path";
+
+// Use buildApiUrl to support base path
+const API_BASE_URL = buildApiUrl("");
 
 export interface Project {
   id: string;
@@ -103,7 +107,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     state.setError(null);
 
     try {
-      const response = await fetch("/api/projects");
+      const response = await fetch(`${API_BASE_URL}/api/projects`);
       const data = await response.json();
 
       if (data.success) {
@@ -124,7 +128,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     state.setError(null);
 
     try {
-      const response = await fetch("/api/projects", {
+      const response = await fetch(`${API_BASE_URL}/api/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, description, is_shared }),
@@ -154,7 +158,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     state.setError(null);
 
     try {
-      const response = await fetch(`/api/projects/${projectId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, description }),
@@ -187,7 +191,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     state.setError(null);
 
     try {
-      const response = await fetch(`/api/projects/${projectId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}`, {
         method: "DELETE",
       });
 
