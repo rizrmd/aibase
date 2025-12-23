@@ -4,7 +4,7 @@ import { createPostgreSQLFunction } from "./postgresql";
 import { createClickHouseFunction } from "./clickhouse";
 import { createTrinoFunction } from "./trino";
 import { createPDFReaderFunction } from "./pdfreader";
-import { createWebSearchFunction } from "./web-search";
+import { createWebSearchFunction, createImageSearchFunction } from "./web-search";
 import { createShowChartFunction } from "./show-chart";
 import { createShowTableFunction } from "./show-table";
 import { peek, peekInfo } from "./peek-output";
@@ -69,7 +69,7 @@ await todo({ action: 'add', texts });
 return { created: texts.length };
 \`\`\`
 
-**Available:** fetch, progress(msg), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), convId, projectId, console`;
+**Available:** fetch, progress(msg), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), convId, projectId, console`;
 };
 
 /**
@@ -157,6 +157,9 @@ export class ScriptRuntime {
 
       // Inject web search function
       webSearch: this.createWebSearchFunction(),
+
+      // Inject image search function
+      imageSearch: this.createImageSearchFunction(),
 
       // Inject showChart function
       showChart: this.createShowChartFunction(),
@@ -246,6 +249,14 @@ export class ScriptRuntime {
   private createWebSearchFunction() {
     // Return the web search function from the modular implementation
     return createWebSearchFunction();
+  }
+
+  /**
+   * Get the image search function
+   */
+  private createImageSearchFunction() {
+    // Return the image search function from the modular implementation
+    return createImageSearchFunction();
   }
 
   /**
