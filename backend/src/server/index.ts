@@ -79,6 +79,7 @@ import {
   handleEnableEmbed,
   handleDisableEmbed,
   handleRegenerateEmbedToken,
+  handleUpdateEmbedCss,
 } from "./embed-handler";
 import { embedRateLimiter, embedWsRateLimiter, getClientIp } from "../middleware/rate-limiter";
 import { ProjectStorage } from "../storage/project-storage";
@@ -260,6 +261,12 @@ export class WebSocketServer {
         if (embedRegenerateMatch && req.method === "POST") {
           const projectId = embedRegenerateMatch[1];
           return handleRegenerateEmbedToken(req, projectId);
+        }
+
+        const embedCssMatch = url.pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/css$/);
+        if (embedCssMatch && req.method === "POST") {
+          const projectId = embedCssMatch[1];
+          return handleUpdateEmbedCss(req, projectId);
         }
 
         // Public embed info endpoint (no auth required)

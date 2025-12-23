@@ -10,6 +10,7 @@ export interface Project {
   is_shared: boolean;
   is_embeddable: boolean;
   embed_token: string | null;
+  custom_embed_css: string | null;
   created_at: number;
   updated_at: number;
 }

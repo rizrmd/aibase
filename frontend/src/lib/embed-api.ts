@@ -15,6 +15,7 @@ interface EmbedInfo {
   projectId: string;
   name: string;
   description: string | null;
+  customCss: string | null;
 }
 
 interface EmbedTokenResponse {
@@ -94,18 +95,35 @@ export async function regenerateEmbedToken(projectId: string): Promise<string> {
 }
 
 /**
+ * Update custom CSS for embedded chat
+ */
+export async function updateEmbedCss(projectId: string, customCss: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/embed/css`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ customCss }),
+  });
+
+  const data: ApiResponse<{ message: string }> = await response.json();
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || "Failed to update embed CSS");
+  }
+}
+
+/**
  * Generate embed code (iframe)
+ * Note: CSS is stored in project config, not in URL
  */
 export function generateIframeCode(
   projectId: string,
   embedToken: string,
-  customCss: string = "",
   width: string = "400px",
   height: string = "600px"
 ): string {
   const baseUrl = window.location.origin;
-  const cssParam = customCss ? `&css=${encodeURIComponent(customCss)}` : "";
-  const embedUrl = `${baseUrl}/embed?projectId=${encodeURIComponent(projectId)}&embedToken=${encodeURIComponent(embedToken)}${cssParam}`;
+  const embedUrl = `${baseUrl}/embed?projectId=${encodeURIComponent(projectId)}&embedToken=${encodeURIComponent(embedToken)}`;
 
   return `<iframe
   src="${embedUrl}"
@@ -119,17 +137,16 @@ export function generateIframeCode(
 
 /**
  * Generate embed code (JavaScript)
+ * Note: CSS is stored in project config, not in URL
  */
 export function generateJavaScriptCode(
   projectId: string,
   embedToken: string,
-  customCss: string = "",
   width: string = "400px",
   height: string = "600px"
 ): string {
   const baseUrl = window.location.origin;
-  const cssParam = customCss ? `&css=${encodeURIComponent(customCss)}` : "";
-  const embedUrl = `${baseUrl}/embed?projectId=${encodeURIComponent(projectId)}&embedToken=${encodeURIComponent(embedToken)}${cssParam}`;
+  const embedUrl = `${baseUrl}/embed?projectId=${encodeURIComponent(projectId)}&embedToken=${encodeURIComponent(embedToken)}`;
 
   return `<div id="aibase-chat"></div>
 <script>

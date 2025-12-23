@@ -49,6 +49,7 @@ export async function handleGetEmbedInfo(req: Request): Promise<Response> {
         projectId: project.id,
         name: project.name,
         description: project.description,
+        customCss: project.custom_embed_css,
       },
     });
   } catch (error) {
@@ -153,6 +154,49 @@ export async function handleRegenerateEmbedToken(req: Request, projectId: string
       {
         success: false,
         error: error instanceof Error ? error.message : "Failed to regenerate embed token",
+      },
+      { status: error instanceof Error && error.message.includes("owner") ? 403 : 500 }
+    );
+  }
+}
+
+/**
+ * Handle POST /api/projects/:id/embed/css
+ * Update custom CSS for embedded chat (authenticated)
+ */
+export async function handleUpdateEmbedCss(req: Request, projectId: string): Promise<Response> {
+  try {
+    const auth = await authenticateRequest(req);
+    if (!auth) {
+      return Response.json(
+        { success: false, error: "Not authenticated" },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const customCss = body.customCss || "";
+
+    // Limit CSS size to 10KB
+    if (customCss.length > 10240) {
+      return Response.json(
+        { success: false, error: "Custom CSS exceeds 10KB limit" },
+        { status: 400 }
+      );
+    }
+
+    await projectStorage.updateEmbedCss(projectId, auth.user.id, customCss);
+
+    return Response.json({
+      success: true,
+      data: { message: "Custom CSS updated successfully" },
+    });
+  } catch (error) {
+    console.error("Error updating embed CSS:", error);
+    return Response.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update embed CSS",
       },
       { status: error instanceof Error && error.message.includes("owner") ? 403 : 500 }
     );

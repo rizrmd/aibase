@@ -14,6 +14,7 @@ import {
   enableEmbed,
   disableEmbed,
   regenerateEmbedToken,
+  updateEmbedCss,
   generateIframeCode,
   generateJavaScriptCode,
 } from "@/lib/embed-api";
@@ -41,6 +42,7 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
     if (open && currentProject) {
       setIsEmbedEnabled(currentProject.is_embeddable || false);
       setEmbedToken(currentProject.embed_token || "");
+      setCustomCss(currentProject.custom_embed_css || "");
       setError("");
     }
   }, [open, currentProject]);
@@ -112,10 +114,32 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
     }
   };
 
+  const handleSaveCss = async () => {
+    if (!isEmbedEnabled) return;
+
+    setIsLoading(true);
+    setError("");
+    try {
+      await updateEmbedCss(projectId, customCss);
+
+      // Update project in store
+      if (currentProject) {
+        useProjectStore.getState().setCurrentProject({
+          ...currentProject,
+          custom_embed_css: customCss,
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save CSS");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const embedCode = isEmbedEnabled && embedToken
     ? codeType === "iframe"
-      ? generateIframeCode(projectId, embedToken, customCss, width, height)
-      : generateJavaScriptCode(projectId, embedToken, customCss, width, height)
+      ? generateIframeCode(projectId, embedToken, width, height)
+      : generateJavaScriptCode(projectId, embedToken, width, height)
     : "";
 
   const { isCopied, handleCopy } = useCopyToClipboard({
@@ -185,7 +209,17 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
 
               {/* Custom CSS */}
               <div className="space-y-2">
-                <Label htmlFor="custom-css">Custom CSS (optional)</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="custom-css">Custom CSS (optional)</Label>
+                  <Button
+                    onClick={handleSaveCss}
+                    disabled={isLoading}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Save CSS
+                  </Button>
+                </div>
                 <textarea
                   id="custom-css"
                   value={customCss}
@@ -194,7 +228,7 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
                   className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Custom CSS will be applied to the embedded chat interface. Limited to 10KB.
+                  Custom CSS is saved in project configuration and applied automatically. Limited to 10KB.
                 </p>
               </div>
 

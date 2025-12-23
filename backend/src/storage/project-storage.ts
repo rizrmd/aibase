@@ -16,6 +16,7 @@ export interface Project {
   is_shared: boolean; // Whether project is shared within tenant
   is_embeddable: boolean; // Whether project can be embedded publicly
   embed_token: string | null; // Secret token for embed verification
+  custom_embed_css: string | null; // Custom CSS for embedded chat
   created_at: number;
   updated_at: number;
 }
@@ -88,8 +89,9 @@ export class ProjectStorage {
       const tableInfo = this.db.prepare('PRAGMA table_info(projects)').all() as any[];
       const hasEmbeddableColumn = tableInfo.some((col: any) => col.name === 'is_embeddable');
       const hasEmbedTokenColumn = tableInfo.some((col: any) => col.name === 'embed_token');
+      const hasCustomEmbedCssColumn = tableInfo.some((col: any) => col.name === 'custom_embed_css');
 
-      if (!hasEmbeddableColumn || !hasEmbedTokenColumn) {
+      if (!hasEmbeddableColumn || !hasEmbedTokenColumn || !hasCustomEmbedCssColumn) {
         console.log('[ProjectStorage] Migrating database: adding embed fields');
         this.db.run('BEGIN TRANSACTION');
 
@@ -99,6 +101,10 @@ export class ProjectStorage {
 
         if (!hasEmbedTokenColumn) {
           this.db.run('ALTER TABLE projects ADD COLUMN embed_token TEXT NULL');
+        }
+
+        if (!hasCustomEmbedCssColumn) {
+          this.db.run('ALTER TABLE projects ADD COLUMN custom_embed_css TEXT NULL');
         }
 
         // Create index for embed_token lookups
@@ -464,6 +470,32 @@ export class ProjectStorage {
     stmt.run(embedToken, Date.now(), projectId);
     console.log('[ProjectStorage] Regenerated embed token for project:', projectId);
     return embedToken;
+  }
+
+  /**
+   * Update custom embed CSS for a project
+   */
+  async updateEmbedCss(projectId: string, userId: number, customCss: string): Promise<void> {
+    const project = this.getById(projectId);
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    // Only owner can update embed CSS
+    if (project.user_id !== userId) {
+      throw new Error('Only the project owner can update embed CSS');
+    }
+
+    if (!project.is_embeddable) {
+      throw new Error('Embedding is not enabled for this project');
+    }
+
+    const stmt = this.db.prepare(`
+      UPDATE projects SET custom_embed_css = ?, updated_at = ? WHERE id = ?
+    `);
+
+    stmt.run(customCss, Date.now(), projectId);
+    console.log('[ProjectStorage] Updated embed CSS for project:', projectId);
   }
 
   /**

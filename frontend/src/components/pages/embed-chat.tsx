@@ -13,11 +13,11 @@ export function EmbedChatPage() {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("projectId");
   const embedToken = searchParams.get("embedToken");
-  const customCss = searchParams.get("css");
+  const [customCss, setCustomCss] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(true);
 
-  // Validate embed parameters
+  // Validate embed parameters and fetch custom CSS
   useEffect(() => {
     const validate = async () => {
       if (!projectId || !embedToken) {
@@ -27,8 +27,9 @@ export function EmbedChatPage() {
       }
 
       try {
-        // Validate embed token with backend
-        await getEmbedInfo(projectId, embedToken);
+        // Validate embed token and get embed info (including custom CSS)
+        const embedInfo = await getEmbedInfo(projectId, embedToken);
+        setCustomCss(embedInfo.customCss);
         setIsValidating(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to validate embed configuration");
@@ -44,11 +45,8 @@ export function EmbedChatPage() {
     if (!customCss) return;
 
     try {
-      // Decode and sanitize CSS
-      const decodedCss = decodeURIComponent(customCss);
-
       // Basic sanitization: remove script tags and javascript: URLs
-      const sanitizedCss = decodedCss
+      const sanitizedCss = customCss
         .replace(/<script[^>]*>.*?<\/script>/gi, '')
         .replace(/javascript:/gi, '')
         .replace(/on\w+\s*=/gi, '');
