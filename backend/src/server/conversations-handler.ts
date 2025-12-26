@@ -4,6 +4,9 @@
 
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
 import { generateConversationTitle, getConversationTitle } from "../llm/conversation-title-generator";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("Conversations");
 
 const chatHistoryStorage = ChatHistoryStorage.getInstance();
 
@@ -47,7 +50,7 @@ export async function handleGetConversations(req: Request): Promise<Response> {
       data: { conversations: enrichedConversations },
     });
   } catch (error) {
-    console.error("Error getting conversations:", error);
+    logger.error({ error }, "Error getting conversations");
     return Response.json(
       {
         success: false,
@@ -119,7 +122,7 @@ export async function handleGetConversationMessages(
       },
     });
   } catch (error) {
-    console.error("Error getting conversation messages:", error);
+    logger.error({ error }, "Error getting conversation messages");
     return Response.json(
       {
         success: false,
@@ -172,7 +175,7 @@ export async function handleDeleteConversation(
       message: "Conversation deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting conversation:", error);
+    logger.error({ error }, "Error deleting conversation");
     return Response.json(
       {
         success: false,

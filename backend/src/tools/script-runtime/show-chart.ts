@@ -4,6 +4,10 @@
 export const context = async () => {
   return `### SHOW CHART
 
+**IMPORTANT: \`showChart\` is a script tool function available in your script execution environment, NOT a direct tool.**
+
+You call \`showChart()\` directly within your TypeScript/JavaScript code - it is NOT invoked via tool use. Just use it like a regular async function.
+
 Use showChart() to display interactive charts in the frontend.
 
 **Available:** showChart({ title, description?, chartType, data })
@@ -19,11 +23,15 @@ Use showChart() to display interactive charts in the frontend.
 
 #### EXAMPLE
 
-\`\`\`json
-{
-  "purpose": "Visualize monthly sales",
-  "code": "const data = { xAxis: ['Jan', 'Feb', 'Mar'], series: [{ name: 'Sales', data: [150, 230, 224] }] }; return await showChart({ title: 'Monthly Sales', chartType: 'bar', data });"
-}
+\`\`\`typescript
+// Simple bar chart
+const data = { xAxis: ['Jan', 'Feb', 'Mar'], series: [{ name: 'Sales', data: [150, 230, 224] }] };
+await showChart({ title: 'Monthly Sales', chartType: 'bar', data });
+
+// Line chart with description
+const sales = { xAxis: ['Q1', 'Q2', 'Q3', 'Q4'], series: [{ name: 'Revenue', data: [1000, 1500, 1200, 1800] }] };
+await showChart({ title: 'Quarterly Revenue', description: 'Revenue in thousands', chartType: 'line', data: sales });
+return { chart: 'displayed' };
 \`\`\``
 };
 

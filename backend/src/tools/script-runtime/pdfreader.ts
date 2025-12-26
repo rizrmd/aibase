@@ -9,42 +9,39 @@ export const context = async () => {
 
 Use pdfReader() to extract text from PDF files.
 
-**Available:** pdfReader({ filePath?, buffer?, password?, maxPages?, debug? })
+**Available:** pdfReader({ filePath?, buffer?, password?, maxPages? })
 
 **IMPORTANT:** When using pdfReader with files from \`file({ action: 'list' })\`, use ONLY the filename (pdf.name), NOT the full path (pdf.path)!
 
 #### EXAMPLES
 
-#### 1. PDF READER - READ ENTIRE PDF:
-\`\`\`json
-{
-  "purpose": "Extract text from PDF file",
-  "code": "progress('Reading PDF...'); const pdf = await pdfReader({ filePath: 'document.pdf' }); progress(\`Extracted \${pdf.totalPages} pages\`); return { text: pdf.text, pages: pdf.totalPages, preview: pdf.text.substring(0, 500) + '...' };"
-}
-\`\`\`
+\`\`\`typescript
+// Read entire PDF
+progress('Reading PDF...');
+const pdf = await pdfReader({ filePath: 'document.pdf' });
+progress(\`Extracted \${pdf.totalPages} pages\`);
+return { text: pdf.text, pages: pdf.totalPages, preview: pdf.text.substring(0, 500) + '...' };
 
-#### 2. PDF READER - PASSWORD PROTECTED:
-\`\`\`json
-{
-  "purpose": "Read password-protected PDF",
-  "code": "progress('Opening encrypted PDF...'); const pdf = await pdfReader({ filePath: 'secure.pdf', password: 'secret123' }); return { text: pdf.text, pages: pdf.totalPages };"
-}
-\`\`\`
+// Read password-protected PDF
+progress('Opening encrypted PDF...');
+const secure = await pdfReader({ filePath: 'secure.pdf', password: 'secret123' });
+return { text: secure.text, pages: secure.totalPages };
 
-#### 3. PDF READER - LIMITED PAGES:
-\`\`\`json
-{
-  "purpose": "Preview first 3 pages of PDF",
-  "code": "progress('Reading preview...'); const pdf = await pdfReader({ filePath: 'report.pdf', maxPages: 3 }); return { preview: pdf.text, pagesRead: pdf.totalPages };"
-}
-\`\`\`
+// Preview first 3 pages
+progress('Reading preview...');
+const preview = await pdfReader({ filePath: 'report.pdf', maxPages: 3 });
+return { preview: preview.text, pagesRead: preview.totalPages };
 
-#### 4. PDF READER - BATCH PROCESS PDFs:
-\`\`\`json
-{
-  "purpose": "Extract text from all PDF files",
-  "code": "const files = await file({ action: 'list' }); const pdfs = files.filter(f => f.name.endsWith('.pdf')); const results = []; for (const pdf of pdfs) { progress(\`Processing \${pdf.name}\`); const content = await pdfReader({ filePath: pdf.name }); results.push({ file: pdf.name, pages: content.totalPages, textLength: content.text.length, preview: content.text.substring(0, 200) }); } return { processed: results.length, results };"
+// Batch process all PDFs
+const files = await file({ action: 'list' });
+const pdfs = files.filter(f => f.name.endsWith('.pdf'));
+const results = [];
+for (const pdf of pdfs) {
+  progress(\`Processing \${pdf.name}\`);
+  const content = await pdfReader({ filePath: pdf.name });
+  results.push({ file: pdf.name, pages: content.totalPages, textLength: content.text.length, preview: content.text.substring(0, 200) });
 }
+return { processed: results.length, results };
 \`\`\``
 };
 

@@ -121,6 +121,7 @@ export class WSServer extends WSEventEmitter {
   private heartbeats = new Map<ServerWebSocket, NodeJS.Timeout>();
   private messagePersistence: MessagePersistence;
   private streamingManager: StreamingManager;
+  private processingConversations = new Set<string>(); // Track processing per conversation (not per connection)
 
   constructor(options: WSServerOptions = {}) {
     super();
@@ -534,16 +535,16 @@ export class WSServer extends WSEventEmitter {
       return;
     }
 
-    // Check if already processing a message for this connection
-    if (connectionInfo.isProcessing) {
+    // Check if already processing a message for this conversation
+    if (this.processingConversations.has(connectionInfo.convId)) {
       console.log(`[UserMessage] Already processing a message for convId: ${connectionInfo.convId}, ignoring duplicate`);
       return;
     }
 
     const userData = message.data as UserMessageData;
 
-    // Mark as processing
-    connectionInfo.isProcessing = true;
+    // Mark conversation as processing
+    this.processingConversations.add(connectionInfo.convId);
 
     // Process message asynchronously without blocking
     this.processUserMessageAsync(ws, connectionInfo, message, userData)
@@ -553,7 +554,7 @@ export class WSServer extends WSEventEmitter {
       })
       .finally(() => {
         // Clear processing flag when done
-        connectionInfo.isProcessing = false;
+        this.processingConversations.delete(connectionInfo.convId);
       });
   }
 
@@ -684,12 +685,6 @@ export class WSServer extends WSEventEmitter {
         );
       }
 
-      // Mark stream as complete in streaming manager
-      this.streamingManager.completeStream(
-        connectionInfo.convId,
-        assistantMsgId
-      );
-
       // Get conversation info to retrieve token usage
       const convInfo = await getConversationInfo(
         connectionInfo.convId,
@@ -791,6 +786,13 @@ export class WSServer extends WSEventEmitter {
       );
       console.log(
         `[Backend Complete] Verification: Saved history has ${savedHistory.length} messages`
+      );
+
+      // FIX: Mark stream as complete AFTER broadcasting completion and saving history
+      // This prevents sendAccumulatedChunks from sending stale/incomplete data to new connections
+      this.streamingManager.completeStream(
+        connectionInfo.convId,
+        assistantMsgId
       );
 
       // Check if compaction is needed (automatic)
@@ -942,7 +944,7 @@ export class WSServer extends WSEventEmitter {
             delete (connectionInfo as any).assistantMsgId;
 
             // Clear processing flag to allow new messages
-            connectionInfo.isProcessing = false;
+            this.processingConversations.delete(connectionInfo.convId);
 
             this.sendToWebSocket(ws, {
               type: "control_response",
@@ -1414,5 +1416,4 @@ interface ConnectionInfo {
   messageCount: number;
   isAlive: boolean;
   conversation?: Conversation;
-  isProcessing?: boolean; // Track if a message is currently being processed
 }

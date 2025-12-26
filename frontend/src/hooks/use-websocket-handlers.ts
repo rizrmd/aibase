@@ -203,8 +203,12 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk-Accumulated] Returning ${updatedMessages.length} messages`
               );
-              // Add thinking indicator back (setInterval will update the time)
-              return thinkingMsg ? [...updatedMessages, thinkingMsg] : updatedMessages;
+              // FIX: Only add thinking indicator if one doesn't already exist in the result
+              // This prevents duplicates when multiple setMessages calls race
+              const hasThinkingIndicator = updatedMessages.some((m) => "isThinking" in m && m.isThinking);
+              return !hasThinkingIndicator && thinkingMsg
+                ? [...updatedMessages, thinkingMsg]
+                : updatedMessages;
             } else {
               // Create new message with accumulated content
               console.log(
@@ -232,8 +236,11 @@ export function useWebSocketHandlers({
                 } messages (added new)`
               );
               const resultArray = [...prev, newMessage];
-              // Add thinking indicator back (setInterval will update the time)
-              return thinkingMsg ? [...resultArray, thinkingMsg] : resultArray;
+              // FIX: Only add thinking indicator if one doesn't already exist in the result
+              const hasThinkingIndicator = resultArray.some((m) => "isThinking" in m && m.isThinking);
+              return !hasThinkingIndicator && thinkingMsg
+                ? [...resultArray, thinkingMsg]
+                : resultArray;
             }
           } else {
             // Real-time chunk - check if message already exists in array
@@ -296,8 +303,11 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk] Returning new array with ${newArray.length} messages`
               );
-              // Add thinking indicator back (setInterval will update the time)
-              const finalArray = thinkingMsg ? [...newArray, thinkingMsg] : newArray;
+              // FIX: Only add thinking indicator if one doesn't already exist in the result
+              const hasThinkingIndicator = newArray.some((m) => "isThinking" in m && m.isThinking);
+              const finalArray = !hasThinkingIndicator && thinkingMsg
+                ? [...newArray, thinkingMsg]
+                : newArray;
               console.log(`[Chunk] Final array has ${finalArray.length} messages (with thinking: ${!!thinkingMsg})`);
               return finalArray;
             } else {
@@ -390,8 +400,11 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk] Returning updated array with ${updatedArray.length} messages`
               );
-              // Add thinking indicator back (setInterval will update the time)
-              return thinkingMsg ? [...updatedArray, thinkingMsg] : updatedArray;
+              // FIX: Only add thinking indicator if one doesn't already exist in the result
+              const hasThinkingIndicator = updatedArray.some((m) => "isThinking" in m && m.isThinking);
+              return !hasThinkingIndicator && thinkingMsg
+                ? [...updatedArray, thinkingMsg]
+                : updatedArray;
             }
           }
         });
@@ -453,89 +466,93 @@ export function useWebSocketHandlers({
         return;
       }
 
-      setMessages((prevMessages) => {
-        // Remove thinking indicator when completion arrives
-        const prev = prevMessages.filter((m) => !m.isThinking);
-        console.log(
-          `[Complete] Processing completion for message ${data.messageId} (${fullText.length} chars, accumulated: ${data.isAccumulated})`
-        );
-
-        // Try to update message by ID
-        const messageIndex = prev.findIndex((m) => m.id === data.messageId);
-
-        if (messageIndex !== -1) {
-          // Message already exists from streaming chunks
-          const existingMessage = prev[messageIndex];
+      // Use flushSync for consistency with handleLLMChunk and to prevent race conditions
+      flushSync(() => {
+        setMessages((prevMessages) => {
           console.log(
-            `[Complete] Message ${data.messageId} already exists with ${existingMessage.content.length} chars from streaming`
-          );
-          console.log(
-            `[Complete] Backend fullText has ${fullText.length} chars`
+            `[Complete] Processing completion for message ${data.messageId} (${fullText.length} chars, accumulated: ${data.isAccumulated})`
           );
 
-          // Always use fullText from backend on completion as it's authoritative
-          // The streamed content is just a preview and may have issues
-          console.log(
-            `[Complete] Replacing message content with fullText from backend`
-          );
-          console.log(
-            `[Complete] Streamed content length: ${existingMessage.content.length}, Backend fullText length: ${fullText.length}`
-          );
+          // Find message to update in the full array (before removing thinking indicator)
+          const messageIndex = prevMessages.findIndex((m) => m.id === data.messageId && !m.isThinking);
 
-          // Preserve existing toolInvocations first, then merge with any new ones
-          const existingToolInvocations = existingMessage.toolInvocations || [];
-          const newToolInvocations = currentToolInvocationsRef.current.size > 0
-            ? Array.from(currentToolInvocationsRef.current.values())
-            : [];
+          if (messageIndex !== -1) {
+            // Message already exists from streaming chunks
+            const existingMessage = prevMessages[messageIndex];
+            console.log(
+              `[Complete] Message ${data.messageId} already exists with ${existingMessage.content.length} chars from streaming`
+            );
+            console.log(
+              `[Complete] Backend fullText has ${fullText.length} chars`
+            );
 
-          // Merge: create a map of existing tools, update/add new ones
-          const toolInvocationsMap = new Map();
-          existingToolInvocations.forEach((inv: any) => {
-            toolInvocationsMap.set(inv.toolCallId, inv);
-          });
-          newToolInvocations.forEach((inv: any) => {
-            toolInvocationsMap.set(inv.toolCallId, inv);
-          });
+            // Use fullText from backend as authoritative source
+            // If lengths don't match, there's a backend bug that needs to be fixed
+            if (existingMessage.content.length !== fullText.length) {
+              console.warn(
+                `[Complete] WARNING: Streamed content (${existingMessage.content.length} chars) != backend fullText (${fullText.length} chars) - backend may have sent incomplete data`
+              );
+            }
 
-          const mergedToolInvocations = Array.from(toolInvocationsMap.values());
+            // Preserve existing toolInvocations first, then merge with any new ones
+            const existingToolInvocations = existingMessage.toolInvocations || [];
+            const newToolInvocations = currentToolInvocationsRef.current.size > 0
+              ? Array.from(currentToolInvocationsRef.current.values())
+              : [];
 
-          return prev.map((msg, idx) =>
-            idx === messageIndex
-              ? {
+            // Merge: create a map of existing tools, update/add new ones
+            const toolInvocationsMap = new Map();
+            existingToolInvocations.forEach((inv: any) => {
+              toolInvocationsMap.set(inv.toolCallId, inv);
+            });
+            newToolInvocations.forEach((inv: any) => {
+              toolInvocationsMap.set(inv.toolCallId, inv);
+            });
+
+            const mergedToolInvocations = Array.from(toolInvocationsMap.values());
+
+            // Update message AND remove thinking indicator in one atomic render
+            return prevMessages.map((msg, idx) => {
+              if (idx === messageIndex) {
+                return {
                   ...msg,
                   content: fullText,
                   completionTime: completionTimeSeconds,
                   ...(data.thinkingDuration !== undefined && { thinkingDuration: data.thinkingDuration }),
                   ...(data.tokenUsage && { tokenUsage: data.tokenUsage }),
                   ...(mergedToolInvocations.length > 0 && { toolInvocations: mergedToolInvocations }),
-                }
-              : msg
-          );
-        }
+                };
+              }
+              // Remove thinking indicator in the same render
+              return msg.isThinking ? (undefined as any) : msg;
+            }).filter(Boolean);
+          }
 
-        // Message not found - create one with fullText
-        console.warn(
-          `[Complete] Message ${data.messageId} not found, creating new message with fullText`
-        );
-        console.warn(
-          `[Complete] Available message IDs in prev:`,
-          prev.map((m) => m.id)
-        );
-        const toolInvocations =
-          currentToolInvocationsRef.current.size > 0
-            ? Array.from(currentToolInvocationsRef.current.values())
-            : undefined;
-        const newMessage: Message = {
-          id: data.messageId,
-          role: "assistant",
-          content: fullText,
-          createdAt: new Date(),
-          completionTime: completionTimeSeconds,
-          ...(data.thinkingDuration !== undefined && { thinkingDuration: data.thinkingDuration }),
-          ...(data.tokenUsage && { tokenUsage: data.tokenUsage }),
-          ...(toolInvocations && toolInvocations.length > 0 && { toolInvocations }),
-        };
-        return [...prev, newMessage];
+          // Message not found - create one with fullText
+          console.warn(
+            `[Complete] Message ${data.messageId} not found, creating new message with fullText`
+          );
+          console.warn(
+            `[Complete] Available message IDs in prevMessages:`,
+            prevMessages.map((m) => m.id)
+          );
+          const toolInvocations =
+            currentToolInvocationsRef.current.size > 0
+              ? Array.from(currentToolInvocationsRef.current.values())
+              : undefined;
+          const newMessage: Message = {
+            id: data.messageId,
+            role: "assistant",
+            content: fullText,
+            createdAt: new Date(),
+            completionTime: completionTimeSeconds,
+            ...(data.thinkingDuration !== undefined && { thinkingDuration: data.thinkingDuration }),
+            ...(data.tokenUsage && { tokenUsage: data.tokenUsage }),
+            ...(toolInvocations && toolInvocations.length > 0 && { toolInvocations }),
+          };
+          // Add new message and remove thinking indicator in one atomic render
+          return [...prevMessages.filter((m) => !m.isThinking), newMessage];
+        });
       });
 
       // Clear refs after completion
@@ -1029,6 +1046,21 @@ export function useWebSocketHandlers({
       // Store tool invocation with appropriate state
       // Merge with existing invocation to preserve args (like code) across state changes
       const existingInvocation = currentToolInvocationsRef.current.get(data.toolCallId);
+
+      // Track timing: store timestamp on first call, calculate duration on completion
+      let timestamp = existingInvocation?.timestamp;
+      let duration = existingInvocation?.duration;
+
+      if (!timestamp) {
+        // First time seeing this tool - record start time
+        timestamp = Date.now();
+      }
+
+      if (state === "result" || state === "error") {
+        // Tool completed - calculate duration
+        duration = timestamp ? Math.round((Date.now() - timestamp) / 1000) : undefined;
+      }
+
       const toolInvocation = {
         state,
         toolCallId: data.toolCallId,
@@ -1036,12 +1068,25 @@ export function useWebSocketHandlers({
         args: { ...existingInvocation?.args, ...data.args }, // Preserve existing args
         result: data.result,
         error: data.error,
+        timestamp,
+        duration,
       };
       currentToolInvocationsRef.current.set(data.toolCallId, toolInvocation);
+
+      // Check if any tools are currently executing
+      const hasExecutingTools = Array.from(currentToolInvocationsRef.current.values())
+        .some(inv => inv.state === "executing" || inv.state === "call");
+
+      // If tools are executing, ensure there's a thinking indicator with tool status
+      if (hasExecutingTools && !thinkingStartTimeRef.current) {
+        thinkingStartTimeRef.current = Date.now();
+      }
+
       console.log(
         "[Tool Call] Current tool invocations size:",
         currentToolInvocationsRef.current.size
       );
+      console.log("[Tool Call] Has executing tools:", hasExecutingTools);
 
       // Add tool to parts array in arrival order (or update existing) - create new array for React
       const existingPartIndex = currentPartsRef.current.findIndex(
@@ -1080,12 +1125,39 @@ export function useWebSocketHandlers({
           ? [...currentPartsRef.current]
           : undefined;
 
+        // Check if any tools are currently executing
+        const hasExecutingTools = toolInvocations.some(
+          inv => inv.state === "executing" || inv.state === "call"
+        );
+
         console.log("[Tool Call] Tool invocations array:", toolInvocations);
         console.log("[Tool Call] Parts array:", parts);
+        console.log("[Tool Call] Has executing tools:", hasExecutingTools);
 
         // Separate thinking indicator from other messages
         const thinkingMsg = prev.find((m) => m.isThinking);
         const otherMessages = prev.filter((m) => !m.isThinking);
+
+        // If tools are executing, ensure we have a thinking indicator with updated text
+        let thinkingIndicator = thinkingMsg;
+        if (hasExecutingTools) {
+          // Get the first executing tool name for display
+          const executingTool = toolInvocations.find(
+            inv => inv.state === "executing" || inv.state === "call"
+          );
+          const toolName = executingTool?.toolName || "tool";
+
+          // Create or update thinking indicator for tool execution
+          thinkingIndicator = {
+            id: `thinking_${Date.now()}`,
+            role: "assistant",
+            content: `Running ${toolName}...`,
+            createdAt: new Date(),
+            isThinking: true,
+          };
+
+          console.log("[Tool Call] Creating tool thinking indicator:", thinkingIndicator.content);
+        }
 
         // Look for message with matching ID if provided
         if (data.assistantMessageId) {
@@ -1110,7 +1182,11 @@ export function useWebSocketHandlers({
                 ? { ...msg, toolInvocations, ...(parts && { parts }) }
                 : msg
             );
-            return thinkingMsg ? [...updated, thinkingMsg] : updated;
+            // FIX: Only add thinking indicator if one doesn't already exist in the result
+            const hasThinkingIndicator = updated.some((m) => "isThinking" in m && m.isThinking);
+            return !hasThinkingIndicator && thinkingIndicator
+              ? [...updated, thinkingIndicator]
+              : updated;
           }
         }
 
@@ -1128,7 +1204,11 @@ export function useWebSocketHandlers({
               ? { ...msg, toolInvocations, ...(parts && { parts }) }
               : msg
           );
-          return thinkingMsg ? [...updated, thinkingMsg] : updated;
+          // FIX: Only add thinking indicator if one doesn't already exist in the result
+          const hasThinkingIndicator = updated.some((m) => "isThinking" in m && m.isThinking);
+          return !hasThinkingIndicator && thinkingIndicator
+            ? [...updated, thinkingIndicator]
+            : updated;
         }
 
         // Check if last non-thinking message is assistant
@@ -1143,7 +1223,11 @@ export function useWebSocketHandlers({
               ? { ...msg, toolInvocations, ...(parts && { parts }) }
               : msg
           );
-          return thinkingMsg ? [...updated, thinkingMsg] : updated;
+          // FIX: Only add thinking indicator if one doesn't already exist in the result
+          const hasThinkingIndicator = updated.some((m) => "isThinking" in m && m.isThinking);
+          return !hasThinkingIndicator && thinkingIndicator
+            ? [...updated, thinkingIndicator]
+            : updated;
         }
 
         // Otherwise, create a placeholder assistant message using the ID from backend
@@ -1161,7 +1245,11 @@ export function useWebSocketHandlers({
           toolInvocations,
         };
         const updated = [...otherMessages, newMessage];
-        return thinkingMsg ? [...updated, thinkingMsg] : updated;
+        // FIX: Only add thinking indicator if one doesn't already exist in the result
+        const hasThinkingIndicator = updated.some((m) => "isThinking" in m && m.isThinking);
+        return !hasThinkingIndicator && thinkingIndicator
+          ? [...updated, thinkingIndicator]
+          : updated;
       });
     };
 
@@ -1218,11 +1306,48 @@ export function useWebSocketHandlers({
             const parts = currentPartsRef.current.length > 0
               ? [...currentPartsRef.current]
               : undefined;
-            return prev.map((msg, idx) =>
-              idx === prev.length - 1
-                ? { ...msg, toolInvocations, ...(parts && { parts }) }
-                : msg
+
+            // Check if any tools are still executing
+            const hasExecutingTools = toolInvocations.some(
+              inv => inv.state === "executing" || inv.state === "call"
             );
+
+            console.log("[Tool Result] Has executing tools after result:", hasExecutingTools);
+
+            // If no tools are executing, remove thinking indicator. If tools are still executing, update it.
+            if (hasExecutingTools) {
+              // Get the first executing tool name for display
+              const executingTool = toolInvocations.find(
+                inv => inv.state === "executing" || inv.state === "call"
+              );
+              const toolName = executingTool?.toolName || "tool";
+
+              const thinkingIndicator = {
+                id: `thinking_${Date.now()}`,
+                role: "assistant",
+                content: `Running ${toolName}...`,
+                createdAt: new Date(),
+                isThinking: true,
+              };
+
+              // Update message and keep thinking indicator
+              const updated = prev.map((msg, idx) =>
+                idx === prev.length - 1
+                  ? { ...msg, toolInvocations, ...(parts && { parts }) }
+                  : msg
+              );
+              const hasThinking = updated.some((m) => m.isThinking);
+              return !hasThinking ? [...updated, thinkingIndicator] : updated;
+            } else {
+              // All tools done - remove thinking indicator and update message
+              return prev.map((msg, idx) => {
+                if (idx === prev.length - 1) {
+                  return { ...msg, toolInvocations, ...(parts && { parts }) };
+                }
+                // Remove thinking indicator
+                return msg.isThinking ? (undefined as any) : msg;
+              }).filter(Boolean);
+            }
           }
           return prev;
         });

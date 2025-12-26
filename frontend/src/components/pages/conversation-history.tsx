@@ -106,7 +106,6 @@ export function ConversationHistoryPage() {
           onClick={handleNewConversation}
           variant="outline"
           size="sm"
-          confirmMessage="Are you sure you want to start a new conversation? This will clear the current chat and todos."
           title="Start a new conversation"
         />
       </PageActionGroup>

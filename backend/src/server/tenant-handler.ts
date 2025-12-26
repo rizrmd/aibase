@@ -6,12 +6,14 @@ import { TenantStorage } from "../storage/tenant-storage";
 import { authenticateRequest } from "./auth-handler";
 import { UserStorage } from "../storage/user-storage";
 import * as fs from 'fs/promises';
+import { createLogger } from "../utils/logger";
 
+const logger = createLogger("Tenant");
 const tenantStorage = TenantStorage.getInstance();
 const userStorage = UserStorage.getInstance();
 
 // Initialize tenant storage
-tenantStorage.initialize().catch(console.error);
+tenantStorage.initialize().catch((error) => logger.error({ error }, "Failed to initialize tenant storage"));
 
 /**
  * GET /api/tenants
@@ -32,7 +34,7 @@ export async function handleGetTenants(req: Request): Promise<Response> {
     const tenants = tenantStorage.getAll();
     return Response.json({ tenants });
   } catch (error: any) {
-    console.error("[Tenant] Get tenants error:", error);
+    logger.error({ error }, "Get tenants error");
     return Response.json(
       { error: error.message || "Failed to get tenants" },
       { status: 500 }
@@ -70,7 +72,7 @@ export async function handleGetTenant(req: Request, tenantId: string): Promise<R
 
     return Response.json({ tenant });
   } catch (error: any) {
-    console.error("[Tenant] Get tenant error:", error);
+    logger.error({ error }, "Get tenant error");
     return Response.json(
       { error: error.message || "Failed to get tenant" },
       { status: 500 }
@@ -110,7 +112,7 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
 
     return Response.json({ tenant }, { status: 201 });
   } catch (error: any) {
-    console.error("[Tenant] Create tenant error:", error);
+    logger.error({ error }, "Create tenant error");
     return Response.json(
       { error: error.message || "Failed to create tenant" },
       { status: 400 }
@@ -152,7 +154,7 @@ export async function handleUpdateTenant(req: Request, tenantId: string): Promis
 
     return Response.json({ tenant });
   } catch (error: any) {
-    console.error("[Tenant] Update tenant error:", error);
+    logger.error({ error }, "Update tenant error");
     return Response.json(
       { error: error.message || "Failed to update tenant" },
       { status: 400 }
@@ -189,7 +191,7 @@ export async function handleDeleteTenant(req: Request, tenantId: string): Promis
 
     return Response.json({ success: true });
   } catch (error: any) {
-    console.error("[Tenant] Delete tenant error:", error);
+    logger.error({ error }, "Delete tenant error");
     return Response.json(
       { error: error.message || "Failed to delete tenant" },
       { status: 400 }
@@ -255,10 +257,10 @@ export async function handleUploadTenantLogo(req: Request, tenantId: string): Pr
     // Update tenant has_logo flag
     await tenantStorage.setHasLogo(tenantIdNum, true);
 
-    console.log('[Tenant] Logo uploaded for tenant:', tenantIdNum);
+    logger.info({ tenantId: tenantIdNum }, "Logo uploaded");
     return Response.json({ success: true });
   } catch (error: any) {
-    console.error("[Tenant] Upload logo error:", error);
+    logger.error({ error }, "Upload logo error");
     return Response.json(
       { error: error.message || "Failed to upload logo" },
       { status: 500 }
@@ -298,7 +300,7 @@ export async function handleGetTenantLogo(req: Request, tenantId: string): Promi
       },
     });
   } catch (error: any) {
-    console.error("[Tenant] Get logo error:", error);
+    logger.error({ error }, "Get logo error");
     return Response.json(
       { error: error.message || "Failed to get logo" },
       { status: 500 }
@@ -336,10 +338,10 @@ export async function handleDeleteTenantLogo(req: Request, tenantId: string): Pr
     // Delete logo
     await tenantStorage.deleteLogo(tenantIdNum);
 
-    console.log('[Tenant] Logo deleted for tenant:', tenantIdNum);
+    logger.info({ tenantId: tenantIdNum }, "Logo deleted");
     return Response.json({ success: true });
   } catch (error: any) {
-    console.error("[Tenant] Delete logo error:", error);
+    logger.error({ error }, "Delete logo error");
     return Response.json(
       { error: error.message || "Failed to delete logo" },
       { status: 500 }
@@ -377,7 +379,7 @@ export async function handleGetTenantUsers(req: Request, tenantId: string): Prom
     const users = userStorage.getByTenantId(tenantIdNum);
     return Response.json({ users });
   } catch (error: any) {
-    console.error("[Tenant] Get tenant users error:", error);
+    logger.error({ error }, "Get tenant users error");
     return Response.json(
       { error: error.message || "Failed to get tenant users" },
       { status: 500 }
@@ -436,10 +438,10 @@ export async function handleCreateTenantUser(req: Request, tenantId: string): Pr
     // Remove password_hash from response
     const { password_hash: _, ...userWithoutPassword } = user;
 
-    console.log('[Tenant] User created for tenant:', tenantIdNum, user.username);
+    logger.info({ tenantId: tenantIdNum, username: user.username }, 'User created for tenant');
     return Response.json({ user: userWithoutPassword }, { status: 201 });
   } catch (error: any) {
-    console.error("[Tenant] Create tenant user error:", error);
+    logger.error({ error }, "Create tenant user error");
     return Response.json(
       { error: error.message || "Failed to create user" },
       { status: 400 }
@@ -515,10 +517,10 @@ export async function handleUpdateTenantUser(req: Request, tenantId: string, use
     // Remove password_hash from response
     const { password_hash: _, ...userWithoutPassword } = user;
 
-    console.log('[Tenant] User updated for tenant:', tenantIdNum, user.username);
+    logger.info({ tenantId: tenantIdNum, username: user.username }, 'User updated for tenant');
     return Response.json({ user: userWithoutPassword });
   } catch (error: any) {
-    console.error("[Tenant] Update tenant user error:", error);
+    logger.error({ error }, "Update tenant user error");
     return Response.json(
       { error: error.message || "Failed to update user" },
       { status: 400 }
@@ -571,10 +573,10 @@ export async function handleDeleteTenantUser(req: Request, tenantId: string, use
       return Response.json({ error: "Failed to delete user" }, { status: 500 });
     }
 
-    console.log('[Tenant] User deleted from tenant:', tenantIdNum);
+    logger.info({ tenantId: tenantIdNum }, 'User deleted from tenant');
     return Response.json({ success: true });
   } catch (error: any) {
-    console.error("[Tenant] Delete tenant user error:", error);
+    logger.error({ error }, "Delete tenant user error");
     return Response.json(
       { error: error.message || "Failed to delete user" },
       { status: 500 }

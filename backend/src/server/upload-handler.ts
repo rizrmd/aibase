@@ -4,6 +4,9 @@
  */
 
 import { FileStorage } from '../storage/file-storage';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('Upload');
 
 export interface UploadedFileInfo {
   id: string;
@@ -70,7 +73,11 @@ export async function handleFileUpload(req: Request): Promise<Response> {
         );
       }
 
-      console.log(`[Upload] Processing file: ${file.name} (${file.size} bytes, ${file.type})`);
+      logger.info({
+        file: file.name,
+        size: file.size,
+        type: file.type
+      }, 'Processing file');
 
       // Convert File to Buffer
       const arrayBuffer = await file.arrayBuffer();
@@ -97,7 +104,7 @@ export async function handleFileUpload(req: Request): Promise<Response> {
         uploadedAt: storedFile.uploadedAt,
       });
 
-      console.log(`[Upload] File saved: ${storedFile.path}`);
+      logger.info({ path: storedFile.path }, 'File saved');
     }
 
     return Response.json({
@@ -106,7 +113,7 @@ export async function handleFileUpload(req: Request): Promise<Response> {
     });
 
   } catch (error: any) {
-    console.error('[Upload] Error:', error);
+    logger.error({ error }, 'Upload error');
     return Response.json(
       { success: false, error: error.message || 'Upload failed' },
       { status: 500 }
@@ -146,7 +153,7 @@ export async function handleFileDownload(req: Request): Promise<Response> {
     });
 
   } catch (error: any) {
-    console.error('[Download] Error:', error);
+    logger.error({ error }, 'Download error');
     if (error.code === 'ENOENT') {
       return new Response('File not found', { status: 404 });
     }

@@ -29,18 +29,16 @@ Use webSearch() to search the web for information, or imageSearch() to search fo
 
 #### EXAMPLES
 
-\`\`\`json
-{
-  "purpose": "Search for latest AI developments",
-  "code": "progress('Searching web...'); const results = await webSearch({ search_query: 'latest AI developments 2024', count: 5, freshness: 'pm' }); return { total: results.total, results: results.results.map(r => ({ title: r.title, url: r.url, description: r.description })) };"
-}
-\`\`\`
+\`\`\`typescript
+// Web search with freshness filter
+progress('Searching web...');
+const results = await webSearch({ search_query: 'latest AI developments 2024', count: 5, freshness: 'pm' });
+return { total: results.total, results: results.results.map(r => ({ title: r.title, url: r.url, description: r.description })) };
 
-\`\`\`json
-{
-  "purpose": "Search for cat images",
-  "code": "progress('Searching for images...'); const results = await imageSearch({ search_query: 'cute cats', count: 10 }); return { total: results.total, images: results.results.map(img => ({ title: img.title, url: img.url, thumbnail: img.thumbnail })) };"
-}
+// Image search
+progress('Searching for images...');
+const images = await imageSearch({ search_query: 'cute cats', count: 10 });
+return { total: images.total, images: images.results.map(img => ({ title: img.title, url: img.url, thumbnail: img.thumbnail })) };
 \`\`\``;
 };
 

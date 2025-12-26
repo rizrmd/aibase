@@ -12,44 +12,34 @@ Use duckdb() for querying CSV, Excel, Parquet, and JSON files using SQL.
 
 #### EXAMPLES
 
-#### 1. DUCKDB SQL QUERIES:
-\`\`\`json
-{
-  "purpose": "Analyze sales data from CSV",
-  "code": "progress('Querying sales data...'); const result = await duckdb({ query: \\"SELECT category, SUM(amount) as total FROM 'sales.csv' GROUP BY category ORDER BY total DESC\\" }); return { categories: result.rowCount, data: result.data };"
-}
-\`\`\`
+\`\`\`typescript
+// Query CSV file
+progress('Querying sales data...');
+const result = await duckdb({
+  query: "SELECT category, SUM(amount) as total FROM 'sales.csv' GROUP BY category ORDER BY total DESC"
+});
+return { categories: result.rowCount, data: result.data };
 
-#### 2. DUCKDB JOIN MULTIPLE FILES:
-\`\`\`json
-{
-  "purpose": "Join customer and order data",
-  "code": "progress('Joining data files...'); const result = await duckdb({ query: \\"SELECT c.name, c.email, COUNT(o.id) as orders FROM 'customers.csv' c LEFT JOIN 'orders.parquet' o ON c.id = o.customer_id GROUP BY c.id, c.name, c.email HAVING orders > 5\\" }); return { customers: result.rowCount, topCustomers: result.data.slice(0, 10) };"
-}
-\`\`\`
+// Join multiple files
+progress('Joining data files...');
+const joined = await duckdb({
+  query: "SELECT c.name, c.email, COUNT(o.id) as orders FROM 'customers.csv' c LEFT JOIN 'orders.parquet' o ON c.id = o.customer_id GROUP BY c.id, c.name, c.email HAVING orders > 5"
+});
+return { customers: joined.rowCount, topCustomers: joined.data.slice(0, 10) };
 
-#### 3. DUCKDB READ EXCEL FILES:
-\`\`\`json
-{
-  "purpose": "Analyze Excel data with specific sheet and range",
-  "code": "progress('Reading Excel file...'); const result = await duckdb({ query: \\"SELECT * FROM read_xlsx('report.xlsx', sheet='Sales', header=true, all_varchar=true, range='A1:Z1000') WHERE revenue IS NOT NULL LIMIT 20\\" }); return { rows: result.rowCount, topSales: result.data };"
-}
-\`\`\`
+// Read Excel file (range required for multi-column files!)
+progress('Reading Excel file...');
+const excel = await duckdb({
+  query: "SELECT * FROM read_xlsx('report.xlsx', sheet='Sales', header=true, all_varchar=true, range='A1:Z1000') WHERE revenue IS NOT NULL LIMIT 20"
+});
+return { rows: excel.rowCount, topSales: excel.data };
 
-#### 4. DUCKDB EXCEL SUMMARY:
-\`\`\`json
-{
-  "purpose": "Summarize Excel data by category",
-  "code": "progress('Analyzing Excel data...'); const summary = await duckdb({ query: \\"SELECT category, COUNT(*) as count, AVG(CAST(amount AS DOUBLE)) as avg_amount, SUM(CAST(amount AS DOUBLE)) as total FROM read_xlsx('data.xlsx', header=true, all_varchar=true, range='A1:F1000') WHERE category IS NOT NULL GROUP BY category ORDER BY total DESC\\" }); return { categories: summary.rowCount, breakdown: summary.data };"
-}
-\`\`\`
-
-#### 5. DUCKDB EXCEL EXPLORE STRUCTURE:
-\`\`\`json
-{
-  "purpose": "Explore Excel file structure and preview data",
-  "code": "progress('Reading Excel structure...'); const structure = await duckdb({ query: \\"DESCRIBE SELECT * FROM read_xlsx('data.xlsx', header=false, all_varchar=true, range='A1:Z100')\\" }); progress(\`Found \${structure.rowCount} columns\`); const preview = await duckdb({ query: \\"SELECT * FROM read_xlsx('data.xlsx', header=false, all_varchar=true, range='A1:Z10')\\" }); return { columns: structure.data.map(c => c.column_name), totalColumns: structure.rowCount, preview: preview.data };"
-}
+// Excel with aggregation (cast to numeric when needed)
+progress('Analyzing Excel data...');
+const summary = await duckdb({
+  query: "SELECT category, COUNT(*) as count, AVG(CAST(amount AS DOUBLE)) as avg_amount, SUM(CAST(amount AS DOUBLE)) as total FROM read_xlsx('data.xlsx', header=true, all_varchar=true, range='A1:F1000') WHERE category IS NOT NULL GROUP BY category ORDER BY total DESC"
+});
+return { categories: summary.rowCount, breakdown: summary.data };
 \`\`\``
 };
 

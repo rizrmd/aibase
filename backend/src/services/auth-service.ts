@@ -5,6 +5,9 @@
 
 import { UserStorage, type User, type CreateUserData, type UserRole } from '../storage/user-storage';
 import { SessionStorage, type Session } from '../storage/session-storage';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('AuthService');
 
 export interface RegisterData {
   email: string;
@@ -53,7 +56,7 @@ export class AuthService {
       this.sessionStorage.cleanupExpired();
     }, 60 * 60 * 1000);
 
-    console.log('[AuthService] Service initialized');
+    logger.info('Service initialized');
   }
 
   /**

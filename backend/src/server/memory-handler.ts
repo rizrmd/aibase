@@ -1,5 +1,8 @@
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("Memory");
 
 export interface MemoryStore {
   [category: string]: {
@@ -74,7 +77,7 @@ export async function handleGetMemory(req: Request): Promise<Response> {
       data: memory,
     });
   } catch (error) {
-    console.error("Error getting memory:", error);
+    logger.error({ error }, "Error getting memory");
     return Response.json(
       {
         success: false,
@@ -131,7 +134,7 @@ export async function handleSetMemory(req: Request): Promise<Response> {
       oldValue,
     });
   } catch (error) {
-    console.error("Error setting memory:", error);
+    logger.error({ error }, "Error setting memory");
     return Response.json(
       {
         success: false,
@@ -220,7 +223,7 @@ export async function handleDeleteMemory(req: Request): Promise<Response> {
       });
     }
   } catch (error) {
-    console.error("Error deleting memory:", error);
+    logger.error({ error }, "Error deleting memory");
     return Response.json(
       {
         success: false,

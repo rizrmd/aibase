@@ -5,6 +5,9 @@
 
 import { ProjectStorage } from "../storage/project-storage";
 import { authenticateRequest } from "./auth-handler";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("Embed");
 
 const projectStorage = ProjectStorage.getInstance();
 
@@ -54,7 +57,7 @@ export async function handleGetEmbedInfo(req: Request): Promise<Response> {
       },
     });
   } catch (error) {
-    console.error("Error getting embed info:", error);
+    logger.error({ error }, "Error getting embed info");
     return Response.json(
       {
         success: false,
@@ -86,7 +89,7 @@ export async function handleEnableEmbed(req: Request, projectId: string): Promis
       data: { embedToken },
     });
   } catch (error) {
-    console.error("Error enabling embed:", error);
+    logger.error({ error }, "Error enabling embed");
     return Response.json(
       {
         success: false,
@@ -118,7 +121,7 @@ export async function handleDisableEmbed(req: Request, projectId: string): Promi
       data: { message: "Embedding disabled successfully" },
     });
   } catch (error) {
-    console.error("Error disabling embed:", error);
+    logger.error({ error }, "Error disabling embed");
     return Response.json(
       {
         success: false,
@@ -150,7 +153,7 @@ export async function handleRegenerateEmbedToken(req: Request, projectId: string
       data: { embedToken },
     });
   } catch (error) {
-    console.error("Error regenerating embed token:", error);
+    logger.error({ error }, "Error regenerating embed token");
     return Response.json(
       {
         success: false,
@@ -193,7 +196,7 @@ export async function handleUpdateEmbedCss(req: Request, projectId: string): Pro
       data: { message: "Custom CSS updated successfully" },
     });
   } catch (error) {
-    console.error("Error updating embed CSS:", error);
+    logger.error({ error }, "Error updating embed CSS");
     return Response.json(
       {
         success: false,
@@ -236,7 +239,7 @@ export async function handleUpdateWelcomeMessage(req: Request, projectId: string
       data: { message: "Welcome message updated successfully" },
     });
   } catch (error) {
-    console.error("Error updating welcome message:", error);
+    logger.error({ error }, "Error updating welcome message");
     return Response.json(
       {
         success: false,
@@ -278,7 +281,7 @@ export async function handleGetEmbedStatus(req: Request, projectId: string): Pro
       },
     });
   } catch (error) {
-    console.error("Error getting embed status:", error);
+    logger.error({ error }, "Error getting embed status");
     return Response.json(
       {
         success: false,

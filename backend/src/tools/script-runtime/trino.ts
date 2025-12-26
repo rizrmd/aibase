@@ -12,28 +12,42 @@ Use trino() for Trino distributed queries.
 
 #### EXAMPLES
 
-#### 1. TRINO QUERY:
-\`\`\`json
-{
-  "purpose": "Query Trino for distributed data analysis",
-  "code": "progress('Querying Trino...'); const result = await trino({ query: 'SELECT region, COUNT(*) as count, SUM(revenue) as total_revenue FROM sales WHERE year = 2024 GROUP BY region ORDER BY total_revenue DESC', serverUrl: 'http://localhost:8080', catalog: 'hive', schema: 'default', username: 'trino' }); progress(\`Found \${result.rowCount} regions\`); return { count: result.rowCount, regions: result.data, stats: result.stats };"
-}
-\`\`\`
+\`\`\`typescript
+// Simple query
+progress('Querying Trino...');
+const result = await trino({
+  query: 'SELECT region, COUNT(*) as count, SUM(revenue) as total_revenue FROM sales WHERE year = 2024 GROUP BY region ORDER BY total_revenue DESC',
+  serverUrl: 'http://localhost:8080',
+  catalog: 'hive',
+  schema: 'default',
+  username: 'trino'
+});
+progress(\`Found \${result.rowCount} regions\`);
+return { count: result.rowCount, regions: result.data, stats: result.stats };
 
-#### 2. TRINO CROSS-CATALOG QUERY:
-\`\`\`json
-{
-  "purpose": "Query across multiple data sources with Trino",
-  "code": "progress('Running cross-catalog query...'); const result = await trino({ query: 'SELECT h.customer_id, h.order_count, p.customer_name FROM hive.sales.order_summary h JOIN postgresql.crm.customers p ON h.customer_id = p.id WHERE h.order_count > 10', serverUrl: 'http://localhost:8080', catalog: 'hive', schema: 'sales', username: 'trino' }); return { customers: result.rowCount, data: result.data };"
-}
-\`\`\`
+// Cross-catalog query
+progress('Running cross-catalog query...');
+const cross = await trino({
+  query: 'SELECT h.customer_id, h.order_count, p.customer_name FROM hive.sales.order_summary h JOIN postgresql.crm.customers p ON h.customer_id = p.id WHERE h.order_count > 10',
+  serverUrl: 'http://localhost:8080',
+  catalog: 'hive',
+  schema: 'sales',
+  username: 'trino'
+});
+return { customers: cross.rowCount, data: cross.data };
 
-#### 3. TRINO WITH AUTHENTICATION:
-\`\`\`json
-{
-  "purpose": "Query Trino with authentication and custom timeout",
-  "code": "progress('Connecting to secured Trino...'); const result = await trino({ query: 'SELECT date_trunc(\\\\'day\\\\', order_date) as day, COUNT(*) as orders FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL \\\\'30\\\\' DAY GROUP BY 1 ORDER BY 1', serverUrl: 'http://localhost:8080', catalog: 'hive', schema: 'warehouse', username: 'user', password: 'secret', timeout: 60000 }); return { days: result.rowCount, orderTrend: result.data };"
-}
+// Query with authentication and timeout
+progress('Connecting to secured Trino...');
+const secured = await trino({
+  query: "SELECT date_trunc('day', order_date) as day, COUNT(*) as orders FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL '30' DAY GROUP BY 1 ORDER BY 1",
+  serverUrl: 'http://localhost:8080',
+  catalog: 'hive',
+  schema: 'warehouse',
+  username: 'user',
+  password: 'secret',
+  timeout: 60000
+});
+return { days: secured.rowCount, orderTrend: secured.data };
 \`\`\``
 };
 

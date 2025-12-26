@@ -1,5 +1,8 @@
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("Context");
 
 /**
  * Load tool examples from tool definition files
@@ -38,7 +41,7 @@ async function loadToolExamples(): Promise<string> {
 
     return examples.join("\n\n");
   } catch (error) {
-    console.error("Failed to load tool examples:", error);
+    logger.error({ error }, "Failed to load tool examples");
     return "";
   }
 }
@@ -141,7 +144,7 @@ export async function handleGetContext(req: Request): Promise<Response> {
       },
     });
   } catch (error) {
-    console.error("Error getting context:", error);
+    logger.error({ error }, "Error getting context");
     return Response.json(
       {
         success: false,
@@ -165,7 +168,7 @@ export async function handleGetDefaultContext(req: Request): Promise<Response> {
       },
     });
   } catch (error) {
-    console.error("Error getting default context:", error);
+    logger.error({ error }, "Error getting default context");
     return Response.json(
       {
         success: false,
@@ -214,7 +217,7 @@ export async function handleUpdateContext(req: Request): Promise<Response> {
       projectId,
     });
   } catch (error) {
-    console.error("Error updating context:", error);
+    logger.error({ error }, "Error updating context");
     return Response.json(
       {
         success: false,

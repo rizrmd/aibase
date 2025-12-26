@@ -1,10 +1,12 @@
 import { ProjectStorage } from "../storage/project-storage";
 import { authenticateRequest } from "./auth-handler";
+import { createLogger } from "../utils/logger";
 
+const logger = createLogger("Projects");
 const projectStorage = ProjectStorage.getInstance();
 
 // Initialize project storage
-projectStorage.initialize().catch(console.error);
+projectStorage.initialize().catch((error) => logger.error({ error }, "Failed to initialize project storage"));
 
 /**
  * Handle GET /api/projects - Get all projects for the current user
@@ -27,7 +29,7 @@ export async function handleGetProjects(req: Request): Promise<Response> {
       data: { projects },
     });
   } catch (error) {
-    console.error("Error getting projects:", error);
+    logger.error({ error }, "Error getting projects");
     return Response.json(
       {
         success: false,
@@ -82,7 +84,7 @@ export async function handleGetProject(req: Request, projectId: string): Promise
       data: { project },
     });
   } catch (error) {
-    console.error("Error getting project:", error);
+    logger.error({ error }, "Error getting project");
     return Response.json(
       {
         success: false,
@@ -166,7 +168,7 @@ export async function handleCreateProject(req: Request): Promise<Response> {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error creating project:", error);
+    logger.error({ error }, "Error creating project");
     return Response.json(
       {
         success: false,
@@ -261,7 +263,7 @@ export async function handleUpdateProject(req: Request, projectId: string): Prom
       message: "Project updated successfully",
     });
   } catch (error) {
-    console.error("Error updating project:", error);
+    logger.error({ error }, "Error updating project");
 
     // Handle permission errors
     if (error instanceof Error && error.message.includes('owner')) {
@@ -314,7 +316,7 @@ export async function handleDeleteProject(req: Request, projectId: string): Prom
       message: "Project deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting project:", error);
+    logger.error({ error }, "Error deleting project");
 
     // Handle permission errors
     if (error instanceof Error && (error.message.includes('owner') || error.message.includes('default'))) {

@@ -9,6 +9,13 @@ import { ChartTool } from "./chart-tool";
 import { TableTool } from "./table-tool";
 import type { ToolInvocation } from "./types";
 
+// Helper function to format duration display
+function formatDuration(duration?: number): string | null {
+  if (!duration) return null;
+  if (duration < 1) return `${Math.round(duration * 1000)}ms`;
+  return `${duration}s`;
+}
+
 interface ToolCallProps {
   toolInvocations?: ToolInvocation[];
 }
@@ -244,6 +251,11 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                   Cancelled{" "}
                   <code className="font-mono">{invocation.toolName}</code>
                 </span>
+                {formatDuration(invocation.duration) && (
+                  <span className="ml-auto text-muted-foreground/70">
+                    [{formatDuration(invocation.duration)}]
+                  </span>
+                )}
               </div>
             );
           }
@@ -343,6 +355,11 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                   <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
                     <Code2 className="h-3 w-3" />
                     {toolName}
+                    {formatDuration(invocation.duration) && (
+                      <span className="ml-auto text-green-600 dark:text-green-500">
+                        [{formatDuration(invocation.duration)}]
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -359,6 +376,11 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                   <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
                     <Ban className="h-3 w-3" />
                     {toolName}
+                    {formatDuration(invocation.duration) && (
+                      <span className="ml-auto text-red-600 dark:text-red-500">
+                        [{formatDuration(invocation.duration)}]
+                      </span>
+                    )}
                   </div>
                 </div>
               );

@@ -3,11 +3,14 @@
  */
 
 import { AuthService } from "../services/auth-service";
+import { createLogger } from "../utils/logger";
+
+const logger = createLogger("Auth");
 
 const authService = AuthService.getInstance();
 
 // Initialize auth service on module load
-authService.initialize().catch(console.error);
+authService.initialize().catch((error) => logger.error({ error }, "Failed to initialize auth service"));
 
 /**
  * Extract session token from Authorization header or cookie
@@ -71,7 +74,7 @@ export async function handleRegister(req: Request): Promise<Response> {
       { status: 201, headers }
     );
   } catch (error: any) {
-    console.error("[Auth] Registration error:", error);
+    logger.error({ error }, "Registration error");
     return Response.json(
       { error: error.message || "Registration failed" },
       { status: 400 }
@@ -115,7 +118,7 @@ export async function handleLogin(req: Request): Promise<Response> {
       { status: 200, headers }
     );
   } catch (error: any) {
-    console.error("[Auth] Login error:", error);
+    logger.error({ error }, "Login error");
     return Response.json(
       { error: error.message || "Login failed" },
       { status: 401 }
@@ -148,7 +151,7 @@ export async function handleLogout(req: Request): Promise<Response> {
       { status: 200, headers }
     );
   } catch (error: any) {
-    console.error("[Auth] Logout error:", error);
+    logger.error({ error }, "Logout error");
     return Response.json(
       { error: error.message || "Logout failed" },
       { status: 500 }
@@ -182,7 +185,7 @@ export async function handleGetCurrentUser(req: Request): Promise<Response> {
 
     return Response.json({ user });
   } catch (error: any) {
-    console.error("[Auth] Get current user error:", error);
+    logger.error({ error }, "Get current user error");
     return Response.json(
       { error: error.message || "Failed to get user" },
       { status: 500 }
@@ -230,7 +233,7 @@ export async function handleChangePassword(req: Request): Promise<Response> {
 
     return Response.json({ success: true });
   } catch (error: any) {
-    console.error("[Auth] Change password error:", error);
+    logger.error({ error }, "Change password error");
     return Response.json(
       { error: error.message || "Failed to change password" },
       { status: 400 }
@@ -278,7 +281,7 @@ export async function handleAdminCreateUser(req: Request): Promise<Response> {
 
     return Response.json({ user: newUser }, { status: 201 });
   } catch (error: any) {
-    console.error("[Admin] Create user error:", error);
+    logger.error({ error }, "Create user error");
     return Response.json(
       { error: error.message || "Failed to create user" },
       { status: 400 }
@@ -305,7 +308,7 @@ export async function handleAdminGetUsers(req: Request): Promise<Response> {
     const users = await authService.getAllUsers(currentUser.id);
     return Response.json({ users });
   } catch (error: any) {
-    console.error("[Admin] Get users error:", error);
+    logger.error({ error }, "Get users error");
     return Response.json(
       { error: error.message || "Failed to get users" },
       { status: 403 }
@@ -353,7 +356,7 @@ export async function handleAdminDeleteUser(req: Request, userId: string): Promi
 
     return Response.json({ success: true });
   } catch (error: any) {
-    console.error("[Admin] Delete user error:", error);
+    logger.error({ error }, "Delete user error");
     return Response.json(
       { error: error.message || "Failed to delete user" },
       { status: 400 }

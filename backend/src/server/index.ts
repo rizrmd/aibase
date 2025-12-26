@@ -85,6 +85,7 @@ import {
 } from "./embed-handler";
 import { embedRateLimiter, embedWsRateLimiter, getClientIp } from "../middleware/rate-limiter";
 import { ProjectStorage } from "../storage/project-storage";
+import { logger } from "../utils/logger";
 
 /**
  * Normalize base path to ensure it starts with / and doesn't end with /
@@ -512,7 +513,7 @@ export class WebSocketServer {
               return new Response(indexFile);
             }
           } catch (error) {
-            console.error("Error serving static file:", error);
+            logger.error({ error }, "Error serving static file");
           }
         }
 
@@ -546,7 +547,8 @@ export class WebSocketServer {
       websocket: this.wsServer.getWebSocketHandlers(),
     });
 
-    console.log(
+    logger.info(
+      { port: this.options.port, hostname: this.options.hostname },
       `WebSocket server started on http://${this.options.hostname}:${this.options.port}`
     );
   }
