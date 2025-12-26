@@ -224,8 +224,11 @@ export class WebSocketServer {
             return new Response("Invalid embed configuration", { status: 403 });
           }
 
-          // Generate a new conversation ID for embed (always new chat)
-          const convId = `embed_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+          // Use existing conversation ID from URL if provided, otherwise generate new one
+          let convId = url.searchParams.get("convId");
+          if (!convId) {
+            convId = `embed_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+          }
 
           // Upgrade to WebSocket with embed flag
           const upgraded = server.upgrade(req, {
