@@ -109,6 +109,7 @@ export interface ConnectionStats {
 export interface WSClientOptions {
   url: string;
   projectId?: string; // Current project ID for the connection
+  convId?: string; // Optional conversation ID (for embed mode)
   reconnectAttempts?: number;
   reconnectDelay?: number;
   heartbeatInterval?: number;

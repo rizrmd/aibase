@@ -134,10 +134,11 @@ export class WSConnectionManager {
   }
 
   private generateConnectionKey(options: WSClientOptions): string {
-    // Create a unique key based on URL and key options, including projectId
+    // Create a unique key based on URL and key options, including projectId and convId
     const keyParts = [
       options.url,
       options.projectId || 'no-project', // Include projectId in the key
+      options.convId || 'no-conv', // Include convId in the key (for embed mode)
       options.reconnectAttempts?.toString() || '5',
       options.reconnectDelay?.toString() || '1000',
       options.heartbeatInterval?.toString() || '30000',

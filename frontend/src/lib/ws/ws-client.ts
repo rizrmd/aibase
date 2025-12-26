@@ -19,7 +19,7 @@ import { ConvIdManager } from "../conv-id";
 
 export class WSClient extends WSEventEmitter {
   private ws: WebSocket | null = null;
-  private options: Required<Omit<WSClientOptions, 'projectId'>> & Pick<WSClientOptions, 'projectId'>;
+  private options: Required<Omit<WSClientOptions, 'projectId' | 'convId'>> & Pick<WSClientOptions, 'projectId' | 'convId'>;
   private state: ConnectionState = {
     status: "disconnected",
     messageCount: 0,
@@ -548,8 +548,8 @@ export class WSClient extends WSEventEmitter {
   }
 
   private getConvId(): string {
-    // Use the shared ConvIdManager for consistency
-    return ConvIdManager.getConvId();
+    // Use the optional convId from options (for embed mode) or fall back to ConvIdManager
+    return this.options.convId || ConvIdManager.getConvId();
   }
 
   private setConvId(convId: string): void {

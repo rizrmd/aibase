@@ -87,6 +87,7 @@ export function MainChat({
   const wsClient = useWSConnection({
     url: wsUrl,
     projectId: currentProject?.id, // Include project ID in WebSocket connection
+    convId: embedConvId, // Pass embed convId if in embed mode
     reconnectAttempts: 5,
     reconnectDelay: 1000,
     heartbeatInterval: 30000,
