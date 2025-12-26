@@ -24,7 +24,7 @@ export function EmbedChatPage() {
   const [isValidating, setIsValidating] = useState(true);
 
   // Use embed-specific conversation ID management (URL hash based)
-  const { convId, setConvId, generateNewConvId, ensureHashUpdated } = useEmbedConvId();
+  const { convId, generateNewConvId, ensureHashUpdated } = useEmbedConvId();
 
   // Get messages from chat store to detect when first message is sent
   const messages = useChatStore((state) => state.messages);
