@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
 
   // Also check process.env (set by the Go build script) as fallback
   const basePath = env.PUBLIC_BASE_PATH || process.env.PUBLIC_BASE_PATH || "";
+  const appName = env.APP_NAME || process.env.APP_NAME || "AI-BASE";
 
   // Normalize base path - ensure it starts with / and doesn't end with /
   const normalizedBasePath = basePath
@@ -18,15 +19,29 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: normalizedBasePath,
-    plugins: [react(), tailwindcss({ optimize: true })],
+    plugins: [
+      react(),
+      tailwindcss({ optimize: true }),
+      // Plugin to inject APP_NAME into index.html
+      {
+        name: 'html-transform',
+        transformIndexHtml(html) {
+          return html.replace(
+            /<title>(.*?)<\/title>/,
+            `<title>${appName}</title>`
+          );
+        },
+      },
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
     },
-    // Inject PUBLIC_BASE_PATH for import.meta.env usage in source code
+    // Inject environment variables for import.meta.env usage in source code
     define: {
       'import.meta.env.PUBLIC_BASE_PATH': JSON.stringify(normalizedBasePath),
+      'import.meta.env.APP_NAME': JSON.stringify(appName),
     },
     server: {
       port: 5050,

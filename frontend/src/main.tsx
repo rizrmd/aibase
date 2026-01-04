@@ -4,6 +4,9 @@ import "./index.css";
 import { AppRouter } from "./components/app-router";
 import { getBasePath, buildWsUrl } from "./lib/base-path";
 
+// Set document title from environment variable
+document.title = import.meta.env.APP_NAME || "AI-BASE";
+
 // Get base path for React Router
 const basePath = getBasePath();
 
