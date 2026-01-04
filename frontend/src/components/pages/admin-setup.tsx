@@ -3,7 +3,16 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { AlertCircle, Upload, CheckCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  Upload,
+  CheckCircle2,
+  Plus,
+  Pencil,
+  Trash2,
+  Save,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface SetupData {
@@ -11,6 +20,15 @@ interface SetupData {
   hasLogo: boolean;
   updatedAt: number;
 }
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: "root" | "admin" | "user";
+}
+
+type Tab = "setup" | "users";
 
 export function AdminSetupPage() {
   const [licenseKey, setLicenseKey] = useState("");
@@ -23,11 +41,31 @@ export function AdminSetupPage() {
   const [setup, setSetup] = useState<SetupData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("setup");
+
+  // User management state
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userForm, setUserForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+    role: "user" as "root" | "admin" | "user",
+  });
 
   // Load current setup on mount
   useEffect(() => {
     loadSetup();
   }, []);
+
+  // Load users when verified and on users tab
+  useEffect(() => {
+    if (isVerified && activeTab === "users") {
+      loadUsers();
+    }
+  }, [isVerified, activeTab]);
 
   const loadSetup = async () => {
     try {
@@ -44,6 +82,29 @@ export function AdminSetupPage() {
       console.error("Error loading setup:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    if (!licenseKey) return;
+
+    setLoadingUsers(true);
+    try {
+      const response = await fetch(
+        `/api/admin/setup/users?licenseKey=${encodeURIComponent(licenseKey)}`
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        setUsers(data.users);
+      } else {
+        toast.error(data.error || "Failed to load users");
+      }
+    } catch (err) {
+      console.error("Error loading users:", err);
+      toast.error("Failed to load users");
+    } finally {
+      setLoadingUsers(false);
     }
   };
 
@@ -82,7 +143,6 @@ export function AdminSetupPage() {
     if (file) {
       setLogoFile(file);
 
-      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setLogoPreview(reader.result as string);
@@ -116,7 +176,6 @@ export function AdminSetupPage() {
       if (data.success) {
         setSetup(data.setup);
         toast.success("Setup saved successfully!");
-        // Reload the page to apply changes
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -133,6 +192,114 @@ export function AdminSetupPage() {
     }
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const response = await fetch("/api/admin/setup/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          licenseKey,
+          ...userForm,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("User created successfully");
+        setShowUserForm(false);
+        setUserForm({ username: "", email: "", password: "", role: "user" });
+        loadUsers();
+      } else {
+        toast.error(data.error || "Failed to create user");
+      }
+    } catch (err) {
+      toast.error("Failed to create user");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(`/api/admin/setup/users/${editingUser.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          licenseKey,
+          ...userForm,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("User updated successfully");
+        setEditingUser(null);
+        setShowUserForm(false);
+        setUserForm({ username: "", email: "", password: "", role: "user" });
+        loadUsers();
+      } else {
+        toast.error(data.error || "Failed to update user");
+      }
+    } catch (err) {
+      toast.error("Failed to update user");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteUser = async (user: User) => {
+    if (!confirm(`Are you sure you want to delete user "${user.username}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/admin/setup/users/${user.id}?licenseKey=${encodeURIComponent(licenseKey)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("User deleted successfully");
+        loadUsers();
+      } else {
+        toast.error(data.error || "Failed to delete user");
+      }
+    } catch (err) {
+      toast.error("Failed to delete user");
+    }
+  };
+
+  const openEditForm = (user: User) => {
+    setEditingUser(user);
+    setUserForm({
+      username: user.username,
+      email: user.email,
+      password: "",
+      role: user.role,
+    });
+    setShowUserForm(true);
+  };
+
+  const closeForm = () => {
+    setShowUserForm(false);
+    setEditingUser(null);
+    setUserForm({ username: "", email: "", password: "", role: "user" });
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -144,27 +311,25 @@ export function AdminSetupPage() {
     );
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight">
-            {setup?.appName || "Admin Setup"}
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Configure your application settings
-          </p>
-        </div>
+  if (!isVerified) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold tracking-tight">Admin Setup</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Enter your license key to continue
+            </p>
+          </div>
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-        {!isVerified ? (
           <div className="space-y-6">
             <Alert>
               <AlertCircle />
@@ -197,7 +362,57 @@ export function AdminSetupPage() {
               </Button>
             </form>
           </div>
-        ) : (
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-4xl space-y-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight">
+            {setup?.appName || "Admin Setup"}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Configure your application settings
+          </p>
+        </div>
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Tabs */}
+        <div className="flex gap-2 border-b">
+          <button
+            onClick={() => setActiveTab("setup")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === "setup"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            App Settings
+          </button>
+          <button
+            onClick={() => setActiveTab("users")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === "users"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            User Management
+          </button>
+        </div>
+
+        {/* Setup Tab */}
+        {activeTab === "setup" && (
           <div className="space-y-6">
             <Alert>
               <CheckCircle2 />
@@ -257,18 +472,6 @@ export function AdminSetupPage() {
               <Button type="submit" className="w-full" disabled={saving}>
                 {saving ? "Saving..." : "Save Settings"}
               </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setIsVerified(false);
-                  setLicenseKey("");
-                }}
-              >
-                Change License Key
-              </Button>
             </form>
 
             {setup?.updatedAt && (
@@ -278,6 +481,178 @@ export function AdminSetupPage() {
             )}
           </div>
         )}
+
+        {/* Users Tab */}
+        {activeTab === "users" && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Users</h2>
+              <Button onClick={() => setShowUserForm(true)} disabled={showUserForm}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add User
+              </Button>
+            </div>
+
+            {showUserForm && (
+              <div className="border rounded-lg p-4 space-y-4">
+                <h3 className="font-semibold">
+                  {editingUser ? "Edit User" : "Create New User"}
+                </h3>
+                <form onSubmit={editingUser ? handleUpdateUser : handleCreateUser} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        type="text"
+                        placeholder="username"
+                        value={userForm.username}
+                        onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="user@example.com"
+                        value={userForm.email}
+                        onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="password">
+                        Password {editingUser && "(leave empty to keep current)"}
+                      </Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={userForm.password}
+                        onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                        required={!editingUser}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="role">Role</Label>
+                      <select
+                        id="role"
+                        value={userForm.role}
+                        onChange={(e) =>
+                          setUserForm({
+                            ...userForm,
+                            role: e.target.value as "root" | "admin" | "user",
+                          })
+                        }
+                        className="w-full px-3 py-2 border rounded-md"
+                        disabled={editingUser?.role === "root"}
+                      >
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                        <option value="root">Root</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={saving}>
+                      <Save className="h-4 w-4 mr-2" />
+                      {saving ? "Saving..." : editingUser ? "Update User" : "Create User"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={closeForm}>
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {loadingUsers ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-sm text-muted-foreground">Loading users...</p>
+              </div>
+            ) : users.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No users found. Create your first user to get started.
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-sm font-medium">Username</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium">Email</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium">Role</th>
+                      <th className="px-4 py-2 text-right text-sm font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-muted/50">
+                        <td className="px-4 py-3 text-sm">{user.username}</td>
+                        <td className="px-4 py-3 text-sm">{user.email}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              user.role === "root"
+                                ? "bg-purple-100 text-purple-800"
+                                : user.role === "admin"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditForm(user)}
+                              title="Edit user"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user)}
+                              title="Delete user"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => {
+            setIsVerified(false);
+            setLicenseKey("");
+            setActiveTab("setup");
+          }}
+        >
+          Change License Key
+        </Button>
       </div>
     </div>
   );

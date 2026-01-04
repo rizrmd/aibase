@@ -90,6 +90,10 @@ import {
   handleUpdateSetup,
   handleGetLogo,
   handleGetPublicSetup,
+  handleGetUsers,
+  handleCreateUser,
+  handleUpdateUser,
+  handleDeleteUser,
 } from "./setup-handler";
 import { embedRateLimiter, embedWsRateLimiter, getClientIp } from "../middleware/rate-limiter";
 import { ProjectStorage } from "../storage/project-storage";
@@ -513,6 +517,26 @@ export class WebSocketServer {
 
         if (pathname === "/api/admin/setup" && req.method === "POST") {
           return handleUpdateSetup(req);
+        }
+
+        // Admin Setup User Management endpoints
+        if (pathname === "/api/admin/setup/users" && req.method === "GET") {
+          return handleGetUsers(req);
+        }
+
+        if (pathname === "/api/admin/setup/users" && req.method === "POST") {
+          return handleCreateUser(req);
+        }
+
+        // Match /api/admin/setup/users/:userId endpoints
+        const setupUserIdMatch = pathname.match(/^\/api\/admin\/setup\/users\/([^\/]+)$/);
+        if (setupUserIdMatch) {
+          const userId = setupUserIdMatch[1];
+          if (req.method === "PUT") {
+            return handleUpdateUser(req, userId);
+          } else if (req.method === "DELETE") {
+            return handleDeleteUser(req, userId);
+          }
         }
 
         // Serve logo file
