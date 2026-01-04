@@ -9,9 +9,11 @@ import { existsSync } from "fs";
 import { createLogger } from "../utils/logger";
 import { AuthService } from "../services/auth-service";
 import { TenantStorage } from "../storage/tenant-storage";
+import { UserStorage } from "../storage/user-storage";
 
 const authService = AuthService.getInstance();
 const tenantStorage = TenantStorage.getInstance();
+const userStorage = UserStorage.getInstance();
 
 const logger = createLogger("Setup");
 
@@ -361,7 +363,7 @@ export async function handleGetUsers(req: Request): Promise<Response> {
 export async function handleCreateUser(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    let { licenseKey, email, username, password, role } = body;
+    let { licenseKey, email, username, password, role, tenant_id } = body;
 
     // If license key not in body, try cookie
     if (!licenseKey) {
@@ -443,9 +445,10 @@ export async function handleCreateUser(req: Request): Promise<Response> {
       username,
       password,
       role: role || "user",
+      tenant_id,
     });
 
-    logger.info({ username, email, role }, "User created via admin-setup");
+    logger.info({ username, email, role, tenant_id }, "User created via admin-setup");
     return Response.json({ success: true, user: newUser }, { status: 201 });
   } catch (error: any) {
     logger.error({ error }, "Error creating user");
@@ -462,7 +465,7 @@ export async function handleCreateUser(req: Request): Promise<Response> {
 export async function handleUpdateUser(req: Request, userId: string): Promise<Response> {
   try {
     const body = await req.json();
-    let { licenseKey, email, username, role, password } = body;
+    let { licenseKey, email, username, role, password, tenant_id } = body;
 
     // If license key not in body, try cookie
     if (!licenseKey) {
@@ -480,6 +483,7 @@ export async function handleUpdateUser(req: Request, userId: string): Promise<Re
     }
 
     await authService.initialize();
+    await userStorage.initialize();
     const rootUser = await getRootUser();
 
     const userIdNum = parseInt(userId, 10);
@@ -500,13 +504,18 @@ export async function handleUpdateUser(req: Request, userId: string): Promise<Re
     if (email) updates.email = email;
     if (username) updates.username = username;
     if (role) updates.role = role;
+    if (tenant_id !== undefined) updates.tenant_id = tenant_id;
 
     // Update user
-    const updatedUser = await authService.updateUser(userIdNum, updates);
+    const updatedUser = await userStorage.update(userIdNum, updates);
 
     // Update password if provided
     if (password) {
-      await authService.changeUserPassword(userIdNum, password);
+      const passwordHash = await Bun.password.hash(password, {
+        algorithm: "bcrypt",
+        cost: 10,
+      });
+      await userStorage.update(userIdNum, { password_hash: passwordHash });
     }
 
     logger.info({ userId }, "User updated via admin-setup");

@@ -33,6 +33,7 @@ export interface UpdateUserData {
   username?: string;
   password_hash?: string;
   role?: UserRole;
+  tenant_id?: number | null;
 }
 
 export class UserStorage {
@@ -199,6 +200,10 @@ export class UserStorage {
     if (data.role !== undefined) {
       updates.push('role = ?');
       values.push(data.role);
+    }
+    if (data.tenant_id !== undefined) {
+      updates.push('tenant_id = ?');
+      values.push(data.tenant_id);
     }
 
     if (updates.length === 0) {
