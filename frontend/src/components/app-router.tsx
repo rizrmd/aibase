@@ -3,6 +3,7 @@ import { MainChat } from "./pages/main-chat";
 import { MemoryEditor } from "./pages/memory-editor";
 import { ContextEditor } from "./pages/context-editor";
 import { ConversationHistoryPage } from "./pages/conversation-history";
+import { FilesManagerPage } from "./pages/files-manager";
 import { ProjectSelectorPage } from "./pages/project-selector";
 import { UserManagementPage } from "./pages/user-management";
 import { TenantManagementPage } from "./pages/tenant-management";
@@ -24,6 +25,7 @@ import {
   Users,
   Building2,
   Code,
+  Files,
 } from "lucide-react";
 import { Toaster } from "./ui/sonner";
 import { useState, useEffect } from "react";
@@ -140,6 +142,20 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
             <FileText />
             {location.pathname === `/projects/${currentProject.id}/context` && (
               <>Context</>
+            )}
+          </Button>
+          <Button
+            variant={
+              location.pathname === `/projects/${currentProject.id}/files`
+                ? "default"
+                : "ghost"
+            }
+            size="sm"
+            onClick={() => navigate(`/projects/${currentProject.id}/files`)}
+          >
+            <Files />
+            {location.pathname === `/projects/${currentProject.id}/files` && (
+              <>Files</>
             )}
           </Button>
           <Button
@@ -276,6 +292,16 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
               <ProtectedRoute>
                 <ProjectRouteHandler>
                   <ContextEditor />
+                </ProjectRouteHandler>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/files"
+            element={
+              <ProtectedRoute>
+                <ProjectRouteHandler>
+                  <FilesManagerPage />
                 </ProjectRouteHandler>
               </ProtectedRoute>
             }

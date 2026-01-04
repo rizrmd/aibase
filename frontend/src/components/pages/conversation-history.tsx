@@ -17,9 +17,23 @@ import { useChatStore } from "@/stores/chat-store";
 import { useConversationStore } from "@/stores/conversation-store";
 import { useProjectStore } from "@/stores/project-store";
 import { MessageSquare, Plus, Trash2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import {
+  fetchConversationFiles,
+  formatFileSize,
+  getFileIcon,
+  type FileInfo,
+} from "@/lib/files-api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function ConversationHistoryPage() {
   const navigate = useNavigate();
@@ -29,6 +43,11 @@ export function ConversationHistoryPage() {
   const { currentProject } = useProjectStore();
   const { clearMessages } = useChatStore();
   const { setConvId, clearConvId } = useConvId();
+  const [deletingConversation, setDeletingConversation] = useState<{
+    convId: string;
+    title: string;
+    files: FileInfo[];
+  } | null>(null);
 
   useEffect(() => {
     // Load conversations when component mounts
@@ -70,19 +89,26 @@ export function ConversationHistoryPage() {
   ) => {
     e.stopPropagation(); // Prevent card click
 
-    if (
-      !confirm(
-        `Are you sure you want to delete "${title}"? This will permanently delete all messages and files.`
-      )
-    ) {
-      return;
-    }
-
     if (!projectId) return;
 
-    const success = await removeConversation(convId, projectId);
+    // Load files for this conversation
+    try {
+      const files = await fetchConversationFiles(convId, projectId);
+      setDeletingConversation({ convId, title, files });
+    } catch (error) {
+      console.error("Error loading files:", error);
+      // Still allow deletion even if files can't be loaded
+      setDeletingConversation({ convId, title, files: [] });
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingConversation || !projectId) return;
+
+    const success = await removeConversation(deletingConversation.convId, projectId);
     if (success) {
       toast.success("Conversation deleted successfully");
+      setDeletingConversation(null);
     }
   };
 
@@ -98,6 +124,50 @@ export function ConversationHistoryPage() {
 
   return (
     <div className="flex h-screen items-center justify-center p-4">
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deletingConversation} onOpenChange={(open) => !open && setDeletingConversation(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Conversation</DialogTitle>
+            <DialogDescription className="space-y-3 text-left">
+              <p>
+                Are you sure you want to delete "{deletingConversation?.title}"?
+              </p>
+              <p className="text-sm">
+                This will permanently delete all messages
+                {deletingConversation?.files && deletingConversation.files.length > 0 && (
+                  <> and {deletingConversation.files.length} {deletingConversation.files.length === 1 ? "file" : "files"}</>
+                )}.
+              </p>
+              {deletingConversation?.files && deletingConversation.files.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm font-medium text-foreground">Files to be deleted:</p>
+                  <div className="max-h-40 overflow-auto space-y-1 border rounded-md p-2 bg-muted/30">
+                    {deletingConversation.files.map((file, index) => (
+                      <div key={index} className="flex items-center gap-2 text-sm">
+                        <span className="text-lg">{getFileIcon(file.name)}</span>
+                        <span className="flex-1 truncate text-foreground">{file.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatFileSize(file.size)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingConversation(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* New Conversation Button - Absolute positioned top right */}
       <PageActionGroup>
         <PageActionButton

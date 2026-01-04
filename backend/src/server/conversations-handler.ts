@@ -3,12 +3,14 @@
  */
 
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
+import { FileStorage } from "../storage/file-storage";
 import { generateConversationTitle, getConversationTitle } from "../llm/conversation-title-generator";
 import { createLogger } from "../utils/logger";
 
 const logger = createLogger("Conversations");
 
 const chatHistoryStorage = ChatHistoryStorage.getInstance();
+const fileStorage = FileStorage.getInstance();
 
 /**
  * Handle GET /api/conversations?projectId={id} - Get all conversations for a project
@@ -167,8 +169,13 @@ export async function handleDeleteConversation(
       );
     }
 
-    // Delete conversation
+    // Delete conversation chat history
     await chatHistoryStorage.deleteChatHistory(convId, projectId);
+
+    // Also delete all associated files
+    await fileStorage.deleteAllFiles(convId, projectId);
+
+    logger.info({ convId, projectId }, "Conversation and associated files deleted");
 
     return Response.json({
       success: true,
