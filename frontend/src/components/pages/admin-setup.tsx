@@ -630,17 +630,8 @@ export function AdminSetupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex h-full overflow-auto items-center justify-center bg-background p-4">
       <div className="w-full max-w-4xl space-y-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight">
-            {setup?.appName || "Admin Setup"}
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Configure your application settings
-          </p>
-        </div>
-
         {error && (
           <Alert variant="destructive">
             <AlertCircle />
