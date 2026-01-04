@@ -359,6 +359,7 @@ export function AdminSetupPage() {
       email: user.email,
       password: "",
       role: user.role,
+      tenant_id: undefined,
     });
     setShowUserForm(true);
   };
@@ -784,7 +785,7 @@ export function AdminSetupPage() {
                           })
                         }
                         className="w-full px-3 py-2 border rounded-md"
-                        required={userForm.role !== "root"}
+                        required
                       >
                         <option value="">Select a tenant</option>
                         {tenants.map((tenant) => (
