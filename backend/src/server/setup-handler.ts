@@ -8,8 +8,10 @@ import { writeFile, readFile } from "fs/promises";
 import { existsSync } from "fs";
 import { createLogger } from "../utils/logger";
 import { AuthService } from "../services/auth-service";
+import { TenantStorage } from "../storage/tenant-storage";
 
 const authService = AuthService.getInstance();
+const tenantStorage = TenantStorage.getInstance();
 
 const logger = createLogger("Setup");
 
@@ -30,6 +32,15 @@ interface UpdateSetupRequest {
   licenseKey: string;
   appName?: string;
   logo?: File;
+}
+
+interface Tenant {
+  id: number;
+  name: string;
+  domain: string | null;
+  has_logo: boolean;
+  created_at: number;
+  updated_at: number;
 }
 
 /**
@@ -375,30 +386,47 @@ export async function handleCreateUser(req: Request): Promise<Response> {
     }
 
     await authService.initialize();
+    await tenantStorage.initialize();
     const rootUser = await getRootUser();
 
     // If no users exist yet, create the first user directly
     if (!rootUser) {
       try {
+        // First, ensure there's a default tenant
+        let tenantId: number | null = null;
+
+        if (role !== "root") {
+          // Check if any tenant exists
+          try {
+            const db = authService.getDatabase();
+            const tenants = db.query("SELECT * FROM tenants").all() as any[];
+
+            if (!tenants || tenants.length === 0) {
+              // Create a default tenant
+              const tenant = await tenantStorage.create({
+                name: "Default",
+                domain: null,
+              });
+              tenantId = tenant.id;
+              logger.info({ tenantId }, "Created default tenant for first user");
+            } else {
+              tenantId = tenants[0].id;
+            }
+          } catch (tenantError) {
+            logger.warn({ error: tenantError }, "Could not create/query tenant, trying without tenant");
+          }
+        }
+
         // Register the first user directly without requiring a parent user
         const result = await authService.register({
           email,
           username,
           password,
+          role: role || "user",
+          tenant_id: tenantId,
         });
 
-        // Update the role if specified (default register creates 'user' role)
-        if (role && role !== "user") {
-          // Get the created user from database to update their role
-          const db = authService.getDatabase();
-          const users = db.query("SELECT * FROM users").all() as any[];
-          const newUser = users.find((u: any) => u.username === username);
-          if (newUser) {
-            db.query("UPDATE users SET role = ? WHERE id = ?").run(role, newUser.id);
-          }
-        }
-
-        logger.info({ username, email, role }, "First user created via admin-setup");
+        logger.info({ username, email, role, tenantId }, "First user created via admin-setup");
         return Response.json({ success: true, user: result.user }, { status: 201 });
       } catch (registerError: any) {
         logger.error({ error: registerError }, "Error creating first user");
@@ -534,6 +562,155 @@ export async function handleDeleteUser(req: Request, userId: string): Promise<Re
     logger.error({ error }, "Error deleting user");
     return Response.json(
       { success: false, error: error.message || "Failed to delete user" },
+      { status: 400 }
+    );
+  }
+}
+
+/**
+ * GET /api/admin/setup/tenants - Get all tenants (license key auth)
+ */
+export async function handleGetTenants(req: Request): Promise<Response> {
+  try {
+    const { success } = await verifyLicenseKeyWithFallback(req);
+
+    if (!success) {
+      return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
+    }
+
+    await tenantStorage.initialize();
+
+    // Query tenants directly from database
+    const db = authService.getDatabase();
+    const tenants = db.query("SELECT id, name, domain, created_at, updated_at FROM tenants").all() as any[];
+
+    // Add has_logo field by checking if logo file exists
+    const tenantsWithLogo = tenants.map((tenant: any) => ({
+      ...tenant,
+      has_logo: false, // Could be enhanced to check for logo file existence
+    }));
+
+    return Response.json({ success: true, tenants: tenantsWithLogo });
+  } catch (error) {
+    logger.error({ error }, "Error getting tenants");
+    return Response.json({ success: false, error: "Internal server error" }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/admin/setup/tenants - Create a new tenant (license key auth)
+ */
+export async function handleCreateTenant(req: Request): Promise<Response> {
+  try {
+    const body = await req.json();
+    const { licenseKey, name, domain } = body;
+
+    if (!licenseKey || licenseKey !== process.env.OPENAI_API_KEY) {
+      return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
+    }
+
+    if (!name) {
+      return Response.json({ success: false, error: "Name is required" }, { status: 400 });
+    }
+
+    await tenantStorage.initialize();
+
+    const tenant = await tenantStorage.create({
+      name,
+      domain: domain || null,
+    });
+
+    logger.info({ name, domain }, "Tenant created via admin-setup");
+    return Response.json({ success: true, tenant }, { status: 201 });
+  } catch (error: any) {
+    logger.error({ error }, "Error creating tenant");
+    return Response.json(
+      { success: false, error: error.message || "Failed to create tenant" },
+      { status: 400 }
+    );
+  }
+}
+
+/**
+ * PUT /api/admin/setup/tenants/:tenantId - Update a tenant (license key auth)
+ */
+export async function handleUpdateTenant(req: Request, tenantId: string): Promise<Response> {
+  try {
+    const body = await req.json();
+    const { licenseKey, name, domain } = body;
+
+    if (!licenseKey || licenseKey !== process.env.OPENAI_API_KEY) {
+      return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
+    }
+
+    const tenantIdNum = parseInt(tenantId, 10);
+    if (isNaN(tenantIdNum)) {
+      return Response.json({ success: false, error: "Invalid tenant ID" }, { status: 400 });
+    }
+
+    await tenantStorage.initialize();
+
+    const updates: any = {};
+    if (name) updates.name = name;
+    if (domain !== undefined) updates.domain = domain;
+
+    const tenant = await tenantStorage.update(tenantIdNum, updates);
+
+    logger.info({ tenantId }, "Tenant updated via admin-setup");
+    return Response.json({ success: true, tenant });
+  } catch (error: any) {
+    logger.error({ error }, "Error updating tenant");
+    return Response.json(
+      { success: false, error: error.message || "Failed to update tenant" },
+      { status: 400 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/admin/setup/tenants/:tenantId - Delete a tenant (license key auth)
+ */
+export async function handleDeleteTenant(req: Request, tenantId: string): Promise<Response> {
+  try {
+    const url = new URL(req.url);
+    const queryKey = url.searchParams.get("licenseKey");
+
+    const { success } = await verifyLicenseKeyWithFallback(req, queryKey);
+
+    if (!success) {
+      return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
+    }
+
+    const tenantIdNum = parseInt(tenantId, 10);
+    if (isNaN(tenantIdNum)) {
+      return Response.json({ success: false, error: "Invalid tenant ID" }, { status: 400 });
+    }
+
+    await tenantStorage.initialize();
+
+    // Check if tenant has users
+    const db = authService.getDatabase();
+    const usersWithTenant = db.query("SELECT COUNT(*) as count FROM users WHERE tenant_id = ?").get(tenantIdNum) as any;
+
+    if (usersWithTenant.count > 0) {
+      return Response.json(
+        { success: false, error: "Cannot delete tenant with users. Please reassign or delete users first." },
+        { status: 400 }
+      );
+    }
+
+    const successDeleted = await tenantStorage.delete(tenantIdNum);
+
+    if (!successDeleted) {
+      return Response.json({ success: false, error: "Tenant not found" }, { status: 404 });
+    }
+
+    logger.info({ tenantId }, "Tenant deleted via admin-setup");
+    return Response.json({ success: true });
+  } catch (error: any) {
+    logger.error({ error }, "Error deleting tenant");
+    return Response.json(
+      { success: false, error: error.message || "Failed to delete tenant" },
       { status: 400 }
     );
   }

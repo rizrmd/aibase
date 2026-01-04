@@ -28,7 +28,16 @@ interface User {
   role: "root" | "admin" | "user";
 }
 
-type Tab = "setup" | "users";
+interface Tenant {
+  id: number;
+  name: string;
+  domain: string | null;
+  has_logo: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+type Tab = "setup" | "users" | "tenants";
 
 const LICENSE_COOKIE_NAME = "admin_license_key";
 
@@ -74,6 +83,17 @@ export function AdminSetupPage() {
     email: "",
     password: "",
     role: "user" as "root" | "admin" | "user",
+    tenant_id: undefined as number | undefined,
+  });
+
+  // Tenant management state
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [showTenantForm, setShowTenantForm] = useState(false);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [tenantForm, setTenantForm] = useState({
+    name: "",
+    domain: "",
   });
 
   // Load current setup and check for license cookie on mount
@@ -100,6 +120,13 @@ export function AdminSetupPage() {
   useEffect(() => {
     if (isVerified && activeTab === "users") {
       loadUsers();
+    }
+  }, [isVerified, activeTab]);
+
+  // Load tenants when verified and on tenants tab
+  useEffect(() => {
+    if (isVerified && activeTab === "tenants") {
+      loadTenants();
     }
   }, [isVerified, activeTab]);
 
@@ -243,6 +270,7 @@ export function AdminSetupPage() {
         body: JSON.stringify({
           licenseKey,
           ...userForm,
+          tenant_id: userForm.role !== "root" ? userForm.tenant_id : undefined,
         }),
       });
 
@@ -251,7 +279,7 @@ export function AdminSetupPage() {
       if (data.success) {
         toast.success("User created successfully");
         setShowUserForm(false);
-        setUserForm({ username: "", email: "", password: "", role: "user" });
+        setUserForm({ username: "", email: "", password: "", role: "user", tenant_id: undefined });
         loadUsers();
       } else {
         toast.error(data.error || "Failed to create user");
@@ -276,6 +304,7 @@ export function AdminSetupPage() {
         body: JSON.stringify({
           licenseKey,
           ...userForm,
+          tenant_id: userForm.role !== "root" ? userForm.tenant_id : undefined,
         }),
       });
 
@@ -285,7 +314,7 @@ export function AdminSetupPage() {
         toast.success("User updated successfully");
         setEditingUser(null);
         setShowUserForm(false);
-        setUserForm({ username: "", email: "", password: "", role: "user" });
+        setUserForm({ username: "", email: "", password: "", role: "user", tenant_id: undefined });
         loadUsers();
       } else {
         toast.error(data.error || "Failed to update user");
@@ -337,7 +366,134 @@ export function AdminSetupPage() {
   const closeForm = () => {
     setShowUserForm(false);
     setEditingUser(null);
-    setUserForm({ username: "", email: "", password: "", role: "user" });
+    setUserForm({ username: "", email: "", password: "", role: "user", tenant_id: undefined });
+  };
+
+  const loadTenants = async () => {
+    if (!licenseKey) return;
+
+    setLoadingTenants(true);
+    try {
+      const response = await fetch(`/api/admin/setup/tenants?licenseKey=${encodeURIComponent(licenseKey)}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setTenants(data.tenants);
+      } else {
+        toast.error(data.error || "Failed to load tenants");
+      }
+    } catch (err) {
+      console.error("Error loading tenants:", err);
+      toast.error("Failed to load tenants");
+    } finally {
+      setLoadingTenants(false);
+    }
+  };
+
+  const handleCreateTenant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const response = await fetch("/api/admin/setup/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          licenseKey,
+          ...tenantForm,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Tenant created successfully");
+        setShowTenantForm(false);
+        setTenantForm({ name: "", domain: "" });
+        loadTenants();
+      } else {
+        toast.error(data.error || "Failed to create tenant");
+      }
+    } catch (err) {
+      toast.error("Failed to create tenant");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateTenant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTenant) return;
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(`/api/admin/setup/tenants/${editingTenant.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          licenseKey,
+          ...tenantForm,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Tenant updated successfully");
+        setEditingTenant(null);
+        setShowTenantForm(false);
+        setTenantForm({ name: "", domain: "" });
+        loadTenants();
+      } else {
+        toast.error(data.error || "Failed to update tenant");
+      }
+    } catch (err) {
+      toast.error("Failed to update tenant");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteTenant = async (tenant: Tenant) => {
+    if (!confirm(`Are you sure you want to delete tenant "${tenant.name}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/admin/setup/tenants/${tenant.id}?licenseKey=${encodeURIComponent(licenseKey)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Tenant deleted successfully");
+        loadTenants();
+      } else {
+        toast.error(data.error || "Failed to delete tenant");
+      }
+    } catch (err) {
+      toast.error("Failed to delete tenant");
+    }
+  };
+
+  const openEditTenantForm = (tenant: Tenant) => {
+    setEditingTenant(tenant);
+    setTenantForm({
+      name: tenant.name,
+      domain: tenant.domain || "",
+    });
+    setShowTenantForm(true);
+  };
+
+  const closeTenantForm = () => {
+    setShowTenantForm(false);
+    setEditingTenant(null);
+    setTenantForm({ name: "", domain: "" });
   };
 
   const handleChangeLicenseKey = () => {
@@ -454,6 +610,16 @@ export function AdminSetupPage() {
             }`}
           >
             User Management
+          </button>
+          <button
+            onClick={() => setActiveTab("tenants")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === "tenants"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Tenant Management
           </button>
         </div>
 
@@ -605,6 +771,36 @@ export function AdminSetupPage() {
                     </div>
                   </div>
 
+                  {userForm.role !== "root" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="tenant">Tenant</Label>
+                      <select
+                        id="tenant"
+                        value={userForm.tenant_id || ""}
+                        onChange={(e) =>
+                          setUserForm({
+                            ...userForm,
+                            tenant_id: e.target.value ? parseInt(e.target.value) : undefined,
+                          })
+                        }
+                        className="w-full px-3 py-2 border rounded-md"
+                        required={userForm.role !== "root"}
+                      >
+                        <option value="">Select a tenant</option>
+                        {tenants.map((tenant) => (
+                          <option key={tenant.id} value={tenant.id}>
+                            {tenant.name}
+                          </option>
+                        ))}
+                      </select>
+                      {tenants.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No tenants available. Please create a tenant first in the Tenant Management tab.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <Button type="submit" disabled={saving}>
                       <Save className="h-4 w-4 mr-2" />
@@ -672,6 +868,134 @@ export function AdminSetupPage() {
                               size="sm"
                               onClick={() => handleDeleteUser(user)}
                               title="Delete user"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tenants Tab */}
+        {activeTab === "tenants" && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Tenants</h2>
+              <Button onClick={() => setShowTenantForm(true)} disabled={showTenantForm}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Tenant
+              </Button>
+            </div>
+
+            {showTenantForm && (
+              <div className="border rounded-lg p-4 space-y-4">
+                <h3 className="font-semibold">
+                  {editingTenant ? "Edit Tenant" : "Create New Tenant"}
+                </h3>
+                <form onSubmit={editingTenant ? handleUpdateTenant : handleCreateTenant} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tenantName">Name</Label>
+                    <Input
+                      id="tenantName"
+                      type="text"
+                      placeholder="My Organization"
+                      value={tenantForm.name}
+                      onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="tenantDomain">Domain (Optional)</Label>
+                    <Input
+                      id="tenantDomain"
+                      type="text"
+                      placeholder="https://example.com"
+                      value={tenantForm.domain}
+                      onChange={(e) => setTenantForm({ ...tenantForm, domain: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Custom domain for this tenant (leave empty for default domain)
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={saving}>
+                      <Save className="h-4 w-4 mr-2" />
+                      {saving ? "Saving..." : editingTenant ? "Update Tenant" : "Create Tenant"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={closeTenantForm}>
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {loadingTenants ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-sm text-muted-foreground">Loading tenants...</p>
+              </div>
+            ) : tenants.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No tenants found. Create your first tenant to get started.
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium">Domain</th>
+                      <th className="px-4 py-2 text-left text-sm font-medium">Created</th>
+                      <th className="px-4 py-2 text-right text-sm font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {tenants.map((tenant) => (
+                      <tr key={tenant.id} className="hover:bg-muted/50">
+                        <td className="px-4 py-3 text-sm font-medium">{tenant.name}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {tenant.domain ? (
+                            <a
+                              href={tenant.domain}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              {tenant.domain}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">Default domain</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {new Date(tenant.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditTenantForm(tenant)}
+                              title="Edit tenant"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteTenant(tenant)}
+                              title="Delete tenant"
                               className="text-destructive hover:text-destructive"
                             >
                               <Trash2 className="h-4 w-4" />
