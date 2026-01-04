@@ -51,6 +51,11 @@ import {
   handleDeleteConversation,
 } from "./conversations-handler";
 import {
+  handleGetProjectFiles,
+  handleGetConversationFiles,
+  handleDeleteFile,
+} from "./files-handler";
+import {
   handleRegister,
   handleLogin,
   handleLogout,
@@ -277,9 +282,21 @@ export class WebSocketServer {
           return handleFileUpload(req);
         }
 
-        // Handle file download (GET /api/files/{convId}/{fileName})
+        // Handle file download (GET /api/files/{projectId}/{convId}/{fileName})
         if (pathname.startsWith("/api/files/") && req.method === "GET") {
           return handleFileDownload(req);
+        }
+
+        // Handle file deletion (DELETE /api/files/{projectId}/{convId}/{fileName})
+        const fileDeleteMatch = pathname.match(/^\/api\/files\/([^\/]+)\/([^\/]+)\/([^\/]+)$/);
+        if (fileDeleteMatch && req.method === "DELETE") {
+          const [, projectId, convId, fileName] = fileDeleteMatch;
+          return handleDeleteFile(req, projectId, convId, fileName);
+        }
+
+        // Get all files for a project (GET /api/files?projectId={id})
+        if (pathname === "/api/files" && req.method === "GET") {
+          return handleGetProjectFiles(req);
         }
 
         // Memory API endpoints
@@ -377,6 +394,13 @@ export class WebSocketServer {
         if (convMessagesMatch && req.method === "GET") {
           const convId = convMessagesMatch[1];
           return handleGetConversationMessages(req, convId);
+        }
+
+        // Match /api/conversations/:convId/files endpoints
+        const convFilesMatch = pathname.match(/^\/api\/conversations\/([^\/]+)\/files$/);
+        if (convFilesMatch && req.method === "GET") {
+          const convId = convFilesMatch[1];
+          return handleGetConversationFiles(req, convId);
         }
 
         // Match /api/conversations/:convId endpoints
