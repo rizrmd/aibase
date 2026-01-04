@@ -14,6 +14,7 @@ const authService = AuthService.getInstance();
 const logger = createLogger("Setup");
 
 const SETUP_FILE = "./data/setup.json";
+const LICENSE_COOKIE_NAME = "admin_license_key";
 
 interface SetupConfig {
   appName: string;
@@ -29,6 +30,28 @@ interface UpdateSetupRequest {
   licenseKey: string;
   appName?: string;
   logo?: File;
+}
+
+/**
+ * Extract license key from cookie or request body
+ */
+function extractLicenseKey(req: Request): string | null {
+  // Try cookie first
+  const cookieHeader = req.headers.get("Cookie");
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(";").reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split("=");
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+
+    const cookieKey = cookies[LICENSE_COOKIE_NAME];
+    if (cookieKey) {
+      return cookieKey;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -229,11 +252,24 @@ export async function handleGetPublicSetup(req: Request): Promise<Response> {
 }
 
 /**
- * Verify license key from request body
+ * Verify license key from request body or cookie
  */
-async function verifyLicenseKey(licenseKey: string): Promise<boolean> {
+async function verifyLicenseKeyWithFallback(req: Request, bodyKey?: string): Promise<{ success: boolean; licenseKey: string | null }> {
+  let licenseKey = bodyKey;
+
+  // If not in body, try cookie
+  if (!licenseKey) {
+    licenseKey = extractLicenseKey(req);
+  }
+
+  if (!licenseKey) {
+    return { success: false, licenseKey: null };
+  }
+
   const envApiKey = process.env.OPENAI_API_KEY;
-  return licenseKey === envApiKey;
+  const isValid = licenseKey === envApiKey;
+
+  return { success: isValid, licenseKey: isValid ? licenseKey : null };
 }
 
 /**
@@ -260,9 +296,11 @@ async function getRootUser(): Promise<any> {
 export async function handleGetUsers(req: Request): Promise<Response> {
   try {
     const url = new URL(req.url);
-    const licenseKey = url.searchParams.get("licenseKey");
+    const queryKey = url.searchParams.get("licenseKey");
 
-    if (!licenseKey || !(await verifyLicenseKey(licenseKey))) {
+    const { success, licenseKey } = await verifyLicenseKeyWithFallback(req, queryKey);
+
+    if (!success || !licenseKey) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
     }
 
@@ -281,9 +319,20 @@ export async function handleGetUsers(req: Request): Promise<Response> {
 export async function handleCreateUser(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { licenseKey, email, username, password, role } = body;
+    let { licenseKey, email, username, password, role } = body;
 
-    if (!licenseKey || !(await verifyLicenseKey(licenseKey))) {
+    // If license key not in body, try cookie
+    if (!licenseKey) {
+      const cookieKey = extractLicenseKey(req);
+      if (cookieKey) {
+        const envApiKey = process.env.OPENAI_API_KEY;
+        if (cookieKey === envApiKey) {
+          licenseKey = cookieKey;
+        }
+      }
+    }
+
+    if (!licenseKey || licenseKey !== process.env.OPENAI_API_KEY) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
     }
 
@@ -321,9 +370,20 @@ export async function handleCreateUser(req: Request): Promise<Response> {
 export async function handleUpdateUser(req: Request, userId: string): Promise<Response> {
   try {
     const body = await req.json();
-    const { licenseKey, email, username, role, password } = body;
+    let { licenseKey, email, username, role, password } = body;
 
-    if (!licenseKey || !(await verifyLicenseKey(licenseKey))) {
+    // If license key not in body, try cookie
+    if (!licenseKey) {
+      const cookieKey = extractLicenseKey(req);
+      if (cookieKey) {
+        const envApiKey = process.env.OPENAI_API_KEY;
+        if (cookieKey === envApiKey) {
+          licenseKey = cookieKey;
+        }
+      }
+    }
+
+    if (!licenseKey || licenseKey !== process.env.OPENAI_API_KEY) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
     }
 
@@ -374,9 +434,11 @@ export async function handleUpdateUser(req: Request, userId: string): Promise<Re
 export async function handleDeleteUser(req: Request, userId: string): Promise<Response> {
   try {
     const url = new URL(req.url);
-    const licenseKey = url.searchParams.get("licenseKey");
+    const queryKey = url.searchParams.get("licenseKey");
 
-    if (!licenseKey || !(await verifyLicenseKey(licenseKey))) {
+    const { success, licenseKey } = await verifyLicenseKeyWithFallback(req, queryKey);
+
+    if (!success || !licenseKey) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
     }
 
@@ -396,9 +458,9 @@ export async function handleDeleteUser(req: Request, userId: string): Promise<Re
       );
     }
 
-    const success = await authService.deleteUserById(userIdNum);
+    const successDeleted = await authService.deleteUserById(userIdNum);
 
-    if (!success) {
+    if (!successDeleted) {
       return Response.json({ success: false, error: "User not found" }, { status: 404 });
     }
 

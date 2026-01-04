@@ -30,6 +30,27 @@ interface User {
 
 type Tab = "setup" | "users";
 
+const LICENSE_COOKIE_NAME = "admin_license_key";
+
+// Cookie helper functions
+const setLicenseCookie = (value: string) => {
+  document.cookie = `${LICENSE_COOKIE_NAME}=${value}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Strict`;
+};
+
+const getLicenseCookie = (): string | null => {
+  const cookies = document.cookie.split(";").reduce((acc, cookie) => {
+    const [key, value] = cookie.trim().split("=");
+    acc[key] = value;
+    return acc;
+  }, {} as Record<string, string>);
+
+  return cookies[LICENSE_COOKIE_NAME] || null;
+};
+
+const clearLicenseCookie = () => {
+  document.cookie = `${LICENSE_COOKIE_NAME}=; path=/; max-age=0; SameSite=Strict`;
+};
+
 export function AdminSetupPage() {
   const [licenseKey, setLicenseKey] = useState("");
   const [isVerified, setIsVerified] = useState(false);
@@ -55,9 +76,24 @@ export function AdminSetupPage() {
     role: "user" as "root" | "admin" | "user",
   });
 
-  // Load current setup on mount
+  // Load current setup and check for license cookie on mount
   useEffect(() => {
-    loadSetup();
+    const initializeAuth = async () => {
+      // Check for existing license cookie
+      const storedLicenseKey = getLicenseCookie();
+
+      if (storedLicenseKey) {
+        setLicenseKey(storedLicenseKey);
+        // Verify the stored license key
+        await verifyLicenseKey(storedLicenseKey);
+      }
+
+      // Load setup data
+      await loadSetup();
+      setLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
   // Load users when verified and on users tab
@@ -66,6 +102,27 @@ export function AdminSetupPage() {
       loadUsers();
     }
   }, [isVerified, activeTab]);
+
+  const verifyLicenseKey = async (key: string): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/admin/setup/verify-license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ licenseKey: key }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setIsVerified(true);
+        setLicenseCookie(key);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      return false;
+    }
+  };
 
   const loadSetup = async () => {
     try {
@@ -80,8 +137,6 @@ export function AdminSetupPage() {
       }
     } catch (err) {
       console.error("Error loading setup:", err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -90,9 +145,7 @@ export function AdminSetupPage() {
 
     setLoadingUsers(true);
     try {
-      const response = await fetch(
-        `/api/admin/setup/users?licenseKey=${encodeURIComponent(licenseKey)}`
-      );
+      const response = await fetch(`/api/admin/setup/users?licenseKey=${encodeURIComponent(licenseKey)}`);
       const data = await response.json();
 
       if (data.success) {
@@ -113,29 +166,16 @@ export function AdminSetupPage() {
     setVerifying(true);
     setError(null);
 
-    try {
-      const response = await fetch("/api/admin/setup/verify-license", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ licenseKey }),
-      });
+    const success = await verifyLicenseKey(licenseKey);
 
-      const data = await response.json();
-
-      if (data.success) {
-        setIsVerified(true);
-        toast.success("License key verified successfully");
-      } else {
-        setError(data.error || "Invalid license key");
-        toast.error(data.error || "Invalid license key");
-      }
-    } catch (err) {
-      const errorMsg = "Failed to verify license key";
-      setError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setVerifying(false);
+    if (success) {
+      toast.success("License key verified successfully");
+    } else {
+      setError("Invalid license key");
+      toast.error("Invalid license key");
     }
+
+    setVerifying(false);
   };
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -298,6 +338,13 @@ export function AdminSetupPage() {
     setShowUserForm(false);
     setEditingUser(null);
     setUserForm({ username: "", email: "", password: "", role: "user" });
+  };
+
+  const handleChangeLicenseKey = () => {
+    clearLicenseCookie();
+    setIsVerified(false);
+    setLicenseKey("");
+    setActiveTab("setup");
   };
 
   if (loading) {
@@ -644,11 +691,7 @@ export function AdminSetupPage() {
           type="button"
           variant="outline"
           className="w-full"
-          onClick={() => {
-            setIsVerified(false);
-            setLicenseKey("");
-            setActiveTab("setup");
-          }}
+          onClick={handleChangeLicenseKey}
         >
           Change License Key
         </Button>
