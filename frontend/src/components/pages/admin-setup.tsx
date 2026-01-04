@@ -171,7 +171,7 @@ export function AdminSetupPage() {
   useEffect(() => {
     if (selectedTenantId && tenants.length > 0) {
       const tenant = tenants.find(t => t.id === parseInt(selectedTenantId));
-      if (tenant && tenant !== selectedTenant) {
+      if (tenant && (!selectedTenant || selectedTenant.id !== tenant.id)) {
         setSelectedTenant(tenant);
         loadUsersForTenant(tenant.id);
       }
@@ -203,7 +203,13 @@ export function AdminSetupPage() {
 
   // Load tenants when verified and on tenants tab
   useEffect(() => {
+    // Load tenants on list view
     if (isVerified && activeTab === "tenants" && tenantView === "list") {
+      loadTenants();
+    }
+    // Also load tenants on detail view if we have a tenantId but no tenants loaded yet
+    // This handles direct URL access to tenant detail view
+    if (isVerified && activeTab === "tenants" && tenantView === "detail" && selectedTenantId && tenants.length === 0) {
       loadTenants();
     }
   }, [isVerified, activeTab, tenantView]);

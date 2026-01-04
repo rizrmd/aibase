@@ -24,7 +24,7 @@ export function UserMenu() {
       <PopoverContent className="w-56 p-2" align="end">
         <div className="space-y-3">
           {auth.user?.username && (
-            <div className="space-y-1">
+            <div className="space-y-1 p-2">
               <p className="text-sm font-medium">{auth.user?.username}</p>
               <p className="text-xs text-muted-foreground">
                 {auth.user?.email}

@@ -17,8 +17,10 @@ export default defineConfig(({ mode }) => {
     ? basePath.replace(/\/+$/, '').replace(/^([^/])/, '/$1')
     : "";
 
+  // Use "/" as base when basePath is empty to ensure absolute paths for assets
+  // This prevents asset loading issues when refreshing on deep routes like /projects/xxx/chat
   return {
-    base: normalizedBasePath,
+    base: normalizedBasePath || "/",
     plugins: [
       react(),
       tailwindcss({ optimize: true }),
