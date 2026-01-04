@@ -630,7 +630,7 @@ export function AdminSetupPage() {
   }
 
   return (
-    <div className="flex min-h-screen overflow-auto items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen overflow-auto justify-center bg-background p-4">
       <div className="w-full max-w-4xl space-y-8">
         {error && (
           <Alert variant="destructive">
