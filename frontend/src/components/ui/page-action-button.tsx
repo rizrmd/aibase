@@ -154,7 +154,7 @@ export const PageActionGroup = ({
   className?: string;
 }) => {
   return (
-    <div className={`absolute top-14 sm:top-4 right-3 sm:right-4 flex gap-2 ${className}`}>
+    <div className={`absolute top-20 sm:top-4 right-3 sm:right-4 flex gap-2 z-10 ${className}`}>
       {children}
     </div>
   );
