@@ -394,10 +394,11 @@ export async function handleCreateUser(req: Request): Promise<Response> {
     // If no users exist yet, create the first user directly
     if (!rootUser) {
       try {
-        // First, ensure there's a default tenant
-        let tenantId: number | null = null;
+        // Use tenant_id from request if provided, otherwise auto-detect
+        let finalTenantId: number | null = tenant_id !== undefined ? tenant_id : null;
 
-        if (role !== "root") {
+        // If no tenant_id provided and role is not root, ensure there's a default tenant
+        if (role !== "root" && finalTenantId === null) {
           // Check if any tenant exists
           try {
             const db = authService.getDatabase();
@@ -409,10 +410,10 @@ export async function handleCreateUser(req: Request): Promise<Response> {
                 name: "Default",
                 domain: null,
               });
-              tenantId = tenant.id;
-              logger.info({ tenantId }, "Created default tenant for first user");
+              finalTenantId = tenant.id;
+              logger.info({ finalTenantId }, "Created default tenant for first user");
             } else {
-              tenantId = tenants[0].id;
+              finalTenantId = tenants[0].id;
             }
           } catch (tenantError) {
             logger.warn({ error: tenantError }, "Could not create/query tenant, trying without tenant");
@@ -425,10 +426,10 @@ export async function handleCreateUser(req: Request): Promise<Response> {
           username,
           password,
           role: role || "user",
-          tenant_id: tenantId,
+          tenant_id: finalTenantId,
         });
 
-        logger.info({ username, email, role, tenantId }, "First user created via admin-setup");
+        logger.info({ username, email, role, tenant_id: finalTenantId }, "First user created via admin-setup");
         return Response.json({ success: true, user: result.user }, { status: 201 });
       } catch (registerError: any) {
         logger.error({ error: registerError }, "Error creating first user");
