@@ -61,10 +61,6 @@ const getLicenseCookie = (): string | null => {
   return cookies[LICENSE_COOKIE_NAME] || null;
 };
 
-const clearLicenseCookie = () => {
-  document.cookie = `${LICENSE_COOKIE_NAME}=; path=/; max-age=0; SameSite=Strict`;
-};
-
 export function AdminSetupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -565,13 +561,6 @@ export function AdminSetupPage() {
     setShowTenantForm(false);
     setEditingTenant(null);
     setTenantForm({ name: "", domain: "" });
-  };
-
-  const handleChangeLicenseKey = () => {
-    clearLicenseCookie();
-    setIsVerified(false);
-    setLicenseKey("");
-    setActiveTab("setup");
   };
 
   if (loading) {
@@ -1088,15 +1077,6 @@ export function AdminSetupPage() {
             )}
           </div>
         )}
-
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={handleChangeLicenseKey}
-        >
-          Change License Key
-        </Button>
       </div>
     </div>
   );

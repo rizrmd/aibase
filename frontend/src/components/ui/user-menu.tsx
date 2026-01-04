@@ -31,17 +31,15 @@ export function UserMenu() {
             <p className="text-sm font-medium">{auth.user?.username}</p>
             <p className="text-xs text-muted-foreground">{auth.user?.email}</p>
           </div>
-          <div className="border-t pt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start"
-              onClick={handleLogout}
-            >
-              <LogOut />
-              Logout
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={handleLogout}
+          >
+            <LogOut />
+            Logout
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
