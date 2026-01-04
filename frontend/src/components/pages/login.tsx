@@ -57,9 +57,11 @@ export function LoginPage() {
               }}
             />
           )}
-          <h1 className="text-4xl font-bold tracking-tight">
-            {appName}
-          </h1>
+          {!logoUrl && (
+            <h1 className="text-4xl font-bold tracking-tight">
+              {appName}
+            </h1>
+          )}
           <p className="mt-2 text-sm text-muted-foreground">
             Sign in to access your projects
           </p>

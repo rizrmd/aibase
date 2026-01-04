@@ -338,7 +338,7 @@ export async function handleGetUsers(req: Request): Promise<Response> {
     // Try to get users directly from database to bypass permission checks
     try {
       const db = authService.getDatabase();
-      const users = db.query("SELECT id, username, email, role FROM users").all() as any[];
+      const users = db.query("SELECT id, username, email, role, tenant_id FROM users").all() as any[];
       return Response.json({ success: true, users });
     } catch (dbError) {
       // Fall back to normal method if available

@@ -12,6 +12,8 @@ import {
   Trash2,
   Save,
   X,
+  ArrowLeft,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +28,7 @@ interface User {
   username: string;
   email: string;
   role: "root" | "admin" | "user";
+  tenant_id: number | null;
 }
 
 interface Tenant {
@@ -37,7 +40,8 @@ interface Tenant {
   updated_at: number;
 }
 
-type Tab = "setup" | "users" | "tenants";
+type Tab = "setup" | "tenants";
+type TenantView = "list" | "detail";
 
 const LICENSE_COOKIE_NAME = "admin_license_key";
 
@@ -72,6 +76,8 @@ export function AdminSetupPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("setup");
+  const [tenantView, setTenantView] = useState<TenantView>("list");
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
 
   // User management state
   const [users, setUsers] = useState<User[]>([]);
@@ -96,6 +102,47 @@ export function AdminSetupPage() {
     domain: "",
   });
 
+  // Helper to get users for a specific tenant
+  const loadUsersForTenant = async (tenantId: number) => {
+    if (!licenseKey) return;
+
+    setLoadingUsers(true);
+    try {
+      const response = await fetch(`/api/admin/setup/users?licenseKey=${encodeURIComponent(licenseKey)}`);
+      const data = await response.json();
+
+      if (data.success) {
+        // Filter users by tenant_id - include root users and users in this tenant
+        const tenantUsers = data.users.filter((u: User) => {
+          // Root users appear in all tenants
+          if (u.role === "root") return true;
+          // Users belonging to this tenant
+          return u.tenant_id === tenantId;
+        });
+        setUsers(tenantUsers);
+      } else {
+        toast.error(data.error || "Failed to load users");
+      }
+    } catch (err) {
+      console.error("Error loading users:", err);
+      toast.error("Failed to load users");
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleTenantClick = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setTenantView("detail");
+    loadUsersForTenant(tenant.id);
+  };
+
+  const handleBackToTenants = () => {
+    setSelectedTenant(null);
+    setTenantView("list");
+    setUsers([]);
+  };
+
   // Load current setup and check for license cookie on mount
   useEffect(() => {
     const initializeAuth = async () => {
@@ -116,19 +163,12 @@ export function AdminSetupPage() {
     initializeAuth();
   }, []);
 
-  // Load users when verified and on users tab
-  useEffect(() => {
-    if (isVerified && activeTab === "users") {
-      loadUsers();
-    }
-  }, [isVerified, activeTab]);
-
   // Load tenants when verified and on tenants tab
   useEffect(() => {
-    if (isVerified && activeTab === "tenants") {
+    if (isVerified && activeTab === "tenants" && tenantView === "list") {
       loadTenants();
     }
-  }, [isVerified, activeTab]);
+  }, [isVerified, activeTab, tenantView]);
 
   const verifyLicenseKey = async (key: string): Promise<boolean> => {
     try {
@@ -164,27 +204,6 @@ export function AdminSetupPage() {
       }
     } catch (err) {
       console.error("Error loading setup:", err);
-    }
-  };
-
-  const loadUsers = async () => {
-    if (!licenseKey) return;
-
-    setLoadingUsers(true);
-    try {
-      const response = await fetch(`/api/admin/setup/users?licenseKey=${encodeURIComponent(licenseKey)}`);
-      const data = await response.json();
-
-      if (data.success) {
-        setUsers(data.users);
-      } else {
-        toast.error(data.error || "Failed to load users");
-      }
-    } catch (err) {
-      console.error("Error loading users:", err);
-      toast.error("Failed to load users");
-    } finally {
-      setLoadingUsers(false);
     }
   };
 
@@ -270,7 +289,7 @@ export function AdminSetupPage() {
         body: JSON.stringify({
           licenseKey,
           ...userForm,
-          tenant_id: userForm.role !== "root" ? userForm.tenant_id : undefined,
+          tenant_id: userForm.role !== "root" ? (userForm.tenant_id || selectedTenant?.id) : undefined,
         }),
       });
 
@@ -280,7 +299,10 @@ export function AdminSetupPage() {
         toast.success("User created successfully");
         setShowUserForm(false);
         setUserForm({ username: "", email: "", password: "", role: "user", tenant_id: undefined });
-        loadUsers();
+        // Reload users for current tenant if in detail view
+        if (tenantView === "detail" && selectedTenant) {
+          loadUsersForTenant(selectedTenant.id);
+        }
       } else {
         toast.error(data.error || "Failed to create user");
       }
@@ -304,7 +326,7 @@ export function AdminSetupPage() {
         body: JSON.stringify({
           licenseKey,
           ...userForm,
-          tenant_id: userForm.role !== "root" ? userForm.tenant_id : undefined,
+          tenant_id: userForm.role !== "root" ? (userForm.tenant_id || selectedTenant?.id) : undefined,
         }),
       });
 
@@ -315,7 +337,10 @@ export function AdminSetupPage() {
         setEditingUser(null);
         setShowUserForm(false);
         setUserForm({ username: "", email: "", password: "", role: "user", tenant_id: undefined });
-        loadUsers();
+        // Reload users for current tenant if in detail view
+        if (tenantView === "detail" && selectedTenant) {
+          loadUsersForTenant(selectedTenant.id);
+        }
       } else {
         toast.error(data.error || "Failed to update user");
       }
@@ -343,7 +368,10 @@ export function AdminSetupPage() {
 
       if (data.success) {
         toast.success("User deleted successfully");
-        loadUsers();
+        // Reload users for current tenant if in detail view
+        if (tenantView === "detail" && selectedTenant) {
+          loadUsersForTenant(selectedTenant.id);
+        }
       } else {
         toast.error(data.error || "Failed to delete user");
       }
@@ -359,7 +387,7 @@ export function AdminSetupPage() {
       email: user.email,
       password: "",
       role: user.role,
-      tenant_id: undefined,
+      tenant_id: user.tenant_id || undefined,
     });
     setShowUserForm(true);
   };
@@ -603,24 +631,18 @@ export function AdminSetupPage() {
             App Settings
           </button>
           <button
-            onClick={() => setActiveTab("users")}
-            className={`px-4 py-2 font-medium transition-colors ${
-              activeTab === "users"
-                ? "border-b-2 border-primary text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            User Management
-          </button>
-          <button
-            onClick={() => setActiveTab("tenants")}
+            onClick={() => {
+              setActiveTab("tenants");
+              setTenantView("list");
+              setSelectedTenant(null);
+            }}
             className={`px-4 py-2 font-medium transition-colors ${
               activeTab === "tenants"
                 ? "border-b-2 border-primary text-primary"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Tenant Management
+            Tenant & User Management
           </button>
         </div>
 
@@ -695,318 +717,335 @@ export function AdminSetupPage() {
           </div>
         )}
 
-        {/* Users Tab */}
-        {activeTab === "users" && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Users</h2>
-              <Button onClick={() => setShowUserForm(true)} disabled={showUserForm}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add User
-              </Button>
-            </div>
-
-            {showUserForm && (
-              <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold">
-                  {editingUser ? "Edit User" : "Create New User"}
-                </h3>
-                <form onSubmit={editingUser ? handleUpdateUser : handleCreateUser} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="username">Username</Label>
-                      <Input
-                        id="username"
-                        type="text"
-                        placeholder="username"
-                        value={userForm.username}
-                        onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="user@example.com"
-                        value={userForm.email}
-                        onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="password">
-                        Password {editingUser && "(leave empty to keep current)"}
-                      </Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="••••••••"
-                        value={userForm.password}
-                        onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                        required={!editingUser}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="role">Role</Label>
-                      <select
-                        id="role"
-                        value={userForm.role}
-                        onChange={(e) =>
-                          setUserForm({
-                            ...userForm,
-                            role: e.target.value as "root" | "admin" | "user",
-                          })
-                        }
-                        className="w-full px-3 py-2 border rounded-md"
-                        disabled={editingUser?.role === "root"}
-                      >
-                        <option value="user">User</option>
-                        <option value="admin">Admin</option>
-                        <option value="root">Root</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {userForm.role !== "root" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="tenant">Tenant</Label>
-                      <select
-                        id="tenant"
-                        value={userForm.tenant_id || ""}
-                        onChange={(e) =>
-                          setUserForm({
-                            ...userForm,
-                            tenant_id: e.target.value ? parseInt(e.target.value) : undefined,
-                          })
-                        }
-                        className="w-full px-3 py-2 border rounded-md"
-                        required
-                      >
-                        <option value="">Select a tenant</option>
-                        {tenants.map((tenant) => (
-                          <option key={tenant.id} value={tenant.id}>
-                            {tenant.name}
-                          </option>
-                        ))}
-                      </select>
-                      {tenants.length === 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          No tenants available. Please create a tenant first in the Tenant Management tab.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <Button type="submit" disabled={saving}>
-                      <Save className="h-4 w-4 mr-2" />
-                      {saving ? "Saving..." : editingUser ? "Update User" : "Create User"}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={closeForm}>
-                      <X className="h-4 w-4 mr-2" />
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {loadingUsers ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="mt-2 text-sm text-muted-foreground">Loading users...</p>
-              </div>
-            ) : users.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No users found. Create your first user to get started.
-              </div>
-            ) : (
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-sm font-medium">Username</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium">Email</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium">Role</th>
-                      <th className="px-4 py-2 text-right text-sm font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {users.map((user) => (
-                      <tr key={user.id} className="hover:bg-muted/50">
-                        <td className="px-4 py-3 text-sm">{user.username}</td>
-                        <td className="px-4 py-3 text-sm">{user.email}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span
-                            className={`px-2 py-1 rounded text-xs font-medium ${
-                              user.role === "root"
-                                ? "bg-purple-100 text-purple-800"
-                                : user.role === "admin"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditForm(user)}
-                              title="Edit user"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user)}
-                              title="Delete user"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Tenants Tab */}
         {activeTab === "tenants" && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Tenants</h2>
-              <Button onClick={() => setShowTenantForm(true)} disabled={showTenantForm}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Tenant
-              </Button>
-            </div>
+            {/* Tenant Detail View */}
+            {tenantView === "detail" && selectedTenant && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <Button variant="ghost" size="sm" onClick={handleBackToTenants}>
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to Tenants
+                  </Button>
+                  <h2 className="text-2xl font-bold">{selectedTenant.name}</h2>
+                </div>
 
-            {showTenantForm && (
-              <div className="border rounded-lg p-4 space-y-4">
-                <h3 className="font-semibold">
-                  {editingTenant ? "Edit Tenant" : "Create New Tenant"}
-                </h3>
-                <form onSubmit={editingTenant ? handleUpdateTenant : handleCreateTenant} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="tenantName">Name</Label>
-                    <Input
-                      id="tenantName"
-                      type="text"
-                      placeholder="My Organization"
-                      value={tenantForm.name}
-                      onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
-                      required
-                    />
+                <div className="border rounded-lg p-4 bg-muted/50">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Domain:</span>{" "}
+                      {selectedTenant.domain ? (
+                        <a
+                          href={selectedTenant.domain}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline ml-2"
+                        >
+                          {selectedTenant.domain}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground ml-2">Default domain</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-medium">Created:</span>{" "}
+                      <span className="text-muted-foreground ml-2">
+                        {new Date(selectedTenant.created_at).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="tenantDomain">Domain (Optional)</Label>
-                    <Input
-                      id="tenantDomain"
-                      type="text"
-                      placeholder="https://example.com"
-                      value={tenantForm.domain}
-                      onChange={(e) => setTenantForm({ ...tenantForm, domain: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Custom domain for this tenant (leave empty for default domain)
-                    </p>
-                  </div>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xl font-semibold">Users</h3>
+                  <Button onClick={() => setShowUserForm(true)} disabled={showUserForm}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add User
+                  </Button>
+                </div>
 
-                  <div className="flex gap-2">
-                    <Button type="submit" disabled={saving}>
-                      <Save className="h-4 w-4 mr-2" />
-                      {saving ? "Saving..." : editingTenant ? "Update Tenant" : "Create Tenant"}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={closeTenantForm}>
-                      <X className="h-4 w-4 mr-2" />
-                      Cancel
-                    </Button>
+                {showUserForm && (
+                  <div className="border rounded-lg p-4 space-y-4">
+                    <h3 className="font-semibold">
+                      {editingUser ? "Edit User" : "Create New User"}
+                    </h3>
+                    <form onSubmit={editingUser ? handleUpdateUser : handleCreateUser} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="username">Username</Label>
+                          <Input
+                            id="username"
+                            type="text"
+                            placeholder="username"
+                            value={userForm.username}
+                            onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="email">Email</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            placeholder="user@example.com"
+                            value={userForm.email}
+                            onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="password">
+                            Password {editingUser && "(leave empty to keep current)"}
+                          </Label>
+                          <Input
+                            id="password"
+                            type="password"
+                            placeholder="••••••••"
+                            value={userForm.password}
+                            onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                            required={!editingUser}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="role">Role</Label>
+                          <select
+                            id="role"
+                            value={userForm.role}
+                            onChange={(e) =>
+                              setUserForm({
+                                ...userForm,
+                                role: e.target.value as "root" | "admin" | "user",
+                              })
+                            }
+                            className="w-full px-3 py-2 border rounded-md"
+                            disabled={editingUser?.role === "root"}
+                          >
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                            <option value="root">Root</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button type="submit" disabled={saving}>
+                          <Save className="h-4 w-4 mr-2" />
+                          {saving ? "Saving..." : editingUser ? "Update User" : "Create User"}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={closeForm}>
+                          <X className="h-4 w-4 mr-2" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
                   </div>
-                </form>
+                )}
+
+                {loadingUsers ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                    <p className="mt-2 text-sm text-muted-foreground">Loading users...</p>
+                  </div>
+                ) : users.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No users found in this tenant. Create your first user to get started.
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Username</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Email</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Role</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {users.map((user) => (
+                          <tr key={user.id} className="hover:bg-muted/50">
+                            <td className="px-4 py-3 text-sm">{user.username}</td>
+                            <td className="px-4 py-3 text-sm">{user.email}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-medium ${
+                                  user.role === "root"
+                                    ? "bg-purple-100 text-purple-800"
+                                    : user.role === "admin"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-gray-100 text-gray-800"
+                                }`}
+                              >
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditForm(user)}
+                                  title="Edit user"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteUser(user)}
+                                  title="Delete user"
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
-            {loadingTenants ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="mt-2 text-sm text-muted-foreground">Loading tenants...</p>
-              </div>
-            ) : tenants.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No tenants found. Create your first tenant to get started.
-              </div>
-            ) : (
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium">Domain</th>
-                      <th className="px-4 py-2 text-left text-sm font-medium">Created</th>
-                      <th className="px-4 py-2 text-right text-sm font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {tenants.map((tenant) => (
-                      <tr key={tenant.id} className="hover:bg-muted/50">
-                        <td className="px-4 py-3 text-sm font-medium">{tenant.name}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {tenant.domain ? (
-                            <a
-                              href={tenant.domain}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              {tenant.domain}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">Default domain</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {new Date(tenant.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditTenantForm(tenant)}
-                              title="Edit tenant"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteTenant(tenant)}
-                              title="Delete tenant"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Tenant List View */}
+            {tenantView === "list" && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold">Tenants</h2>
+                  <Button onClick={() => setShowTenantForm(true)} disabled={showTenantForm}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Tenant
+                  </Button>
+                </div>
+
+                {showTenantForm && (
+                  <div className="border rounded-lg p-4 space-y-4">
+                    <h3 className="font-semibold">
+                      {editingTenant ? "Edit Tenant" : "Create New Tenant"}
+                    </h3>
+                    <form onSubmit={editingTenant ? handleUpdateTenant : handleCreateTenant} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="tenantName">Name</Label>
+                        <Input
+                          id="tenantName"
+                          type="text"
+                          placeholder="My Organization"
+                          value={tenantForm.name}
+                          onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="tenantDomain">Domain (Optional)</Label>
+                        <Input
+                          id="tenantDomain"
+                          type="text"
+                          placeholder="https://example.com"
+                          value={tenantForm.domain}
+                          onChange={(e) => setTenantForm({ ...tenantForm, domain: e.target.value })}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Custom domain for this tenant (leave empty for default domain)
+                        </p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button type="submit" disabled={saving}>
+                          <Save className="h-4 w-4 mr-2" />
+                          {saving ? "Saving..." : editingTenant ? "Update Tenant" : "Create Tenant"}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={closeTenantForm}>
+                          <X className="h-4 w-4 mr-2" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {loadingTenants ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                    <p className="mt-2 text-sm text-muted-foreground">Loading tenants...</p>
+                  </div>
+                ) : tenants.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No tenants found. Create your first tenant to get started.
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Name</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Domain</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Created</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {tenants.map((tenant) => (
+                          <tr key={tenant.id} className="hover:bg-muted/50">
+                            <td className="px-4 py-3 text-sm font-medium">{tenant.name}</td>
+                            <td className="px-4 py-3 text-sm">
+                              {tenant.domain ? (
+                                <a
+                                  href={tenant.domain}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  {tenant.domain}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">Default domain</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                              {new Date(tenant.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleTenantClick(tenant)}
+                                  title="View users"
+                                >
+                                  <Users className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditTenantForm(tenant)}
+                                  title="Edit tenant"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteTenant(tenant)}
+                                  title="Delete tenant"
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
