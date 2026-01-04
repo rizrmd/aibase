@@ -3,6 +3,8 @@ import { flushSync } from "react-dom";
 import type { Message } from "@/components/ui/chat";
 import { activeTabManager } from "@/lib/ws/active-tab-manager";
 import type { WSClient } from "@/lib/ws/ws-connection-manager";
+import { useConversationStore } from "@/stores/conversation-store";
+import { useProjectStore } from "@/stores/project-store";
 
 interface UseWebSocketHandlersProps {
   wsClient: WSClient | null;
@@ -39,6 +41,10 @@ export function useWebSocketHandlers({
   currentToolInvocationsRef,
   currentPartsRef,
 }: UseWebSocketHandlersProps) {
+  // Get conversation store and project store for title updates
+  const { refreshConversations } = useConversationStore();
+  const { currentProject } = useProjectStore();
+
   useEffect(() => {
     if (!wsClient) return;
 
@@ -1361,6 +1367,17 @@ export function useWebSocketHandlers({
       setTodos(data.todos);
     };
 
+    const handleConversationTitleUpdate = (data: { title: string }) => {
+      // Only active tab processes title updates
+      if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
+      console.log("[Title Update] Received new title:", data.title);
+
+      // Refresh conversation list to show updated title
+      if (currentProject?.id) {
+        refreshConversations(currentProject.id);
+      }
+    };
+
     // Register event listeners
     wsClient.on("connected", handleConnected);
     wsClient.on("disconnected", handleDisconnected);
@@ -1374,6 +1391,7 @@ export function useWebSocketHandlers({
     wsClient.on("tool_call", handleToolCall);
     wsClient.on("tool_result", handleToolResult);
     wsClient.on("todo_update", handleTodoUpdate);
+    wsClient.on("conversation_title_update", handleConversationTitleUpdate);
 
     // Connect to WebSocket (connection manager handles multiple calls gracefully)
     wsClient.connect().catch(handleError);
@@ -1397,6 +1415,7 @@ export function useWebSocketHandlers({
       wsClient.off("tool_call", handleToolCall);
       wsClient.off("tool_result", handleToolResult);
       wsClient.off("todo_update", handleTodoUpdate);
+      wsClient.off("conversation_title_update", handleConversationTitleUpdate);
     };
-  }, [wsClient, convId, componentRef, setMessages, setIsLoading, setError, setTodos, isLoading, thinkingStartTimeRef, currentMessageRef, currentMessageIdRef, currentToolInvocationsRef, currentPartsRef]);
+  }, [wsClient, convId, componentRef, setMessages, setIsLoading, setError, setTodos, isLoading, thinkingStartTimeRef, currentMessageRef, currentMessageIdRef, currentToolInvocationsRef, currentPartsRef, refreshConversations, currentProject]);
 }

@@ -16,6 +16,7 @@ import { WSEventEmitter } from "./events";
 import { MessagePersistence } from "./msg-persistance";
 import { detectAndStorePostgreSQLUrl } from "../llm/postgresql-detector";
 import { getConversationInfo } from "../llm/conversation-info";
+import { generateConversationTitle, getConversationTitle } from "../llm/conversation-title-generator";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -795,6 +796,13 @@ export class WSServer extends WSEventEmitter {
         assistantMsgId
       );
 
+      // Generate conversation title asynchronously after first assistant response
+      // Don't wait for it to complete - let it run in the background
+      this.generateTitleIfNeeded(connectionInfo.convId, connectionInfo.projectId, historyWithIds)
+        .catch((error) => {
+          console.error(`[TitleGeneration] Error generating title for ${connectionInfo.convId}:`, error);
+        });
+
       // Check if compaction is needed (automatic)
       try {
         const compactionResult = await this.messagePersistence.checkAndCompact(
@@ -1335,6 +1343,54 @@ Always be helpful and conversational.`;
         convId,
       },
     });
+  }
+
+  /**
+   * Generate conversation title if needed (after first message)
+   * Runs asynchronously in the background
+   */
+  private async generateTitleIfNeeded(
+    convId: string,
+    projectId: string,
+    history: any[]
+  ): Promise<void> {
+    try {
+      // Check if title already exists
+      const existingTitle = await getConversationTitle(convId, projectId);
+      if (existingTitle) {
+        console.log(`[TitleGeneration] Title already exists for ${convId}: "${existingTitle}"`);
+        return;
+      }
+
+      // Count non-system messages to determine if we should generate a title
+      const nonSystemMessages = history.filter((msg: any) => msg.role !== "system");
+
+      // Generate title after first user-assistant exchange (at least 2 non-system messages)
+      if (nonSystemMessages.length >= 2) {
+        console.log(`[TitleGeneration] Generating title for ${convId} with ${nonSystemMessages.length} messages...`);
+
+        // Generate title using AI
+        const title = await generateConversationTitle(history, convId, projectId);
+
+        console.log(`[TitleGeneration] Generated title for ${convId}: "${title}"`);
+
+        // Optionally broadcast title update to all connected clients
+        this.broadcastToConv(convId, {
+          type: "conversation_title_update",
+          id: this.generateMessageId(),
+          data: { title },
+          metadata: {
+            timestamp: Date.now(),
+            convId,
+          },
+        });
+      } else {
+        console.log(`[TitleGeneration] Skipping title generation for ${convId} - not enough messages yet (${nonSystemMessages.length}/2)`);
+      }
+    } catch (error) {
+      console.error(`[TitleGeneration] Failed to generate title for ${convId}:`, error);
+      // Don't throw - title generation is non-critical
+    }
   }
 
   private sendToWebSocket(ws: ServerWebSocket, message: WSMessage): boolean {

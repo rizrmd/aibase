@@ -433,6 +433,10 @@ export class WSClient extends WSEventEmitter {
         this.emit("todo_update", message.data);
         break;
 
+      case "conversation_title_update":
+        this.emit("conversation_title_update", message.data);
+        break;
+
       default:
         this.emit("message", message);
     }
