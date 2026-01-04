@@ -74,7 +74,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
     <div className="flex h-screen flex-col">
       {/* Navigation Bar - Only show on chat routes */}
       {isChatRoute && currentProject && (
-        <div className="absolute top-0 left-0 m-3 z-10 flex gap-2">
+        <div className="absolute top-0 left-0 m-3 z-10 flex flex-wrap gap-2 max-w-[calc(100%-80px)] sm:max-w-none">
           {/* Back to Projects Button */}
           <Button
             variant="ghost"
@@ -97,7 +97,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           >
             <MessageSquare />
             {location.pathname === `/projects/${currentProject.id}/chat` && (
-              <>Chat</>
+              <span className="hidden sm:inline">Chat</span>
             )}
           </Button>
           {conversations.length > 0 && (
@@ -113,7 +113,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
             >
               <MessagesSquare />
               {location.pathname ===
-                `/projects/${currentProject.id}/history` && <>History</>}
+                `/projects/${currentProject.id}/history` && <span className="hidden sm:inline">History</span>}
             </Button>
           )}
           <Button
@@ -127,7 +127,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           >
             <Binary />
             {location.pathname === `/projects/${currentProject.id}/memory` && (
-              <>Memory</>
+              <span className="hidden sm:inline">Memory</span>
             )}
           </Button>
           <Button
@@ -141,7 +141,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           >
             <FileText />
             {location.pathname === `/projects/${currentProject.id}/context` && (
-              <>Context</>
+              <span className="hidden sm:inline">Context</span>
             )}
           </Button>
           <Button
@@ -155,7 +155,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           >
             <Files />
             {location.pathname === `/projects/${currentProject.id}/files` && (
-              <>Files</>
+              <span className="hidden sm:inline">Files</span>
             )}
           </Button>
           <Button
@@ -169,7 +169,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           >
             <Code />
             {location.pathname === `/projects/${currentProject.id}/embed` && (
-              <>Embed</>
+              <span className="hidden sm:inline">Embed</span>
             )}
           </Button>
           {location.pathname === `/projects/${currentProject.id}/chat` &&
@@ -181,7 +181,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
                 title={isTodoPanelVisible ? "Hide tasks" : "Show tasks"}
               >
                 <ListTodo />
-                {isTodoPanelVisible && <>Tasks</>}
+                {isTodoPanelVisible && <span className="hidden sm:inline">Tasks</span>}
               </Button>
             )}
         </div>
@@ -200,7 +200,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
               onClick={() => navigate("/admin/tenants")}
             >
               <Building2 />
-              {location.pathname === "/admin/tenants" && <>Tenants</>}
+              {location.pathname === "/admin/tenants" && <span className="hidden sm:inline">Tenants</span>}
             </Button>
           )}
           {/* Users button (admin and root, not on chat routes) */}
@@ -213,7 +213,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
               onClick={() => navigate("/admin/users")}
             >
               <Users />
-              {location.pathname === "/admin/users" && <>Users</>}
+              {location.pathname === "/admin/users" && <span className="hidden sm:inline">Users</span>}
             </Button>
           )}
           {!isChatRoute && <UserMenu />}
