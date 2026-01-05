@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/time-utils";
-import { useProjectStore } from "@/stores/project-store";
+
 import { useConversationStore } from "@/stores/conversation-store";
 import { FileIcon, Trash2, Download, MessageSquare } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -27,7 +27,7 @@ import { useChatStore } from "@/stores/chat-store";
 export function FilesManagerPage() {
   const navigate = useNavigate();
   const { projectId } = useParams();
-  const { currentProject } = useProjectStore();
+
   const { conversations, loadConversations } = useConversationStore();
   const { setConvId } = useConvId();
   const { clearMessages } = useChatStore();

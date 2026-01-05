@@ -15,7 +15,7 @@ import { useConvId } from "@/lib/conv-id";
 import { formatRelativeTime } from "@/lib/time-utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useConversationStore } from "@/stores/conversation-store";
-import { useProjectStore } from "@/stores/project-store";
+
 import { MessageSquare, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -42,7 +42,7 @@ export function ConversationHistoryPage() {
   const { projectId } = useParams();
   const { conversations, isLoading, loadConversations, removeConversation } =
     useConversationStore();
-  const { currentProject } = useProjectStore();
+
   const { clearMessages } = useChatStore();
   const { setConvId, clearConvId } = useConvId();
   const [deletingConversation, setDeletingConversation] = useState<{
