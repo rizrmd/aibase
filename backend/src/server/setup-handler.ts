@@ -142,102 +142,95 @@ export async function handleUpdateSetup(req: Request): Promise<Response> {
     let licenseKey: string;
     let appName: string | undefined;
     let logo: File | null = null;
+    let favicon: File | null = null;
 
-    // Handle multipart form data (for logo upload)
+    // Handle multipart form data (for logo/favicon upload)
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       licenseKey = formData.get("licenseKey") as string;
       appName = formData.get("appName") as string | undefined;
+
       const logoFile = formData.get("logo") as File | null;
+      if (logoFile && logoFile.size > 0) {
+        logo = logoFile;
+      }
 
-      logo = logoFile;
-    }
-
-    const faviconFile = formData.get("favicon") as File | null;
-    if (!faviconFile || faviconFile.size === 0) {
-      // null means no change/delete not supported via this simple check for now unless explicit
-      // but here we just check if provided
+      const faviconFile = formData.get("favicon") as File | null;
+      if (faviconFile && faviconFile.size > 0) {
+        favicon = faviconFile;
+      }
     } else {
-      // We handle favicon assignment below
-      // Just need to cast it or store it temporarily, but since we re-read below from formData or local var...
-      // Actually we need to extract it here to a variable
+      // Handle JSON request
+      const body = (await req.json()) as UpdateSetupRequest;
+      licenseKey = body.licenseKey;
+      appName = body.appName;
     }
-    // Re-get cleanly
-    const faviconInput = formData.get("favicon") as File | null;
-    var favicon: File | null = (faviconInput && faviconInput.size > 0) ? faviconInput : null;
-  } else {
-    // Handle JSON request
-    const body = (await req.json()) as UpdateSetupRequest;
-    licenseKey = body.licenseKey;
-    appName = body.appName;
-    // JSON can't really upload files this way usually, but keeping structure
+
+    // Verify license key
+    const envApiKey = process.env.OPENAI_API_KEY;
+    if (!licenseKey || licenseKey !== envApiKey) {
+      return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
+    }
+
+    // Read existing setup or create new
+    let setup: SetupConfig = {
+      appName: "",
+      updatedAt: Date.now(),
+    };
+
+    if (existsSync(SETUP_FILE)) {
+      const data = await readFile(SETUP_FILE, "utf-8");
+      setup = JSON.parse(data);
+    }
+
+    // Update app name if provided
+    if (appName !== undefined) {
+      setup.appName = appName;
+    }
+
+    // Handle logo upload
+    if (logo) {
+      const logoPath = "./data/logo.png";
+      const buffer = await logo.arrayBuffer();
+      await writeFile(logoPath, Buffer.from(buffer));
+      setup.logoPath = logoPath;
+      logger.info("Logo uploaded successfully");
+    }
+
+    // Handle favicon upload
+    // @ts-ignore - favicon variable is defined in the block above but TS might complain about scope if not careful
+    // To be safe, let's just grab it from formData again if we are in multipart mode, or rely on the variable if we hoisted it
+    // I used `var` above which hoists, or I can just access it if I restructure.
+    // Let's restructure the retrieval slightly to be cleaner in a subsequent edit or just trust the logic.
+    // Since I cannot easily change the whole function logic structure in one chunk without conflict risk, I will assume `favicon` var is available or re-grab.
+    // Actually, `var favicon` in the `if` block is function scoped.
+    if (typeof favicon !== 'undefined' && favicon) {
+      const faviconPath = "./data/favicon.png";
+      const buffer = await favicon.arrayBuffer();
+      await writeFile(faviconPath, Buffer.from(buffer));
+      setup.faviconPath = faviconPath;
+      logger.info("Favicon uploaded successfully");
+    }
+
+    setup.updatedAt = Date.now();
+
+    // Save setup
+    await writeFile(SETUP_FILE, JSON.stringify(setup, null, 2));
+
+    logger.info({ appName: setup.appName, hasLogo: !!setup.logoPath }, "Setup updated successfully");
+
+    return Response.json({
+      success: true,
+      setup: {
+        appName: setup.appName,
+        hasLogo: !!setup.logoPath,
+        updatedAt: setup.updatedAt,
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, "Error updating setup");
+    return Response.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
-
-  // Verify license key
-  const envApiKey = process.env.OPENAI_API_KEY;
-  if (!licenseKey || licenseKey !== envApiKey) {
-    return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
-  }
-
-  // Read existing setup or create new
-  let setup: SetupConfig = {
-    appName: "",
-    updatedAt: Date.now(),
-  };
-
-  if (existsSync(SETUP_FILE)) {
-    const data = await readFile(SETUP_FILE, "utf-8");
-    setup = JSON.parse(data);
-  }
-
-  // Update app name if provided
-  if (appName !== undefined) {
-    setup.appName = appName;
-  }
-
-  // Handle logo upload
-  if (logo) {
-    const logoPath = "./data/logo.png";
-    const buffer = await logo.arrayBuffer();
-    await writeFile(logoPath, Buffer.from(buffer));
-    setup.logoPath = logoPath;
-    logger.info("Logo uploaded successfully");
-  }
-
-  // Handle favicon upload
-  // @ts-ignore - favicon variable is defined in the block above but TS might complain about scope if not careful
-  // To be safe, let's just grab it from formData again if we are in multipart mode, or rely on the variable if we hoisted it
-  // I used `var` above which hoists, or I can just access it if I restructure.
-  // Let's restructure the retrieval slightly to be cleaner in a subsequent edit or just trust the logic.
-  // Since I cannot easily change the whole function logic structure in one chunk without conflict risk, I will assume `favicon` var is available or re-grab.
-  // Actually, `var favicon` in the `if` block is function scoped.
-  if (typeof favicon !== 'undefined' && favicon) {
-    const faviconPath = "./data/favicon.png";
-    const buffer = await favicon.arrayBuffer();
-    await writeFile(faviconPath, Buffer.from(buffer));
-    setup.faviconPath = faviconPath;
-    logger.info("Favicon uploaded successfully");
-  }
-
-  setup.updatedAt = Date.now();
-
-  // Save setup
-  await writeFile(SETUP_FILE, JSON.stringify(setup, null, 2));
-
-  logger.info({ appName: setup.appName, hasLogo: !!setup.logoPath }, "Setup updated successfully");
-
-  return Response.json({
-    success: true,
-    setup: {
-      appName: setup.appName,
-      hasLogo: !!setup.logoPath,
-      updatedAt: setup.updatedAt,
-    },
-  });
-} catch (error) {
-  logger.error({ error }, "Error updating setup");
-  return Response.json({ success: false, error: "Internal server error" }, { status: 500 });
-}
 }
 
 /**
