@@ -15,7 +15,7 @@ interface UseWebSocketHandlersProps {
   setError: (error: string | null) => void;
   setTodos: (todos: any) => void;
   setMaxTokens: (maxTokens: number | null) => void;
-  setTokenUsage: (tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number } | null) => void;
+  setTokenUsage: (tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number; messageCount: number } | null) => void;
   isLoading: boolean;
   thinkingStartTimeRef: React.MutableRefObject<number | null>;
   currentMessageRef: React.MutableRefObject<string | null>;
@@ -430,6 +430,7 @@ export function useWebSocketHandlers({
         promptTokens: number;
         completionTokens: number;
         totalTokens: number;
+        messageCount: number;
       };
       maxTokens?: number;
     }) => {
