@@ -15,6 +15,7 @@ import {
   generateIframeCode,
   generateJavaScriptCode,
 } from "@/lib/embed-api";
+import { buildApiUrl } from "@/lib/base-path";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
 import { Checkbox } from "./checkbox";
@@ -35,7 +36,7 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
   const [showFiles, setShowFiles] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
-  const [useClientUid, setUseClientUid] = useState(false);
+  const [userMode, setUserMode] = useState<"current" | "uid">("current");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [codeType, setCodeType] = useState<"iframe" | "javascript">("iframe");
@@ -49,7 +50,7 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
       setShowFiles(currentProject.show_files ?? false);
       setShowContext(currentProject.show_context ?? false);
       setShowMemory(currentProject.show_memory ?? false);
-      setUseClientUid(currentProject.use_client_uid ?? false);
+      setUserMode(currentProject.use_client_uid ? "uid" : "current");
       setError("");
     }
   }, [open, currentProject]);
@@ -66,7 +67,7 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
         show_files: showFiles,
         show_context: showContext,
         show_memory: showMemory,
-        use_client_uid: useClientUid,
+        use_client_uid: userMode === "uid",
       };
 
       await useProjectStore.getState().updateProject(projectId, configUpdates);
@@ -157,18 +158,21 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
                   <Label htmlFor="show-memory">Show Memory (Persisted facts)</Label>
                 </div>
 
-                <div className="flex items-center space-x-2 pt-4 border-t">
-                  <Checkbox
-                    id="use-client-uid"
-                    checked={useClientUid}
-                    onCheckedChange={(c) => setUseClientUid(c === true)}
-                  />
-                  <div className="grid gap-1.5 leading-none">
-                    <Label htmlFor="use-client-uid" className="font-semibold">Enable User ID (Persistent History)</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Allow embedding with a custom <code>uid</code> to persist user history across sessions.
-                    </p>
-                  </div>
+                <div className="space-y-2 pt-4 border-t">
+                  <Label htmlFor="user-mode" className="font-semibold">User Identification</Label>
+                  <select
+                    id="user-mode"
+                    value={userMode}
+                    onChange={(e) => setUserMode(e.target.value as "current" | "uid")}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="current">Current User</option>
+                    <option value="uid">By UID Param</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {userMode === "current" && "All embedded users share the same conversation history"}
+                    {userMode === "uid" && "Each user has their own history by passing a unique uid parameter (uid=user123)"}
+                  </p>
                 </div>
               </div>
 
@@ -296,20 +300,48 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
                 </p>
               </div>
 
-              <div className="rounded-md bg-blue-50 p-4 mt-4">
-                <h4 className="font-semibold text-blue-900 mb-2 text-sm">Authentication & User Identifiers</h4>
-                <p className="text-xs text-blue-800 mb-2">
-                  To maintain persistent history for your users, you should provide a unique <code>uid</code> for each of your users.
-                  When using JavaScript embed, you can pass <code>uid: "user_123"</code> in the options.
-                </p>
-                <pre className="text-xs text-blue-900 bg-blue-100 p-2 rounded overflow-x-auto">
-                  {`window.AIChat.init({
-  projectId: "${projectId}",
-  embedToken: "${embedToken}",
-  uid: "UNIQUE_USER_ID" // Your user's ID
-});`}
-                </pre>
-              </div>
+              {userMode === "uid" && (
+                <div className="rounded-md bg-blue-50 p-4 mt-4">
+                  <h4 className="font-semibold text-blue-900 mb-2 text-sm">Using UID Parameter for Persistent User History</h4>
+                  <p className="text-xs text-blue-800 mb-2">
+                    To maintain separate conversation history for each user, add a <code>uid</code> parameter to the embed URL.
+                    The system will automatically create and persist history for each unique user ID.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-blue-800 font-semibold mb-1">For iframe:</p>
+                      <pre className="text-xs text-blue-900 bg-blue-100 p-2 rounded overflow-x-auto">
+{`<iframe
+  src="${window.location.origin}${buildApiUrl("")}/embed?projectId=${projectId}&embedToken=${embedToken}&uid=USER_ID_HERE"
+  width="${width}"
+  height="${height}"
+></iframe>`}
+                      </pre>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-800 font-semibold mb-1">Example with dynamic user ID:</p>
+                      <pre className="text-xs text-blue-900 bg-blue-100 p-2 rounded overflow-x-auto">
+{`<!-- Replace USER_ID_HERE with your user's actual ID -->
+<iframe
+  src="${window.location.origin}${buildApiUrl("")}/embed?projectId=${projectId}&embedToken=${embedToken}&uid=user_123"
+  width="${width}"
+  height="${height}"
+></iframe>`}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {userMode === "current" && (
+                <div className="rounded-md bg-amber-50 p-4 mt-4">
+                  <h4 className="font-semibold text-amber-900 mb-2 text-sm">Shared Conversation Mode</h4>
+                  <p className="text-xs text-amber-800">
+                    All embedded users will share the same conversation history. To enable per-user history,
+                    switch to "By UID Param" mode in the Config tab.
+                  </p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>
