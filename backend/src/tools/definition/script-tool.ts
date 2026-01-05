@@ -57,10 +57,10 @@ export const context = async () => {
 export class ScriptTool extends Tool {
   name = "script";
 
-  description = `Execute TypeScript code with programmatic access to other tools.
+  description = `Execute Bun TypeScript code with programmatic access to other tools.
 Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
 Available functions: progress(message, data?), duckdb(options), postgresql(options), pdfReader(options), showChart(options), showTable(options), and all registered tools as async functions.
-Context variables: convId, projectId.`;
+Context variables: convId, projectId. Note: Bun is used instead of Node.js (Do not use require).`;
 
   parameters = {
     type: "object",
