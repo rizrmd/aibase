@@ -49,6 +49,7 @@ import {
   handleGetConversations,
   handleGetConversationMessages,
   handleDeleteConversation,
+  handleRegenerateConversationTitle,
 } from "./conversations-handler";
 import {
   handleGetProjectFiles,
@@ -387,6 +388,13 @@ export class WebSocketServer {
         if (convFilesMatch && req.method === "GET") {
           const convId = convFilesMatch[1];
           return handleGetConversationFiles(req, convId);
+        }
+
+        // Match /api/conversations/:convId/regenerate-title endpoints
+        const convRegenerateTitleMatch = pathname.match(/^\/api\/conversations\/([^\/]+)\/regenerate-title$/);
+        if (convRegenerateTitleMatch && req.method === "POST") {
+          const convId = convRegenerateTitleMatch[1];
+          return handleRegenerateConversationTitle(req, convId);
         }
 
         // Match /api/conversations/:convId endpoints

@@ -154,3 +154,112 @@ export async function getConversationTitle(
     return null;
   }
 }
+
+/**
+ * Regenerate conversation title (force regeneration even if title exists)
+ */
+export async function regenerateConversationTitle(
+  convId: string,
+  projectId: string
+): Promise<string> {
+  // Load conversation messages
+  const { ChatHistoryStorage } = await import("../storage/chat-history-storage");
+  const chatHistoryStorage = ChatHistoryStorage.getInstance();
+  const messages = await chatHistoryStorage.loadChatHistory(convId, projectId);
+
+  // If no messages, return a default title
+  if (messages.length === 0) {
+    return "New Conversation";
+  }
+
+  // Get first few messages for context (max 5)
+  const contextMessages = messages.slice(0, 5);
+
+  // Create a simple string representation of the conversation
+  const conversationText = contextMessages
+    .map((msg) => {
+      if (typeof msg.content === "string") {
+        return `${msg.role}: ${msg.content}`;
+      }
+      return "";
+    })
+    .filter((text) => text.length > 0)
+    .join("\n");
+
+  // If conversation is too short, use first user message
+  if (conversationText.length < 10) {
+    const firstUserMsg = messages.find(
+      (msg) => msg.role === "user" && typeof msg.content === "string"
+    );
+    if (firstUserMsg && typeof firstUserMsg.content === "string") {
+      const title = firstUserMsg.content.slice(0, 60).trim();
+      await saveConversationTitle(convId, projectId, title);
+      return title;
+    }
+    return "New Conversation";
+  }
+
+  try {
+    // Initialize OpenAI client
+    const client = new OpenAI({
+      baseURL: process.env.OPENAI_BASE_URL,
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    // Use a small, fast model for title generation (to save costs)
+    // Falls back to the main OPENAI_MODEL if TITLE_GENERATION_MODEL is not set
+    const model = process.env.TITLE_GENERATION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+    // Generate title using AI
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful assistant that generates concise, descriptive titles for conversations. Generate a title that is 3-8 words long, captures the main topic, and is clear and specific. Do not use quotes or special formatting. Just return the plain text title.",
+        },
+        {
+          role: "user",
+          content: `Generate a concise title for this conversation:\n\n${conversationText}`,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 30,
+    });
+
+    const title = response.choices[0]?.message?.content?.trim();
+
+    if (title && title.length > 0) {
+      // Save the title to conversation info
+      await saveConversationTitle(convId, projectId, title);
+      return title;
+    }
+
+    // Fallback to first user message if AI fails
+    const firstUserMsg = messages.find(
+      (msg) => msg.role === "user" && typeof msg.content === "string"
+    );
+    if (firstUserMsg && typeof firstUserMsg.content === "string") {
+      const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
+      await saveConversationTitle(convId, projectId, fallbackTitle);
+      return fallbackTitle;
+    }
+
+    return "New Conversation";
+  } catch (error) {
+    console.error("[TitleGenerator] Error regenerating title:", error);
+
+    // Fallback to first user message
+    const firstUserMsg = messages.find(
+      (msg) => msg.role === "user" && typeof msg.content === "string"
+    );
+    if (firstUserMsg && typeof firstUserMsg.content === "string") {
+      const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
+      await saveConversationTitle(convId, projectId, fallbackTitle);
+      return fallbackTitle;
+    }
+
+    return "New Conversation";
+  }
+}

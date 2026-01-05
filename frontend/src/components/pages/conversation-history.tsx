@@ -26,6 +26,7 @@ import {
   getFileIcon,
   type FileInfo,
 } from "@/lib/files-api";
+import { regenerateConversationTitle } from "@/lib/conversation-api";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { RefreshCw } from "lucide-react";
 
 export function ConversationHistoryPage() {
   const navigate = useNavigate();
@@ -48,6 +50,7 @@ export function ConversationHistoryPage() {
     title: string;
     files: FileInfo[];
   } | null>(null);
+  const [regeneratingTitleId, setRegeneratingTitleId] = useState<string | null>(null);
 
   useEffect(() => {
     // Load conversations when component mounts
@@ -109,6 +112,31 @@ export function ConversationHistoryPage() {
     if (success) {
       toast.success("Conversation deleted successfully");
       setDeletingConversation(null);
+    }
+  };
+
+  const handleRegenerateTitle = async (
+    e: React.MouseEvent,
+    convId: string,
+    _currentTitle: string
+  ) => {
+    e.stopPropagation(); // Prevent card click
+
+    if (!projectId) return;
+
+    setRegeneratingTitleId(convId);
+
+    try {
+      await regenerateConversationTitle(convId, projectId);
+      toast.success("Title regenerated successfully");
+
+      // Reload conversations to get the updated title
+      await loadConversations(projectId);
+    } catch (error) {
+      console.error("Error regenerating title:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to regenerate title");
+    } finally {
+      setRegeneratingTitleId(null);
     }
   };
 
@@ -217,21 +245,39 @@ export function ConversationHistoryPage() {
                           </CardDescription>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) =>
-                          handleDeleteConversation(
-                            e,
-                            conversation.convId,
-                            conversation.title
-                          )
-                        }
-                        className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                        title="Delete conversation"
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) =>
+                            handleRegenerateTitle(
+                              e,
+                              conversation.convId,
+                              conversation.title
+                            )
+                          }
+                          disabled={regeneratingTitleId === conversation.convId}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          title="Regenerate title"
+                        >
+                          <RefreshCw className={`size-4 text-muted-foreground ${regeneratingTitleId === conversation.convId ? "animate-spin" : ""}`} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) =>
+                            handleDeleteConversation(
+                              e,
+                              conversation.convId,
+                              conversation.title
+                            )
+                          }
+                          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          title="Delete conversation"
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                 </Card>

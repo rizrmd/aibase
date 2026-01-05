@@ -4,7 +4,7 @@
 
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
 import { FileStorage } from "../storage/file-storage";
-import { generateConversationTitle, getConversationTitle } from "../llm/conversation-title-generator";
+import { generateConversationTitle, getConversationTitle, regenerateConversationTitle } from "../llm/conversation-title-generator";
 import { createLogger } from "../utils/logger";
 
 const logger = createLogger("Conversations");
@@ -187,6 +187,61 @@ export async function handleDeleteConversation(
       {
         success: false,
         error: error instanceof Error ? error.message : "Failed to delete conversation",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Handle POST /api/conversations/:convId/regenerate-title?projectId={id} - Regenerate conversation title
+ */
+export async function handleRegenerateConversationTitle(
+  req: Request,
+  convId: string
+): Promise<Response> {
+  try {
+    const url = new URL(req.url);
+    const projectId = url.searchParams.get("projectId");
+
+    if (!projectId) {
+      return Response.json(
+        {
+          success: false,
+          error: "projectId query parameter is required",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if conversation exists
+    const metadata = await chatHistoryStorage.getChatHistoryMetadata(convId, projectId);
+
+    if (!metadata) {
+      return Response.json(
+        {
+          success: false,
+          error: "Conversation not found",
+        },
+        { status: 404 }
+      );
+    }
+
+    // Regenerate the title
+    const newTitle = await regenerateConversationTitle(convId, projectId);
+
+    logger.info({ convId, projectId, newTitle }, "Conversation title regenerated");
+
+    return Response.json({
+      success: true,
+      data: { title: newTitle },
+    });
+  } catch (error) {
+    logger.error({ error }, "Error regenerating conversation title");
+    return Response.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to regenerate conversation title",
       },
       { status: 500 }
     );

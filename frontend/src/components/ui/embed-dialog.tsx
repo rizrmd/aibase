@@ -8,10 +8,9 @@ import { Label } from "./label";
 import { Input } from "./input";
 import { Button } from "./button";
 import { useState, useEffect } from "react";
-import { RefreshCw, Copy, Check } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
 import {
-  regenerateEmbedToken,
   updateEmbedCss,
   generateIframeCode,
   generateJavaScriptCode,
@@ -42,27 +41,6 @@ export function EmbedDialog({ open, onOpenChange, projectId }: EmbedDialogProps)
       setError("");
     }
   }, [open, currentProject]);
-
-  const handleRegenerateToken = async () => {
-    setIsLoading(true);
-    setError("");
-    try {
-      const token = await regenerateEmbedToken(projectId);
-      setEmbedToken(token);
-
-      // Update project in store
-      if (currentProject) {
-        useProjectStore.getState().setCurrentProject({
-          ...currentProject,
-          embed_token: token,
-        });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to regenerate token");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSaveCss = async () => {
     setIsLoading(true);

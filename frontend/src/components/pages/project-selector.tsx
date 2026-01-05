@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { ProjectCreateModal } from "@/components/project/project-create-modal";
 import { ProjectRenameModal } from "@/components/project/project-rename-modal";
-import { Folder, Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { Project } from "@/stores/project-store";
 

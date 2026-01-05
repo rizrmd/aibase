@@ -87,3 +87,25 @@ export async function deleteConversation(
     throw new Error(data.error || "Failed to delete conversation");
   }
 }
+
+/**
+ * Regenerate conversation title
+ */
+export async function regenerateConversationTitle(
+  convId: string,
+  projectId: string
+): Promise<string> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/conversations/${convId}/regenerate-title?projectId=${projectId}`,
+    {
+      method: "POST",
+    }
+  );
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || "Failed to regenerate conversation title");
+  }
+
+  return data.data.title;
+}
