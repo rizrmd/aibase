@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for full-stack application
-FROM oven/bun:1.1-alpine AS frontend-build
+FROM oven/bun:alpine AS frontend-build
 
 # Build frontend
 WORKDIR /app/frontend
@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # Production stage
-FROM oven/bun:1.1-alpine
+FROM oven/bun:alpine
 
 WORKDIR /app
 
