@@ -49,7 +49,9 @@ export async function generateConversationTitle(
       (msg) => msg.role === "user" && typeof msg.content === "string"
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
-      return firstUserMsg.content.slice(0, 60).trim();
+      const title = firstUserMsg.content.slice(0, 60).trim();
+      await saveConversationTitle(convId, projectId, title);
+      return title;
     }
     return "New Conversation";
   }
@@ -96,7 +98,9 @@ export async function generateConversationTitle(
       (msg) => msg.role === "user" && typeof msg.content === "string"
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
-      return firstUserMsg.content.slice(0, 60).trim();
+      const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
+      await saveConversationTitle(convId, projectId, fallbackTitle);
+      return fallbackTitle;
     }
 
     return "New Conversation";
@@ -108,7 +112,9 @@ export async function generateConversationTitle(
       (msg) => msg.role === "user" && typeof msg.content === "string"
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
-      return firstUserMsg.content.slice(0, 60).trim();
+      const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
+      await saveConversationTitle(convId, projectId, fallbackTitle);
+      return fallbackTitle;
     }
 
     return "New Conversation";

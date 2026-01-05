@@ -6,6 +6,7 @@ interface ChatStore {
   messages: Message[];
   input: string;
   isLoading: boolean;
+  isHistoryLoading: boolean;
   error: string | null;
 
   // Connection state
@@ -37,6 +38,7 @@ interface ChatStore {
 
   // Actions for loading/error
   setIsLoading: (isLoading: boolean) => void;
+  setIsHistoryLoading: (isHistoryLoading: boolean) => void;
   setError: (error: string | null) => void;
 
   // Actions for connection
@@ -57,6 +59,7 @@ export const useChatStore = create<ChatStore>((set) => ({
   messages: [],
   input: "",
   isLoading: false,
+  isHistoryLoading: false,
   error: null,
   connectionStatus: "disconnected",
   todos: null,
@@ -83,6 +86,7 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   // Loading/error actions
   setIsLoading: (isLoading) => set({ isLoading }),
+  setIsHistoryLoading: (isHistoryLoading) => set({ isHistoryLoading }),
   setError: (error) => set({ error }),
 
   // Connection actions

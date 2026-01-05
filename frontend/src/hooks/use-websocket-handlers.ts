@@ -12,6 +12,7 @@ interface UseWebSocketHandlersProps {
   componentRef: React.MutableRefObject<{}>;
   setMessages: (updater: (prev: Message[]) => Message[]) => void;
   setIsLoading: (loading: boolean) => void;
+  setIsHistoryLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setTodos: (todos: any) => void;
   setMaxTokens: (maxTokens: number | null) => void;
@@ -30,6 +31,7 @@ export function useWebSocketHandlers({
   componentRef,
   setMessages,
   setIsLoading,
+  setIsHistoryLoading,
   setError,
   setTodos,
   setMaxTokens,
@@ -58,6 +60,8 @@ export function useWebSocketHandlers({
       // Only active tab handles connection events
       if (!activeTabManager.isActiveTab(componentRef.current, convId)) return;
       setError(null);
+      // Set history loading state to true when requesting history
+      setIsHistoryLoading(true);
       // Request message history from server when connected
       wsClient.getHistory();
     };
@@ -602,6 +606,9 @@ export function useWebSocketHandlers({
       console.log("handleHistoryResponse called with:", data);
       console.log("[History] hasActiveStream from backend:", data.hasActiveStream);
       console.log("[History] tokenUsage from backend:", data.tokenUsage);
+
+      // Clear history loading state when response is received
+      setIsHistoryLoading(false);
 
       // Set maxTokens if provided
       if (data.maxTokens !== undefined) {
@@ -1418,5 +1425,5 @@ export function useWebSocketHandlers({
       wsClient.off("todo_update", handleTodoUpdate);
       wsClient.off("conversation_title_update", handleConversationTitleUpdate);
     };
-  }, [wsClient, convId, componentRef, setMessages, setIsLoading, setError, setTodos, isLoading, thinkingStartTimeRef, currentMessageRef, currentMessageIdRef, currentToolInvocationsRef, currentPartsRef, refreshConversations, currentProject]);
+  }, [wsClient, convId, componentRef, setMessages, setIsLoading, setIsHistoryLoading, setError, setTodos, isLoading, thinkingStartTimeRef, currentMessageRef, currentMessageIdRef, currentToolInvocationsRef, currentPartsRef, refreshConversations, currentProject]);
 }

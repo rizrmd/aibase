@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ArrowDown, Loader2, ThumbsDown, ThumbsUp } from "lucide-react";
 import { forwardRef, useCallback, useRef, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -24,6 +24,7 @@ interface ChatPropsBase {
   className?: string;
   handleInputChange: React.ChangeEventHandler<HTMLTextAreaElement>;
   isGenerating: boolean;
+  isHistoryLoading?: boolean;
   stop?: () => void;
   onRateResponse?: (
     messageId: string,
@@ -44,6 +45,7 @@ export function Chat({
   handleInputChange,
   stop,
   isGenerating,
+  isHistoryLoading = false,
   className,
   onRateResponse,
   setMessages,
@@ -199,7 +201,14 @@ export function Chat({
 
       {isEmpty ? (
         <div className="flex flex-1 items-center justify-center">
-          {welcomeMessage || "Welcome"}
+          {isHistoryLoading ? (
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Loading conversation...</p>
+            </div>
+          ) : (
+            welcomeMessage || "Welcome"
+          )}
         </div>
       ) : null}
 

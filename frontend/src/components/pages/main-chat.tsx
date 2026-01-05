@@ -42,11 +42,13 @@ export function MainChat({
     messages,
     input,
     isLoading,
+    isHistoryLoading,
     error,
     todos,
     setMessages,
     setInput,
     setIsLoading,
+    setIsHistoryLoading,
     setError,
     setTodos,
     setMaxTokens,
@@ -56,11 +58,13 @@ export function MainChat({
       messages: state.messages,
       input: state.input,
       isLoading: state.isLoading,
+      isHistoryLoading: state.isHistoryLoading,
       error: state.error,
       todos: state.todos,
       setMessages: state.setMessages,
       setInput: state.setInput,
       setIsLoading: state.setIsLoading,
+      setIsHistoryLoading: state.setIsHistoryLoading,
       setError: state.setError,
       setTodos: state.setTodos,
       setMaxTokens: state.setMaxTokens,
@@ -149,6 +153,7 @@ export function MainChat({
     componentRef,
     setMessages,
     setIsLoading,
+    setIsHistoryLoading,
     setError,
     setTodos,
     setMaxTokens,
@@ -321,6 +326,7 @@ export function MainChat({
           handleInputChange={handleInputChange}
           handleSubmit={handleSubmit}
           isGenerating={isLoading}
+          isHistoryLoading={isHistoryLoading}
           stop={abort}
           setMessages={setMessages}
           className="h-full"
