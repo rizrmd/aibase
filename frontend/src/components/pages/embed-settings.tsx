@@ -22,7 +22,7 @@ export function EmbedSettings() {
 
   const [embedToken, setEmbedToken] = useState<string | null>(null);
   const [customCss, setCustomCss] = useState("");
-  const [welcomeMessage, setWelcomeMessage] = useState("");
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isCoping, setIsCopying] = useState(false);
@@ -56,23 +56,7 @@ export function EmbedSettings() {
     }
   }, [currentProject]);
 
-  // Load welcome message
-  const loadWelcomeMessage = useCallback(async () => {
-    if (!currentProject) return;
 
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/embed/info?projectId=${currentProject.id}&embedToken=${currentProject.id}`
-      );
-      const data = await response.json();
-
-      if (data.success && data.data.welcomeMessage) {
-        setWelcomeMessage(data.data.welcomeMessage);
-      }
-    } catch (err) {
-      console.error("Failed to load welcome message:", err);
-    }
-  }, [currentProject]);
 
   // Load embed settings when project changes
   const loadEmbedSettings = useCallback(async () => {
@@ -94,14 +78,13 @@ export function EmbedSettings() {
       setUserMode(currentProject.use_client_uid ? "uid" : "current");
 
       await loadCustomCss();
-      await loadWelcomeMessage();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load embed settings";
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  }, [currentProject, loadCustomCss, loadWelcomeMessage]);
+  }, [currentProject, loadCustomCss]);
 
   // Load embed settings when project changes
   useEffect(() => {
@@ -464,7 +447,7 @@ export function EmbedSettings() {
                     <div>
                       <p className="text-xs text-blue-800 font-semibold mb-1">For iframe:</p>
                       <pre className="text-xs text-blue-900 bg-blue-100 p-2 rounded overflow-x-auto">
-{`<iframe
+                        {`<iframe
   src="${window.location.origin}${buildApiUrl("")}/embed?projectId=${currentProject.id}&embedToken=${embedToken}&uid=USER_ID_HERE"
   width="${width}"
   height="${height}"
@@ -474,7 +457,7 @@ export function EmbedSettings() {
                     <div>
                       <p className="text-xs text-blue-800 font-semibold mb-1">Example with dynamic user ID:</p>
                       <pre className="text-xs text-blue-900 bg-blue-100 p-2 rounded overflow-x-auto">
-{`<!-- Replace USER_ID_HERE with your user's actual ID -->
+                        {`<!-- Replace USER_ID_HERE with your user's actual ID -->
 <iframe
   src="${window.location.origin}${buildApiUrl("")}/embed?projectId=${currentProject.id}&embedToken=${embedToken}&uid=user_123"
   width="${width}"
