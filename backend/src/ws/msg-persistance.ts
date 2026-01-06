@@ -10,6 +10,7 @@ import { chatCompaction } from "../storage/chat-compaction";
 
 export interface ConvMessageHistory {
   convId: string;
+  projectId: string;
   messages: ChatCompletionMessageParam[];
   lastUpdated: number;
   messageCount: number;
@@ -22,6 +23,13 @@ export class MessagePersistence {
 
   private constructor() {
     this.chatHistoryStorage = ChatHistoryStorage.getInstance();
+  }
+
+  /**
+   * Generate cache key from projectId and convId
+   */
+  private getCacheKey(projectId: string, convId: string): string {
+    return `${projectId}:${convId}`;
   }
 
   /**
@@ -39,7 +47,8 @@ export class MessagePersistence {
    * Loads from disk if not in memory
    */
   async getClientHistory(convId: string, projectId: string): Promise<ChatCompletionMessageParam[]> {
-    const history = this.convHistories[convId];
+    const cacheKey = this.getCacheKey(projectId, convId);
+    const history = this.convHistories[cacheKey];
     if (history) {
       return [...history.messages]; // Return a copy to prevent direct modification
     }
@@ -49,8 +58,9 @@ export class MessagePersistence {
       const diskHistory = await this.chatHistoryStorage.loadChatHistory(convId, projectId);
       if (diskHistory.length > 0) {
         // Store in memory for faster access
-        this.convHistories[convId] = {
+        this.convHistories[cacheKey] = {
           convId,
+          projectId,
           messages: diskHistory,
           lastUpdated: Date.now(),
           messageCount: diskHistory.length,
@@ -85,8 +95,10 @@ export class MessagePersistence {
     messages: ChatCompletionMessageParam[],
     projectId: string
   ): void {
-    this.convHistories[convId] = {
+    const cacheKey = this.getCacheKey(projectId, convId);
+    this.convHistories[cacheKey] = {
       convId,
+      projectId,
       messages: [...messages], // Store a copy
       lastUpdated: Date.now(),
       messageCount: messages.length,
@@ -103,21 +115,23 @@ export class MessagePersistence {
    * Also saves to disk
    */
   addClientMessage(convId: string, message: ChatCompletionMessageParam, projectId: string): void {
-    if (!this.convHistories[convId]) {
-      this.convHistories[convId] = {
+    const cacheKey = this.getCacheKey(projectId, convId);
+    if (!this.convHistories[cacheKey]) {
+      this.convHistories[cacheKey] = {
         convId,
+        projectId,
         messages: [],
         lastUpdated: Date.now(),
         messageCount: 0,
       };
     }
 
-    this.convHistories[convId].messages.push(message);
-    this.convHistories[convId].lastUpdated = Date.now();
-    this.convHistories[convId].messageCount++;
+    this.convHistories[cacheKey].messages.push(message);
+    this.convHistories[cacheKey].lastUpdated = Date.now();
+    this.convHistories[cacheKey].messageCount++;
 
     // Asynchronously save to disk (don't wait)
-    const messages = this.convHistories[convId].messages;
+    const messages = this.convHistories[cacheKey].messages;
     this.chatHistoryStorage.saveChatHistory(convId, messages, projectId).catch(error => {
       console.error(`[MessagePersistence] Error saving history for ${convId}:`, error);
     });
@@ -126,28 +140,28 @@ export class MessagePersistence {
   /**
    * Clear message history for a conversation
    */
-  clearClientHistory(convId: string, keepSystemPrompt: boolean = true): void {
-    const history = this.convHistories[convId];
+  clearClientHistory(convId: string, projectId: string, keepSystemPrompt: boolean = true): void {
+    const cacheKey = this.getCacheKey(projectId, convId);
+    const history = this.convHistories[cacheKey];
     if (!history) return;
 
-    if (convId && this.convHistories[convId]) {
-      if (keepSystemPrompt && history.messages[0]?.role === "system") {
-        this.convHistories[convId].messages = [history.messages[0]];
-        this.convHistories[convId].messageCount = 1;
-      } else {
-        this.convHistories[convId].messages = [];
-        this.convHistories[convId].messageCount = 0;
-      }
-      this.convHistories[convId].lastUpdated = Date.now();
+    if (keepSystemPrompt && history.messages[0]?.role === "system") {
+      history.messages = [history.messages[0]];
+      history.messageCount = 1;
+    } else {
+      history.messages = [];
+      history.messageCount = 0;
     }
+    history.lastUpdated = Date.now();
   }
 
   /**
    * Delete conversation history completely
    */
-  deleteClientHistory(convId: string): boolean {
-    if (this.convHistories[convId]) {
-      delete this.convHistories[convId];
+  deleteClientHistory(convId: string, projectId: string): boolean {
+    const cacheKey = this.getCacheKey(projectId, convId);
+    if (this.convHistories[cacheKey]) {
+      delete this.convHistories[cacheKey];
       return true;
     }
     return false;
@@ -208,18 +222,20 @@ export class MessagePersistence {
   /**
    * Check if conversation has history
    */
-  hasClientHistory(convId: string): boolean {
+  hasClientHistory(convId: string, projectId: string): boolean {
+    const cacheKey = this.getCacheKey(projectId, convId);
     return (
-      !!this.convHistories[convId] &&
-      this.convHistories[convId].messages.length > 0
+      !!this.convHistories[cacheKey] &&
+      this.convHistories[cacheKey].messages.length > 0
     );
   }
 
   /**
    * Get message count for a conversation
    */
-  getClientMessageCount(convId: string): number {
-    return this.convHistories[convId]?.messageCount || 0;
+  getClientMessageCount(convId: string, projectId: string): number {
+    const cacheKey = this.getCacheKey(projectId, convId);
+    return this.convHistories[cacheKey]?.messageCount || 0;
   }
 
   /**
@@ -240,7 +256,7 @@ export class MessagePersistence {
       }
 
       // Get current messages
-      const messages = await this.getClientHistory(convId);
+      const messages = await this.getClientHistory(convId, projectId);
 
       // Perform compaction
       const result = await chatCompaction.compactChat(projectId, convId, messages);

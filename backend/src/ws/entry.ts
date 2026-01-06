@@ -1009,7 +1009,7 @@ export class WSServer extends WSEventEmitter {
           if (conversation) {
             conversation.clearHistory();
             // Also clear from persistent storage
-            this.messagePersistence.clearClientHistory(connectionInfo.convId);
+            this.messagePersistence.clearClientHistory(connectionInfo.convId, connectionInfo.projectId);
             this.sendToWebSocket(ws, {
               type: "control_response",
               id: message.id,
