@@ -12,6 +12,13 @@ Use duckdb() for querying CSV, Excel, Parquet, and JSON files using SQL.
 
 #### EXAMPLES
 
+**CRITICAL: FILE PATHS ARE RELATIVE!**
+- The script automatically executes in the files directory.
+- DO NOT use full paths causing "No such file or directory" errors.
+- CORRECT: \`read_xlsx('data.xlsx')\`
+- WRONG: \`read_xlsx('data/proj_123/conv_456/files/data.xlsx')\`
+- CROSS-CONVERSATION: \`../../<other_conv_id>/files/data.xlsx\`
+
 \`\`\`typescript
 // Query CSV file
 progress('Querying sales data...');
