@@ -36,7 +36,7 @@ interface ChatPropsBase {
   welcomeMessage?: string | null;
 }
 
-interface ChatProps extends ChatPropsBase {}
+interface ChatProps extends ChatPropsBase { }
 
 export function Chat({
   messages,
@@ -266,8 +266,8 @@ export function ChatMessages({
       onScroll={handleScroll}
       onTouchStart={handleTouchStart}
     >
-      <div className="grid grid-cols-1 max-w-[650px]  w-full mx-auto pt-10 pb-[200px]">
-        <div className="max-w-full col-[1/1] row-[1/1]">{children}</div>
+      <div className="grid grid-cols-1 max-w-[650px] w-full mx-auto pt-10 pb-[200px]">
+        <div className="max-w-full col-[1/1] md:px-0 px-4 md:mt-4 mt-12 row-[1/1]">{children}</div>
 
         {!shouldAutoScroll && (
           <div className="pointer-events-none flex flex-1 items-end justify-end cursor-pointer col-[1/1] row-[1/1]">

@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
     base: normalizedBasePath || "/",
     plugins: [
       react(),
-      tailwindcss({ optimize: true }),
+      tailwindcss(),
       // Plugin to inject APP_NAME into index.html
       {
         name: 'html-transform',

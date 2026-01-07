@@ -208,10 +208,10 @@ export function ConversationHistoryPage() {
         />
       </PageActionGroup>
 
-      <div className="w-full select-none max-w-3xl space-y-6 h-full flex flex-col">
+      <div className="w-full select-none max-w-3xl space-y-6 h-full flex flex-col md:mt-8 mt-16">
         {/* Conversations List */}
         {conversations.length > 0 ? (
-          <div className="overflow-auto relative flex-1">
+          <div className="overflow-auto relative flex-1 ">
             <div className="p-4 space-y-3 absolute inset-0">
               {conversations.map((conversation) => (
                 <Card
@@ -222,10 +222,10 @@ export function ConversationHistoryPage() {
                   <CardHeader className="min-h-0 h-auto">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                        <div className="sm:flex size-10 rounded-full bg-primary/10 hidden items-center justify-center flex-shrink-0 mt-1">
                           <MessageSquare className="size-5 text-primary" />
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 ">
                           <CardTitle className="text-lg line-clamp-2 break-words">
                             {conversation.title}
                           </CardTitle>
@@ -250,7 +250,7 @@ export function ConversationHistoryPage() {
                             )
                           }
                           disabled={regeneratingTitleId === conversation.convId}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          className="sm:opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                           title="Regenerate title"
                         >
                           <RefreshCw className={`size-4 text-muted-foreground ${regeneratingTitleId === conversation.convId ? "animate-spin" : ""}`} />
@@ -265,7 +265,7 @@ export function ConversationHistoryPage() {
                               conversation.title
                             )
                           }
-                          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          className="sm:opacity-0  group-hover:opacity-100 transition-opacity flex-shrink-0"
                           title="Delete conversation"
                         >
                           <Trash2 className="size-4 text-destructive" />
