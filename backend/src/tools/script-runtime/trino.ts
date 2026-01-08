@@ -22,6 +22,43 @@ async function loadMemory(projectId: string): Promise<Record<string, any>> {
 }
 
 /**
+ * Parse memory reference and retrieve value
+ * Supports syntax: "memory:category.key" -> reads from memory[category][key]
+ * Example: "memory:database.trino_url" -> memory.database.trino_url
+ */
+async function parseMemoryReference(value: string | undefined, projectId: string): Promise<string | undefined> {
+  if (!value || !value.startsWith('memory:')) {
+    return value;
+  }
+
+  const reference = value.substring(7); // Remove "memory:" prefix
+  const parts = reference.split('.');
+
+  if (parts.length !== 2) {
+    throw new Error(
+      `Invalid memory reference: "${value}". Expected format: "memory:category.key" (e.g., "memory:database.trino_url")`
+    );
+  }
+
+  const [category, key] = parts;
+  const memory = await loadMemory(projectId);
+
+  if (!memory[category]) {
+    throw new Error(
+      `Memory category "${category}" not found. Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+    );
+  }
+
+  if (!memory[category][key]) {
+    throw new Error(
+      `Memory key "${key}" not found in category "${category}". Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+    );
+  }
+
+  return memory[category][key];
+}
+
+/**
  * Context documentation for Trino functionality
  */
 export const context = async () => {
@@ -31,16 +68,9 @@ Use trino() for Trino distributed queries.
 
 **IMPORTANT:** Use trino() for Trino distributed queries!
 
-**Available:** trino({ query, serverUrl?, catalog?, schema?, username?, password?, format?, timeout? })
+**Available:** trino({ query, serverUrl, catalog?, schema?, username?, password?, format?, timeout? })
 
-**IMPORTANT:** Store credentials in memory for security! Use:
-\`\`\`
-await memory({ action: 'set', category: 'database', key: 'trino_url', value: 'http://localhost:8080' });
-await memory({ action: 'set', category: 'database', key: 'trino_catalog', value: 'hive' });
-await memory({ action: 'set', category: 'database', key: 'trino_schema', value: 'default' });
-await memory({ action: 'set', category: 'database', key: 'trino_username', value: 'trino' });
-await memory({ action: 'set', category: 'database', key: 'trino_password', value: 'secret' });
-\`\`\`
+**SECURITY:** Store credentials in memory and reference them explicitly!
 
 #### EXAMPLES
 
@@ -51,31 +81,37 @@ await memory({ action: 'set', category: 'database', key: 'trino_catalog', value:
 await memory({ action: 'set', category: 'database', key: 'trino_schema', value: 'default' });
 await memory({ action: 'set', category: 'database', key: 'trino_username', value: 'trino' });
 
-// Then query without exposing credentials in code:
+// Then reference credentials explicitly (CLEAR which credentials are used):
 progress('Querying Trino...');
 const result = await trino({
-  query: 'SELECT region, COUNT(*) as count, SUM(revenue) as total_revenue FROM sales WHERE year = 2024 GROUP BY region ORDER BY total_revenue DESC'
+  query: 'SELECT region, COUNT(*) as count, SUM(revenue) as total_revenue FROM sales WHERE year = 2024 GROUP BY region ORDER BY total_revenue DESC',
+  serverUrl: 'memory:database.trino_url',      // Explicit memory reference
+  catalog: 'memory:database.trino_catalog',    // Explicit memory reference
+  schema: 'memory:database.trino_schema',      // Explicit memory reference
+  username: 'memory:database.trino_username'   // Explicit memory reference
 });
 progress(\`Found \${result.rowCount} regions\`);
 return { count: result.rowCount, regions: result.data, stats: result.stats };
 
-// Cross-catalog query (credentials from memory)
+// Cross-catalog query (explicit memory references)
 progress('Running cross-catalog query...');
 const cross = await trino({
-  query: 'SELECT h.customer_id, h.order_count, p.customer_name FROM hive.sales.order_summary h JOIN postgresql.crm.customers p ON h.customer_id = p.id WHERE h.order_count > 10'
+  query: 'SELECT h.customer_id, h.order_count, p.customer_name FROM hive.sales.order_summary h JOIN postgresql.crm.customers p ON h.customer_id = p.id WHERE h.order_count > 10',
+  serverUrl: 'memory:database.trino_url'
 });
 return { customers: cross.rowCount, data: cross.data };
 
-// Query with timeout (credentials from memory)
+// Query with timeout (explicit memory references)
 progress('Connecting to Trino...');
 const secured = await trino({
   query: "SELECT date_trunc('day', order_date) as day, COUNT(*) as orders FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL '30' DAY GROUP BY 1 ORDER BY 1",
+  serverUrl: 'memory:database.trino_url',
   timeout: 60000
 });
 return { days: secured.rowCount, orderTrend: secured.data };
 
-// Legacy: Direct credentials (NOT RECOMMENDED - credentials visible in code)
-const legacy = await trino({
+// ALTERNATIVE: Direct credentials (credentials visible in code)
+const direct = await trino({
   query: 'SELECT * FROM items',
   serverUrl: 'http://localhost:8080',
   catalog: 'hive',
@@ -92,15 +128,15 @@ const legacy = await trino({
 export interface TrinoOptions {
   /** SQL query to execute */
   query: string;
-  /** Trino server URL (optional if stored in memory) */
-  serverUrl?: string;
-  /** Trino catalog to query (optional if stored in memory) */
+  /** Trino server URL or memory reference (e.g., "memory:database.trino_url") */
+  serverUrl: string;
+  /** Trino catalog to query or memory reference (e.g., "memory:database.trino_catalog") */
   catalog?: string;
-  /** Trino schema to query (optional if stored in memory) */
+  /** Trino schema to query or memory reference (e.g., "memory:database.trino_schema") */
   schema?: string;
-  /** Username for authentication (optional if stored in memory) */
+  /** Username for authentication or memory reference (e.g., "memory:database.trino_username") */
   username?: string;
-  /** Password for authentication (optional if stored in memory) */
+  /** Password for authentication or memory reference (e.g., "memory:database.trino_password") */
   password?: string;
   /** Return format: 'json' (default), 'raw' */
   format?: "json" | "raw";
@@ -166,53 +202,43 @@ export function createTrinoFunction(projectId?: string) {
   return async (options: TrinoOptions): Promise<TrinoResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
-        "trino requires an options object. Usage: trino({ query: 'SELECT * FROM table' })"
+        "trino requires an options object. Usage: trino({ query: 'SELECT * FROM table', serverUrl: 'memory:database.trino_url' })"
       );
     }
 
     if (!options.query) {
       throw new Error(
-        "trino requires 'query' parameter. Usage: trino({ query: 'SELECT * FROM table' })"
+        "trino requires 'query' parameter. Usage: trino({ query: 'SELECT * FROM table', serverUrl: 'memory:database.trino_url' })"
       );
     }
 
-    // Try to get credentials from memory first, then fall back to provided parameters
-    let serverUrl = options.serverUrl;
-    let catalog = options.catalog;
-    let schema = options.schema;
-    let username = options.username;
-    let password = options.password;
-
-    if (projectId) {
-      try {
-        // Try to read from memory
-        const memory = await loadMemory(projectId);
-        if (memory.database) {
-          if (!serverUrl && memory.database.trino_url) {
-            serverUrl = memory.database.trino_url;
-          }
-          if (!catalog && memory.database.trino_catalog) {
-            catalog = memory.database.trino_catalog;
-          }
-          if (!schema && memory.database.trino_schema) {
-            schema = memory.database.trino_schema;
-          }
-          if (!username && memory.database.trino_username) {
-            username = memory.database.trino_username;
-          }
-          if (password === undefined && memory.database.trino_password !== undefined) {
-            password = memory.database.trino_password;
-          }
-        }
-      } catch (error) {
-        // Silently ignore memory errors and require explicit parameters
-      }
+    if (!options.serverUrl) {
+      throw new Error(
+        "trino requires 'serverUrl' parameter. " +
+        "Use memory reference: serverUrl: 'memory:database.trino_url' or direct URL: 'http://localhost:8080'"
+      );
     }
+
+    // Parse memory references if they're in the format "memory:category.key"
+    const serverUrl = projectId
+      ? await parseMemoryReference(options.serverUrl, projectId)
+      : options.serverUrl;
+    const catalog = projectId && options.catalog
+      ? await parseMemoryReference(options.catalog, projectId)
+      : options.catalog;
+    const schema = projectId && options.schema
+      ? await parseMemoryReference(options.schema, projectId)
+      : options.schema;
+    const username = projectId && options.username
+      ? await parseMemoryReference(options.username, projectId)
+      : options.username;
+    const password = projectId && options.password !== undefined
+      ? await parseMemoryReference(options.password, projectId)
+      : options.password;
 
     if (!serverUrl) {
       throw new Error(
-        "trino requires 'serverUrl' parameter or credentials stored in memory. " +
-        "Store credentials securely: await memory({ action: 'set', category: 'database', key: 'trino_url', value: 'http://localhost:8080' })"
+        "trino serverUrl resolved to undefined. Check your memory reference or provide a direct URL."
       );
     }
 

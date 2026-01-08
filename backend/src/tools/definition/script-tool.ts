@@ -135,28 +135,31 @@ PostgreSQL query examples (RECOMMENDED: store credentials in memory):
     value: 'postgresql://user:pass@localhost:5432/mydb'
   });
 
-  // Then query without exposing credentials in code:
+  // Then reference the credential explicitly (CLEAR which credential is used):
   const users = await postgresql({
-    query: "SELECT * FROM users WHERE active = true LIMIT 10"
+    query: "SELECT * FROM users WHERE active = true LIMIT 10",
+    connectionUrl: "memory:database.postgresql_url"  // Explicit memory reference
   });
   progress(\`Found \${users.rowCount} users\`);
   return users.data;
 
-  // Query with aggregation (credentials from memory)
+  // Query with aggregation (explicit memory reference)
   const stats = await postgresql({
-    query: "SELECT status, COUNT(*) as count FROM orders GROUP BY status"
+    query: "SELECT status, COUNT(*) as count FROM orders GROUP BY status",
+    connectionUrl: "memory:database.postgresql_url"
   });
   return stats.data;
 
-  // Query with timeout (credentials from memory)
+  // Query with timeout (explicit memory reference)
   const large = await postgresql({
     query: "SELECT * FROM large_table",
+    connectionUrl: "memory:database.postgresql_url",
     timeout: 60000 // 60 seconds
   });
   return { rowCount: large.rowCount, executionTime: large.executionTime };
 
-  // LEGACY: Direct connection URL (NOT RECOMMENDED - exposes credentials)
-  const legacy = await postgresql({
+  // ALTERNATIVE: Direct connection URL (credentials visible in code)
+  const direct = await postgresql({
     query: "SELECT * FROM items",
     connectionUrl: "postgresql://user:pass@localhost:5432/mydb"
   });
@@ -177,9 +180,10 @@ PDF reader examples (extract text from PDF files):
     value: 'secret123'
   });
 
-  // Then read without exposing password in code:
+  // Then reference the password explicitly (CLEAR which password is used):
   const secure = await pdfReader({
-    filePath: "secure.pdf"
+    filePath: "secure.pdf",
+    password: "memory:credentials.pdf_password"  // Explicit memory reference
   });
   return secure.text;
 
@@ -201,8 +205,8 @@ PDF reader examples (extract text from PDF files):
   }
   return results;
 
-  // LEGACY: Direct password (NOT RECOMMENDED - exposes password)
-  const legacy = await pdfReader({
+  // ALTERNATIVE: Direct password (password visible in code)
+  const direct = await pdfReader({
     filePath: "secure.pdf",
     password: "secret123"
   });`,

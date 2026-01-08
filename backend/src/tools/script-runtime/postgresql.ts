@@ -12,9 +12,9 @@ Use postgresql() for direct PostgreSQL database queries.
 
 **IMPORTANT:** Use postgresql(), NOT DuckDB for PostgreSQL databases!
 
-**Available:** postgresql({ query, connectionUrl?, format?, timeout? })
+**Available:** postgresql({ query, connectionUrl, format?, timeout? })
 
-**IMPORTANT:** Store credentials in memory for security! Use: \`await memory({ action: 'set', category: 'database', key: 'postgresql_url', value: 'postgresql://user:pass@localhost:5432/mydb' })\`
+**SECURITY:** Store credentials in memory and reference them explicitly!
 
 #### EXAMPLES
 
@@ -27,31 +27,34 @@ await memory({
   value: 'postgresql://user:pass@localhost:5432/mydb'
 });
 
-// Then query without exposing credentials in code:
+// Then reference the credential explicitly (CLEAR which credential is used):
 progress('Querying PostgreSQL...');
 const result = await postgresql({
-  query: 'SELECT * FROM users WHERE active = true LIMIT 10'
+  query: 'SELECT * FROM users WHERE active = true LIMIT 10',
+  connectionUrl: 'memory:database.postgresql_url'  // Explicit memory reference
 });
 progress(\`Found \${result.rowCount} users\`);
 return { count: result.rowCount, users: result.data };
 
-// Query with aggregation (credentials from memory)
+// Query with aggregation (explicit memory reference)
 progress('Analyzing orders...');
 const stats = await postgresql({
-  query: 'SELECT status, COUNT(*) as count, SUM(total) as revenue FROM orders GROUP BY status ORDER BY revenue DESC'
+  query: 'SELECT status, COUNT(*) as count, SUM(total) as revenue FROM orders GROUP BY status ORDER BY revenue DESC',
+  connectionUrl: 'memory:database.postgresql_url'
 });
 return { breakdown: stats.data, totalStatuses: stats.rowCount };
 
-// Query with custom timeout (credentials from memory)
+// Query with custom timeout (explicit memory reference)
 progress('Querying large table...');
 const products = await postgresql({
   query: 'SELECT * FROM products WHERE price > 100 ORDER BY price DESC',
+  connectionUrl: 'memory:database.postgresql_url',
   timeout: 60000
 });
 return { products: products.rowCount, data: products.data };
 
-// Legacy: Direct connection URL (NOT RECOMMENDED - credentials visible in code)
-const legacy = await postgresql({
+// ALTERNATIVE: Direct connection URL (credentials visible in code)
+const direct = await postgresql({
   query: 'SELECT * FROM items',
   connectionUrl: 'postgresql://user:pass@localhost:5432/shop'
 });
@@ -64,8 +67,8 @@ const legacy = await postgresql({
 export interface PostgreSQLOptions {
   /** SQL query to execute */
   query: string;
-  /** PostgreSQL connection URL (optional if stored in memory) */
-  connectionUrl?: string;
+  /** PostgreSQL connection URL or memory reference (e.g., "memory:database.postgresql_url") */
+  connectionUrl: string;
   /** Return format: 'json' (default), 'raw' */
   format?: "json" | "raw";
   /** Query timeout in milliseconds (default: 30000) */
@@ -109,30 +112,70 @@ async function loadMemory(projectId: string): Promise<Record<string, any>> {
 }
 
 /**
+ * Parse memory reference and retrieve value
+ * Supports syntax: "memory:category.key" -> reads from memory[category][key]
+ * Example: "memory:database.postgresql_url" -> memory.database.postgresql_url
+ */
+async function parseMemoryReference(value: string | undefined, projectId: string): Promise<string | undefined> {
+  if (!value || !value.startsWith('memory:')) {
+    return value;
+  }
+
+  const reference = value.substring(7); // Remove "memory:" prefix
+  const parts = reference.split('.');
+
+  if (parts.length !== 2) {
+    throw new Error(
+      `Invalid memory reference: "${value}". Expected format: "memory:category.key" (e.g., "memory:database.postgresql_url")`
+    );
+  }
+
+  const [category, key] = parts;
+  const memory = await loadMemory(projectId);
+
+  if (!memory[category]) {
+    throw new Error(
+      `Memory category "${category}" not found. Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+    );
+  }
+
+  if (!memory[category][key]) {
+    throw new Error(
+      `Memory key "${key}" not found in category "${category}". Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+    );
+  }
+
+  return memory[category][key];
+}
+
+/**
  * Create a PostgreSQL query function with memory support for secure credential storage
  *
  * Uses Bun's native SQL API for PostgreSQL database queries.
  *
- * Credentials can be stored securely in memory:
+ * Credentials can be stored securely in memory and referenced explicitly:
  * await memory({ action: 'set', category: 'database', key: 'postgresql_url', value: 'postgresql://...' });
  *
  * Usage in script tool:
  *
- * // RECOMMENDED: Query using credentials from memory:
+ * // RECOMMENDED: Query using credentials from memory (explicit reference):
  * const users = await postgresql({
- *   query: 'SELECT * FROM users WHERE active = true LIMIT 10'
+ *   query: 'SELECT * FROM users WHERE active = true LIMIT 10',
+ *   connectionUrl: 'memory:database.postgresql_url'
  * });
  * console.log(`Found ${users.rowCount} users`);
  * console.log(users.data); // Array of user objects
  *
  * // Query with aggregation:
  * const stats = await postgresql({
- *   query: 'SELECT status, COUNT(*) as count FROM orders GROUP BY status'
+ *   query: 'SELECT status, COUNT(*) as count FROM orders GROUP BY status',
+ *   connectionUrl: 'memory:database.postgresql_url'
  * });
  *
  * // Query with custom timeout:
  * const large = await postgresql({
  *   query: 'SELECT * FROM large_table',
+ *   connectionUrl: 'memory:database.postgresql_url',
  *   timeout: 60000 // 60 seconds
  * });
  *
@@ -142,35 +185,31 @@ export function createPostgreSQLFunction(projectId?: string) {
   return async (options: PostgreSQLOptions): Promise<PostgreSQLResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
-        "postgresql requires an options object. Usage: postgresql({ query: 'SELECT * FROM users' })"
+        "postgresql requires an options object. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: 'memory:database.postgresql_url' })"
       );
     }
 
     if (!options.query) {
       throw new Error(
-        "postgresql requires 'query' parameter. Usage: postgresql({ query: 'SELECT * FROM users' })"
+        "postgresql requires 'query' parameter. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: 'memory:database.postgresql_url' })"
       );
     }
 
-    // Try to get connection URL from memory first, then fall back to provided parameter
-    let connectionUrl = options.connectionUrl;
-
-    if (!connectionUrl && projectId) {
-      try {
-        // Try to read from memory
-        const memory = await loadMemory(projectId);
-        if (memory.database && memory.database.postgresql_url) {
-          connectionUrl = memory.database.postgresql_url;
-        }
-      } catch (error) {
-        // Silently ignore memory errors and require explicit connectionUrl
-      }
+    if (!options.connectionUrl) {
+      throw new Error(
+        "postgresql requires 'connectionUrl' parameter. " +
+        "Use memory reference: connectionUrl: 'memory:database.postgresql_url' or direct URL: 'postgresql://user:pass@host:5432/db'"
+      );
     }
+
+    // Parse memory reference if it's in the format "memory:category.key"
+    const connectionUrl = projectId
+      ? await parseMemoryReference(options.connectionUrl, projectId)
+      : options.connectionUrl;
 
     if (!connectionUrl) {
       throw new Error(
-        "postgresql requires 'connectionUrl' parameter or credentials stored in memory. " +
-        "Store credentials securely: await memory({ action: 'set', category: 'database', key: 'postgresql_url', value: 'postgresql://user:pass@host:5432/db' })"
+        "postgresql connectionUrl resolved to undefined. Check your memory reference or provide a direct URL."
       );
     }
 

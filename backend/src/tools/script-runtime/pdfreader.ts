@@ -22,6 +22,43 @@ async function loadMemory(projectId: string): Promise<Record<string, any>> {
 }
 
 /**
+ * Parse memory reference and retrieve value
+ * Supports syntax: "memory:category.key" -> reads from memory[category][key]
+ * Example: "memory:credentials.pdf_password" -> memory.credentials.pdf_password
+ */
+async function parseMemoryReference(value: string | undefined, projectId: string): Promise<string | undefined> {
+  if (!value || !value.startsWith('memory:')) {
+    return value;
+  }
+
+  const reference = value.substring(7); // Remove "memory:" prefix
+  const parts = reference.split('.');
+
+  if (parts.length !== 2) {
+    throw new Error(
+      `Invalid memory reference: "${value}". Expected format: "memory:category.key" (e.g., "memory:credentials.pdf_password")`
+    );
+  }
+
+  const [category, key] = parts;
+  const memory = await loadMemory(projectId);
+
+  if (!memory[category]) {
+    throw new Error(
+      `Memory category "${category}" not found. Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+    );
+  }
+
+  if (!memory[category][key]) {
+    throw new Error(
+      `Memory key "${key}" not found in category "${category}". Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+    );
+  }
+
+  return memory[category][key];
+}
+
+/**
  * Context documentation for PDF reader functionality
  */
 export const context = async () => {
@@ -33,8 +70,7 @@ Use pdfReader() to extract text from PDF files.
 
 **IMPORTANT:** When using pdfReader with files from \`file({ action: 'list' })\`, use ONLY the filename (pdf.name), NOT the full path (pdf.path)!
 
-**IMPORTANT:** For password-protected PDFs, store the password in memory for security:
-\`await memory({ action: 'set', category: 'credentials', key: 'pdf_password', value: 'your-password' });\`
+**SECURITY:** For password-protected PDFs, store the password in memory and reference it explicitly!
 
 #### EXAMPLES
 
@@ -48,9 +84,12 @@ return { text: pdf.text, pages: pdf.totalPages, preview: pdf.text.substring(0, 5
 // RECOMMENDED: For password-protected PDFs, store password in memory first (do this once):
 await memory({ action: 'set', category: 'credentials', key: 'pdf_password', value: 'secret123' });
 
-// Then read PDF without exposing password in code:
+// Then reference the password explicitly (CLEAR which password is used):
 progress('Opening encrypted PDF...');
-const secure = await pdfReader({ filePath: 'secure.pdf' });
+const secure = await pdfReader({
+  filePath: 'secure.pdf',
+  password: 'memory:credentials.pdf_password'  // Explicit memory reference
+});
 return { text: secure.text, pages: secure.totalPages };
 
 // Preview first 3 pages
@@ -69,8 +108,8 @@ for (const pdf of pdfs) {
 }
 return { processed: results.length, results };
 
-// Legacy: Direct password (NOT RECOMMENDED - password visible in code)
-const legacy = await pdfReader({ filePath: 'secure.pdf', password: 'secret123' });
+// ALTERNATIVE: Direct password (password visible in code)
+const direct = await pdfReader({ filePath: 'secure.pdf', password: 'secret123' });
 \`\`\``
 };
 
@@ -82,7 +121,7 @@ export interface PDFReaderOptions {
   filePath?: string;
   /** PDF buffer data (alternative to filePath) */
   buffer?: Buffer;
-  /** Password for encrypted PDFs (optional if stored in memory) */
+  /** Password for encrypted PDFs or memory reference (e.g., "memory:credentials.pdf_password") */
   password?: string;
   /** Maximum number of pages to read (0 = all pages) */
   maxPages?: number;
@@ -139,20 +178,10 @@ export function createPDFReaderFunction(cwd?: string, projectId?: string) {
       );
     }
 
-    // Try to get password from memory first, then fall back to provided parameter
-    let password = options.password;
-
-    if (!password && projectId) {
-      try {
-        // Try to read from memory
-        const memory = await loadMemory(projectId);
-        if (memory.credentials && memory.credentials.pdf_password) {
-          password = memory.credentials.pdf_password;
-        }
-      } catch (error) {
-        // Silently ignore memory errors and use provided password
-      }
-    }
+    // Parse memory reference if password is in the format "memory:category.key"
+    const password = projectId && options.password
+      ? await parseMemoryReference(options.password, projectId)
+      : options.password;
 
     try {
       let dataBuffer: Buffer;
