@@ -2,63 +2,6 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 /**
- * Load memory from file to retrieve stored credentials
- */
-async function loadMemory(projectId: string): Promise<Record<string, any>> {
-  const memoryPath = path.join(
-    process.cwd(),
-    "data",
-    projectId,
-    "memory.json"
-  );
-
-  try {
-    const content = await fs.readFile(memoryPath, "utf-8");
-    return JSON.parse(content);
-  } catch (error: any) {
-    // File doesn't exist or is invalid, return empty object
-    return {};
-  }
-}
-
-/**
- * Parse memory reference and retrieve value
- * Supports syntax: "memory:category.key" -> reads from memory[category][key]
- * Example: "memory:credentials.pdf_password" -> memory.credentials.pdf_password
- */
-async function parseMemoryReference(value: string | undefined, projectId: string): Promise<string | undefined> {
-  if (!value || !value.startsWith('memory:')) {
-    return value;
-  }
-
-  const reference = value.substring(7); // Remove "memory:" prefix
-  const parts = reference.split('.');
-
-  if (parts.length !== 2) {
-    throw new Error(
-      `Invalid memory reference: "${value}". Expected format: "memory:category.key" (e.g., "memory:credentials.pdf_password")`
-    );
-  }
-
-  const [category, key] = parts;
-  const memory = await loadMemory(projectId);
-
-  if (!memory[category]) {
-    throw new Error(
-      `Memory category "${category}" not found. Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
-    );
-  }
-
-  if (!memory[category][key]) {
-    throw new Error(
-      `Memory key "${key}" not found in category "${category}". Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
-    );
-  }
-
-  return memory[category][key];
-}
-
-/**
  * Context documentation for PDF reader functionality
  */
 export const context = async () => {
@@ -70,7 +13,7 @@ Use pdfReader() to extract text from PDF files.
 
 **IMPORTANT:** When using pdfReader with files from \`file({ action: 'list' })\`, use ONLY the filename (pdf.name), NOT the full path (pdf.path)!
 
-**SECURITY:** For password-protected PDFs, store the password in memory and reference it explicitly!
+**SECURITY:** For password-protected PDFs, store the password in memory and use \`memory.read()\` function!
 
 #### EXAMPLES
 
@@ -84,11 +27,11 @@ return { text: pdf.text, pages: pdf.totalPages, preview: pdf.text.substring(0, 5
 // RECOMMENDED: For password-protected PDFs, store password in memory first (do this once):
 await memory({ action: 'set', category: 'credentials', key: 'pdf_password', value: 'secret123' });
 
-// Then reference the password explicitly (CLEAR which password is used):
+// Then use memory.read() to get the password (CLEAR and type-safe):
 progress('Opening encrypted PDF...');
 const secure = await pdfReader({
   filePath: 'secure.pdf',
-  password: 'memory:credentials.pdf_password'  // Explicit memory reference
+  password: memory.read('credentials', 'pdf_password')  // Function call - type-safe!
 });
 return { text: secure.text, pages: secure.totalPages };
 
@@ -121,7 +64,7 @@ export interface PDFReaderOptions {
   filePath?: string;
   /** PDF buffer data (alternative to filePath) */
   buffer?: Buffer;
-  /** Password for encrypted PDFs or memory reference (e.g., "memory:credentials.pdf_password") */
+  /** Password for encrypted PDFs (use memory.read('credentials', 'pdf_password') for secure credentials) */
   password?: string;
   /** Maximum number of pages to read (0 = all pages) */
   maxPages?: number;
@@ -150,21 +93,26 @@ export interface PDFReaderResult {
 }
 
 /**
- * Create a PDF reader function that extracts text from PDF files with memory support
+ * Create a PDF reader function that extracts text from PDF files
  *
  * Supports:
  * - Reading from file path or buffer
  * - Page extraction
  * - Metadata extraction
- * - Password storage in memory for encrypted PDFs
+ * - Password-protected PDFs
  *
- * Password can be stored in memory:
+ * Passwords should be stored in memory and accessed via memory.read():
  * await memory({ action: 'set', category: 'credentials', key: 'pdf_password', value: 'secret' });
  *
+ * Usage in script tool:
+ * const pdf = await pdfReader({
+ *   filePath: 'secure.pdf',
+ *   password: memory.read('credentials', 'pdf_password')
+ * });
+ *
  * @param cwd - Working directory for resolving relative file paths
- * @param projectId - Project ID for loading memory
  */
-export function createPDFReaderFunction(cwd?: string, projectId?: string) {
+export function createPDFReaderFunction(cwd?: string) {
   return async (options: PDFReaderOptions): Promise<PDFReaderResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
@@ -178,10 +126,7 @@ export function createPDFReaderFunction(cwd?: string, projectId?: string) {
       );
     }
 
-    // Parse memory reference if password is in the format "memory:category.key"
-    const password = projectId && options.password
-      ? await parseMemoryReference(options.password, projectId)
-      : options.password;
+    const password = options.password;
 
     try {
       let dataBuffer: Buffer;
@@ -254,9 +199,9 @@ export function createPDFReaderFunction(cwd?: string, projectId?: string) {
  */
 export async function readPDF(
   filePath: string,
-  options?: { password?: string; maxPages?: number; cwd?: string; projectId?: string }
+  options?: { password?: string; maxPages?: number; cwd?: string }
 ): Promise<PDFReaderResult> {
-  return createPDFReaderFunction(options?.cwd, options?.projectId)({
+  return createPDFReaderFunction(options?.cwd)({
     filePath,
     password: options?.password,
     maxPages: options?.maxPages,
@@ -268,9 +213,9 @@ export async function readPDF(
  */
 export async function readPDFBuffer(
   buffer: Buffer,
-  options?: { password?: string; maxPages?: number; projectId?: string }
+  options?: { password?: string; maxPages?: number }
 ): Promise<PDFReaderResult> {
-  return createPDFReaderFunction(undefined, options?.projectId)({
+  return createPDFReaderFunction()({
     buffer,
     password: options?.password,
     maxPages: options?.maxPages,

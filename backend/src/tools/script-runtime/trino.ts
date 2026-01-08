@@ -1,63 +1,3 @@
-import * as fs from "fs/promises";
-import * as path from "path";
-
-/**
- * Load memory from file to retrieve stored credentials
- */
-async function loadMemory(projectId: string): Promise<Record<string, any>> {
-  const memoryPath = path.join(
-    process.cwd(),
-    "data",
-    projectId,
-    "memory.json"
-  );
-
-  try {
-    const content = await fs.readFile(memoryPath, "utf-8");
-    return JSON.parse(content);
-  } catch (error: any) {
-    // File doesn't exist or is invalid, return empty object
-    return {};
-  }
-}
-
-/**
- * Parse memory reference and retrieve value
- * Supports syntax: "memory:category.key" -> reads from memory[category][key]
- * Example: "memory:database.trino_url" -> memory.database.trino_url
- */
-async function parseMemoryReference(value: string | undefined, projectId: string): Promise<string | undefined> {
-  if (!value || !value.startsWith('memory:')) {
-    return value;
-  }
-
-  const reference = value.substring(7); // Remove "memory:" prefix
-  const parts = reference.split('.');
-
-  if (parts.length !== 2) {
-    throw new Error(
-      `Invalid memory reference: "${value}". Expected format: "memory:category.key" (e.g., "memory:database.trino_url")`
-    );
-  }
-
-  const [category, key] = parts;
-  const memory = await loadMemory(projectId);
-
-  if (!memory[category]) {
-    throw new Error(
-      `Memory category "${category}" not found. Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
-    );
-  }
-
-  if (!memory[category][key]) {
-    throw new Error(
-      `Memory key "${key}" not found in category "${category}". Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
-    );
-  }
-
-  return memory[category][key];
-}
-
 /**
  * Context documentation for Trino functionality
  */
@@ -70,7 +10,7 @@ Use trino() for Trino distributed queries.
 
 **Available:** trino({ query, serverUrl, catalog?, schema?, username?, password?, format?, timeout? })
 
-**SECURITY:** Store credentials in memory and reference them explicitly!
+**SECURITY:** Store credentials in memory and use \`memory.read()\` function!
 
 #### EXAMPLES
 
@@ -81,31 +21,31 @@ await memory({ action: 'set', category: 'database', key: 'trino_catalog', value:
 await memory({ action: 'set', category: 'database', key: 'trino_schema', value: 'default' });
 await memory({ action: 'set', category: 'database', key: 'trino_username', value: 'trino' });
 
-// Then reference credentials explicitly (CLEAR which credentials are used):
+// Then use memory.read() to get credentials (CLEAR and type-safe):
 progress('Querying Trino...');
 const result = await trino({
   query: 'SELECT region, COUNT(*) as count, SUM(revenue) as total_revenue FROM sales WHERE year = 2024 GROUP BY region ORDER BY total_revenue DESC',
-  serverUrl: 'memory:database.trino_url',      // Explicit memory reference
-  catalog: 'memory:database.trino_catalog',    // Explicit memory reference
-  schema: 'memory:database.trino_schema',      // Explicit memory reference
-  username: 'memory:database.trino_username'   // Explicit memory reference
+  serverUrl: memory.read('database', 'trino_url'),      // Function call - type-safe!
+  catalog: memory.read('database', 'trino_catalog'),    // Function call - type-safe!
+  schema: memory.read('database', 'trino_schema'),      // Function call - type-safe!
+  username: memory.read('database', 'trino_username')   // Function call - type-safe!
 });
 progress(\`Found \${result.rowCount} regions\`);
 return { count: result.rowCount, regions: result.data, stats: result.stats };
 
-// Cross-catalog query (explicit memory references)
+// Cross-catalog query (using memory.read())
 progress('Running cross-catalog query...');
 const cross = await trino({
   query: 'SELECT h.customer_id, h.order_count, p.customer_name FROM hive.sales.order_summary h JOIN postgresql.crm.customers p ON h.customer_id = p.id WHERE h.order_count > 10',
-  serverUrl: 'memory:database.trino_url'
+  serverUrl: memory.read('database', 'trino_url')
 });
 return { customers: cross.rowCount, data: cross.data };
 
-// Query with timeout (explicit memory references)
+// Query with timeout (using memory.read())
 progress('Connecting to Trino...');
 const secured = await trino({
   query: "SELECT date_trunc('day', order_date) as day, COUNT(*) as orders FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL '30' DAY GROUP BY 1 ORDER BY 1",
-  serverUrl: 'memory:database.trino_url',
+  serverUrl: memory.read('database', 'trino_url'),
   timeout: 60000
 });
 return { days: secured.rowCount, orderTrend: secured.data };
@@ -128,15 +68,15 @@ const direct = await trino({
 export interface TrinoOptions {
   /** SQL query to execute */
   query: string;
-  /** Trino server URL or memory reference (e.g., "memory:database.trino_url") */
+  /** Trino server URL (use memory.read('database', 'trino_url') for secure credentials) */
   serverUrl: string;
-  /** Trino catalog to query or memory reference (e.g., "memory:database.trino_catalog") */
+  /** Trino catalog to query (use memory.read('database', 'trino_catalog') for secure credentials) */
   catalog?: string;
-  /** Trino schema to query or memory reference (e.g., "memory:database.trino_schema") */
+  /** Trino schema to query (use memory.read('database', 'trino_schema') for secure credentials) */
   schema?: string;
-  /** Username for authentication or memory reference (e.g., "memory:database.trino_username") */
+  /** Username for authentication (use memory.read('database', 'trino_username') for secure credentials) */
   username?: string;
-  /** Password for authentication or memory reference (e.g., "memory:database.trino_password") */
+  /** Password for authentication (use memory.read('database', 'trino_password') for secure credentials) */
   password?: string;
   /** Return format: 'json' (default), 'raw' */
   format?: "json" | "raw";
@@ -171,11 +111,11 @@ export interface TrinoResult {
 }
 
 /**
- * Create a Trino query function with memory support for secure credential storage
+ * Create a Trino query function for distributed SQL queries
  *
  * Uses Trino's REST API for distributed SQL queries.
  *
- * Credentials can be stored securely in memory:
+ * Credentials should be stored in memory and accessed via memory.read():
  * await memory({ action: 'set', category: 'database', key: 'trino_url', value: 'http://...' });
  * await memory({ action: 'set', category: 'database', key: 'trino_catalog', value: 'hive' });
  * await memory({ action: 'set', category: 'database', key: 'trino_schema', value: 'default' });
@@ -184,71 +124,55 @@ export interface TrinoResult {
  *
  * Usage in script tool:
  *
- * // RECOMMENDED: Query using credentials from memory:
+ * // RECOMMENDED: Query using memory.read() for credentials:
  * const results = await trino({
- *   query: 'SELECT * FROM customers LIMIT 10'
+ *   query: 'SELECT * FROM customers LIMIT 10',
+ *   serverUrl: memory.read('database', 'trino_url'),
+ *   catalog: memory.read('database', 'trino_catalog')
  * });
  * console.log(`Found ${results.rowCount} rows`);
  * console.log(results.data);
  *
  * // Query with aggregation:
  * const stats = await trino({
- *   query: 'SELECT region, COUNT(*) as count FROM orders GROUP BY region'
+ *   query: 'SELECT region, COUNT(*) as count FROM orders GROUP BY region',
+ *   serverUrl: memory.read('database', 'trino_url')
  * });
- *
- * @param projectId - Project ID for loading memory
  */
-export function createTrinoFunction(projectId?: string) {
+export function createTrinoFunction() {
   return async (options: TrinoOptions): Promise<TrinoResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
-        "trino requires an options object. Usage: trino({ query: 'SELECT * FROM table', serverUrl: 'memory:database.trino_url' })"
+        "trino requires an options object. Usage: trino({ query: 'SELECT * FROM table', serverUrl: memory.read('database', 'trino_url') })"
       );
     }
 
     if (!options.query) {
       throw new Error(
-        "trino requires 'query' parameter. Usage: trino({ query: 'SELECT * FROM table', serverUrl: 'memory:database.trino_url' })"
+        "trino requires 'query' parameter. Usage: trino({ query: 'SELECT * FROM table', serverUrl: memory.read('database', 'trino_url') })"
       );
     }
 
     if (!options.serverUrl) {
       throw new Error(
         "trino requires 'serverUrl' parameter. " +
-        "Use memory reference: serverUrl: 'memory:database.trino_url' or direct URL: 'http://localhost:8080'"
+        "Use memory.read(): serverUrl: memory.read('database', 'trino_url') or direct URL: 'http://localhost:8080'"
       );
     }
 
-    // Parse memory references if they're in the format "memory:category.key"
-    const serverUrl = projectId
-      ? await parseMemoryReference(options.serverUrl, projectId)
-      : options.serverUrl;
-    const catalog = projectId && options.catalog
-      ? await parseMemoryReference(options.catalog, projectId)
-      : options.catalog;
-    const schema = projectId && options.schema
-      ? await parseMemoryReference(options.schema, projectId)
-      : options.schema;
-    const username = projectId && options.username
-      ? await parseMemoryReference(options.username, projectId)
-      : options.username;
-    const password = projectId && options.password !== undefined
-      ? await parseMemoryReference(options.password, projectId)
-      : options.password;
-
-    if (!serverUrl) {
-      throw new Error(
-        "trino serverUrl resolved to undefined. Check your memory reference or provide a direct URL."
-      );
-    }
+    const serverUrl = options.serverUrl;
+    const catalog = options.catalog;
+    const schema = options.schema;
+    const username = options.username;
+    const password = options.password;
 
     const format = options.format || "json";
     const timeout = options.timeout || 30000;
     const startTime = Date.now();
 
     try {
-      serverUrl = serverUrl!.replace(/\/$/, ""); // Remove trailing slash
-      const endpoint = `${serverUrl}/v1/statement`;
+      const cleanServerUrl = serverUrl.replace(/\/$/, ""); // Remove trailing slash
+      const endpoint = `${cleanServerUrl}/v1/statement`;
 
       // Prepare headers
       const headers: Record<string, string> = {
@@ -430,11 +354,10 @@ export async function testTrinoConnection(
     schema?: string;
     username?: string;
     password?: string;
-    projectId?: string;
   }
 ): Promise<{ connected: boolean; version?: string; error?: string }> {
   try {
-    const trinoQuery = createTrinoFunction(options?.projectId);
+    const trinoQuery = createTrinoFunction();
     const result = await trinoQuery({
       query: "SELECT version()",
       serverUrl,
@@ -470,7 +393,6 @@ export function queryTrino(
     where?: string;
     limit?: number;
     orderBy?: string;
-    projectId?: string;
   }
 ) {
   const where = options?.where ? `WHERE ${options.where}` : "";
@@ -479,7 +401,7 @@ export function queryTrino(
 
   const query = `SELECT * FROM ${table} ${where} ${orderBy} ${limit}`.trim();
 
-  return createTrinoFunction(options?.projectId)({
+  return createTrinoFunction()({
     query,
     serverUrl,
     catalog: options?.catalog,

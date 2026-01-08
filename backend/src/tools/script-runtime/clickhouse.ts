@@ -1,63 +1,3 @@
-import * as fs from "fs/promises";
-import * as path from "path";
-
-/**
- * Load memory from file to retrieve stored credentials
- */
-async function loadMemory(projectId: string): Promise<Record<string, any>> {
-  const memoryPath = path.join(
-    process.cwd(),
-    "data",
-    projectId,
-    "memory.json"
-  );
-
-  try {
-    const content = await fs.readFile(memoryPath, "utf-8");
-    return JSON.parse(content);
-  } catch (error: any) {
-    // File doesn't exist or is invalid, return empty object
-    return {};
-  }
-}
-
-/**
- * Parse memory reference and retrieve value
- * Supports syntax: "memory:category.key" -> reads from memory[category][key]
- * Example: "memory:database.clickhouse_url" -> memory.database.clickhouse_url
- */
-async function parseMemoryReference(value: string | undefined, projectId: string): Promise<string | undefined> {
-  if (!value || !value.startsWith('memory:')) {
-    return value;
-  }
-
-  const reference = value.substring(7); // Remove "memory:" prefix
-  const parts = reference.split('.');
-
-  if (parts.length !== 2) {
-    throw new Error(
-      `Invalid memory reference: "${value}". Expected format: "memory:category.key" (e.g., "memory:database.clickhouse_url")`
-    );
-  }
-
-  const [category, key] = parts;
-  const memory = await loadMemory(projectId);
-
-  if (!memory[category]) {
-    throw new Error(
-      `Memory category "${category}" not found. Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
-    );
-  }
-
-  if (!memory[category][key]) {
-    throw new Error(
-      `Memory key "${key}" not found in category "${category}". Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
-    );
-  }
-
-  return memory[category][key];
-}
-
 /**
  * Context documentation for ClickHouse functionality
  */
@@ -70,7 +10,7 @@ Use clickhouse() for ClickHouse database queries.
 
 **Available:** clickhouse({ query, serverUrl, database?, username?, password?, format?, timeout?, params? })
 
-**SECURITY:** Store credentials in memory and reference them explicitly!
+**SECURITY:** Store credentials in memory and use \`memory.read()\` function!
 
 #### EXAMPLES
 
@@ -81,31 +21,31 @@ await memory({ action: 'set', category: 'database', key: 'clickhouse_database', 
 await memory({ action: 'set', category: 'database', key: 'clickhouse_username', value: 'default' });
 await memory({ action: 'set', category: 'database', key: 'clickhouse_password', value: '' });
 
-// Then reference credentials explicitly (CLEAR which credentials are used):
+// Then use memory.read() to get credentials (CLEAR and type-safe):
 progress('Querying ClickHouse...');
 const result = await clickhouse({
   query: 'SELECT event_type, COUNT(*) as count FROM events WHERE date >= today() - 7 GROUP BY event_type ORDER BY count DESC LIMIT 10',
-  serverUrl: 'memory:database.clickhouse_url',      // Explicit memory reference
-  database: 'memory:database.clickhouse_database',  // Explicit memory reference
-  username: 'memory:database.clickhouse_username',  // Explicit memory reference
-  password: 'memory:database.clickhouse_password'   // Explicit memory reference
+  serverUrl: memory.read('database', 'clickhouse_url'),      // Function call - type-safe!
+  database: memory.read('database', 'clickhouse_database'),  // Function call - type-safe!
+  username: memory.read('database', 'clickhouse_username'),  // Function call - type-safe!
+  password: memory.read('database', 'clickhouse_password')   // Function call - type-safe!
 });
 progress(\`Found \${result.rowCount} event types\`);
 return { count: result.rowCount, events: result.data };
 
-// Query with time-series aggregation (explicit memory references)
+// Query with time-series aggregation (using memory.read())
 progress('Analyzing user activity...');
 const stats = await clickhouse({
   query: 'SELECT toDate(timestamp) as date, COUNT(DISTINCT user_id) as unique_users, COUNT(*) as total_events FROM user_events WHERE timestamp >= now() - INTERVAL 30 DAY GROUP BY date ORDER BY date',
-  serverUrl: 'memory:database.clickhouse_url'
+  serverUrl: memory.read('database', 'clickhouse_url')
 });
 return { days: stats.rowCount, dailyStats: stats.data };
 
-// Query with parameters (explicit memory references)
+// Query with parameters (using memory.read())
 progress('Querying with parameters...');
 const filtered = await clickhouse({
   query: 'SELECT * FROM users WHERE age > {minAge:UInt8} AND country = {country:String} LIMIT {limit:UInt16}',
-  serverUrl: 'memory:database.clickhouse_url',
+  serverUrl: memory.read('database', 'clickhouse_url'),
   params: { minAge: 25, country: 'US', limit: 100 }
 });
 return { users: filtered.rowCount, data: filtered.data };
@@ -127,13 +67,13 @@ const direct = await clickhouse({
 export interface ClickHouseOptions {
   /** SQL query to execute */
   query: string;
-  /** ClickHouse server URL or memory reference (e.g., "memory:database.clickhouse_url") */
+  /** ClickHouse server URL (use memory.read('database', 'clickhouse_url') for secure credentials) */
   serverUrl: string;
-  /** Database to query or memory reference (e.g., "memory:database.clickhouse_database") */
+  /** Database to query (use memory.read('database', 'clickhouse_database') for secure credentials) */
   database?: string;
-  /** Username for authentication or memory reference (e.g., "memory:database.clickhouse_username") */
+  /** Username for authentication (use memory.read('database', 'clickhouse_username') for secure credentials) */
   username?: string;
-  /** Password for authentication or memory reference (e.g., "memory:database.clickhouse_password") */
+  /** Password for authentication (use memory.read('database', 'clickhouse_password') for secure credentials) */
   password?: string;
   /** Return format: 'json' (default), 'raw', 'csv', 'tsv' */
   format?: "json" | "raw" | "csv" | "tsv";
@@ -166,11 +106,11 @@ export interface ClickHouseResult {
 }
 
 /**
- * Create a ClickHouse query function with memory support for secure credential storage
+ * Create a ClickHouse query function for fast columnar database queries
  *
  * Uses ClickHouse's HTTP interface for fast columnar database queries.
  *
- * Credentials can be stored securely in memory:
+ * Credentials should be stored in memory and accessed via memory.read():
  * await memory({ action: 'set', category: 'database', key: 'clickhouse_url', value: 'http://...' });
  * await memory({ action: 'set', category: 'database', key: 'clickhouse_database', value: 'analytics' });
  * await memory({ action: 'set', category: 'database', key: 'clickhouse_username', value: 'default' });
@@ -178,76 +118,63 @@ export interface ClickHouseResult {
  *
  * Usage in script tool:
  *
- * // RECOMMENDED: Query using credentials from memory:
+ * // RECOMMENDED: Query using memory.read() for credentials:
  * const results = await clickhouse({
- *   query: 'SELECT * FROM users WHERE active = 1 LIMIT 10'
+ *   query: 'SELECT * FROM users WHERE active = 1 LIMIT 10',
+ *   serverUrl: memory.read('database', 'clickhouse_url'),
+ *   database: memory.read('database', 'clickhouse_database')
  * });
  * console.log(`Found ${results.rowCount} users`);
  * console.log(results.data);
  *
  * // Query with aggregation:
  * const stats = await clickhouse({
- *   query: 'SELECT status, COUNT(*) as count FROM orders GROUP BY status'
+ *   query: 'SELECT status, COUNT(*) as count FROM orders GROUP BY status',
+ *   serverUrl: memory.read('database', 'clickhouse_url')
  * });
  *
  * // Query with parameters:
  * const filtered = await clickhouse({
  *   query: 'SELECT * FROM users WHERE age > {age:UInt8} LIMIT 10',
+ *   serverUrl: memory.read('database', 'clickhouse_url'),
  *   params: { age: 25 }
  * });
- *
- * @param projectId - Project ID for loading memory
  */
-export function createClickHouseFunction(projectId?: string) {
+export function createClickHouseFunction() {
   return async (options: ClickHouseOptions): Promise<ClickHouseResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
-        "clickhouse requires an options object. Usage: clickhouse({ query: 'SELECT * FROM table', serverUrl: 'memory:database.clickhouse_url' })"
+        "clickhouse requires an options object. Usage: clickhouse({ query: 'SELECT * FROM table', serverUrl: memory.read('database', 'clickhouse_url') })"
       );
     }
 
     if (!options.query) {
       throw new Error(
-        "clickhouse requires 'query' parameter. Usage: clickhouse({ query: 'SELECT * FROM table', serverUrl: 'memory:database.clickhouse_url' })"
+        "clickhouse requires 'query' parameter. Usage: clickhouse({ query: 'SELECT * FROM table', serverUrl: memory.read('database', 'clickhouse_url') })"
       );
     }
 
     if (!options.serverUrl) {
       throw new Error(
         "clickhouse requires 'serverUrl' parameter. " +
-        "Use memory reference: serverUrl: 'memory:database.clickhouse_url' or direct URL: 'http://localhost:8123'"
+        "Use memory.read(): serverUrl: memory.read('database', 'clickhouse_url') or direct URL: 'http://localhost:8123'"
       );
     }
 
-    // Parse memory references if they're in the format "memory:category.key"
-    const serverUrl = projectId
-      ? await parseMemoryReference(options.serverUrl, projectId)
-      : options.serverUrl;
-    const database = projectId && options.database
-      ? await parseMemoryReference(options.database, projectId)
-      : options.database;
-    const username = projectId && options.username
-      ? await parseMemoryReference(options.username, projectId)
-      : options.username;
-    const password = projectId && options.password !== undefined
-      ? await parseMemoryReference(options.password, projectId)
-      : options.password;
-
-    if (!serverUrl) {
-      throw new Error(
-        "clickhouse serverUrl resolved to undefined. Check your memory reference or provide a direct URL."
-      );
-    }
+    const serverUrl = options.serverUrl;
+    const database = options.database;
+    const username = options.username;
+    const password = options.password;
 
     const format = options.format || "json";
     const timeout = options.timeout || 30000;
     const startTime = Date.now();
 
     try {
-      serverUrl = serverUrl!.replace(/\/$/, ""); // Remove trailing slash
+      const cleanServerUrl = serverUrl.replace(/\/$/, ""); // Remove trailing slash
 
       // Build URL with query parameters
-      const url = new URL(serverUrl);
+      const url = new URL(cleanServerUrl);
 
       // Set database if provided
       if (database) {
@@ -428,11 +355,10 @@ export async function testClickHouseConnection(
     database?: string;
     username?: string;
     password?: string;
-    projectId?: string;
   }
 ): Promise<{ connected: boolean; version?: string; error?: string }> {
   try {
-    const chQuery = createClickHouseFunction(options?.projectId);
+    const chQuery = createClickHouseFunction();
     const result = await chQuery({
       query: "SELECT version()",
       serverUrl,
@@ -466,7 +392,6 @@ export function queryClickHouse(
     where?: string;
     limit?: number;
     orderBy?: string;
-    projectId?: string;
   }
 ) {
   const where = options?.where ? `WHERE ${options.where}` : "";
@@ -475,7 +400,7 @@ export function queryClickHouse(
 
   const query = `SELECT * FROM ${table} ${where} ${orderBy} ${limit}`.trim();
 
-  return createClickHouseFunction(options?.projectId)({
+  return createClickHouseFunction()({
     query,
     serverUrl,
     database: options?.database,

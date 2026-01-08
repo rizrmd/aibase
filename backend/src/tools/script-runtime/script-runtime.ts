@@ -276,16 +276,16 @@ export class ScriptRuntime {
    * Get the ClickHouse query function
    */
   private createClickHouseFunction() {
-    // Return the ClickHouse function with project ID for memory access
-    return createClickHouseFunction(this.context.projectId);
+    // Return the ClickHouse function
+    return createClickHouseFunction();
   }
 
   /**
    * Get the Trino query function
    */
   private createTrinoFunction() {
-    // Return the Trino function with project ID for memory access
-    return createTrinoFunction(this.context.projectId);
+    // Return the Trino function
+    return createTrinoFunction();
   }
 
   /**
@@ -294,8 +294,8 @@ export class ScriptRuntime {
   private createPDFReaderFunction() {
     // Set working directory to the conversation's files directory
     const cwd = `data/${this.context.projectId}/${this.context.convId}/files`;
-    // Return the PDF reader function with project ID for memory access
-    return createPDFReaderFunction(cwd, this.context.projectId);
+    // Return the PDF reader function
+    return createPDFReaderFunction(cwd);
   }
 
   /**
