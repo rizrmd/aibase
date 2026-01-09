@@ -10,44 +10,55 @@ Use trino() for Trino distributed queries.
 
 **Available:** trino({ query, serverUrl, catalog?, schema?, username?, password?, format?, timeout? })
 
+**SECURITY:** Store credentials in memory and use \`memory.read()\` function!
+
 #### EXAMPLES
 
 \`\`\`typescript
-// Simple query
+// RECOMMENDED: Store credentials in memory first (do this once):
+await memory({ action: 'set', category: 'database', key: 'trino_url', value: 'http://localhost:8080' });
+await memory({ action: 'set', category: 'database', key: 'trino_catalog', value: 'hive' });
+await memory({ action: 'set', category: 'database', key: 'trino_schema', value: 'default' });
+await memory({ action: 'set', category: 'database', key: 'trino_username', value: 'trino' });
+
+// Then use memory.read() to get credentials (CLEAR and type-safe):
 progress('Querying Trino...');
 const result = await trino({
   query: 'SELECT region, COUNT(*) as count, SUM(revenue) as total_revenue FROM sales WHERE year = 2024 GROUP BY region ORDER BY total_revenue DESC',
-  serverUrl: 'http://localhost:8080',
-  catalog: 'hive',
-  schema: 'default',
-  username: 'trino'
+  serverUrl: memory.read('database', 'trino_url'),      // Function call - type-safe!
+  catalog: memory.read('database', 'trino_catalog'),    // Function call - type-safe!
+  schema: memory.read('database', 'trino_schema'),      // Function call - type-safe!
+  username: memory.read('database', 'trino_username')   // Function call - type-safe!
 });
 progress(\`Found \${result.rowCount} regions\`);
 return { count: result.rowCount, regions: result.data, stats: result.stats };
 
-// Cross-catalog query
+// Cross-catalog query (using memory.read())
 progress('Running cross-catalog query...');
 const cross = await trino({
   query: 'SELECT h.customer_id, h.order_count, p.customer_name FROM hive.sales.order_summary h JOIN postgresql.crm.customers p ON h.customer_id = p.id WHERE h.order_count > 10',
-  serverUrl: 'http://localhost:8080',
-  catalog: 'hive',
-  schema: 'sales',
-  username: 'trino'
+  serverUrl: memory.read('database', 'trino_url')
 });
 return { customers: cross.rowCount, data: cross.data };
 
-// Query with authentication and timeout
-progress('Connecting to secured Trino...');
+// Query with timeout (using memory.read())
+progress('Connecting to Trino...');
 const secured = await trino({
   query: "SELECT date_trunc('day', order_date) as day, COUNT(*) as orders FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL '30' DAY GROUP BY 1 ORDER BY 1",
+  serverUrl: memory.read('database', 'trino_url'),
+  timeout: 60000
+});
+return { days: secured.rowCount, orderTrend: secured.data };
+
+// ALTERNATIVE: Direct credentials (credentials visible in code)
+const direct = await trino({
+  query: 'SELECT * FROM items',
   serverUrl: 'http://localhost:8080',
   catalog: 'hive',
   schema: 'warehouse',
   username: 'user',
-  password: 'secret',
-  timeout: 60000
+  password: 'secret'
 });
-return { days: secured.rowCount, orderTrend: secured.data };
 \`\`\``
 };
 
@@ -57,15 +68,15 @@ return { days: secured.rowCount, orderTrend: secured.data };
 export interface TrinoOptions {
   /** SQL query to execute */
   query: string;
-  /** Trino server URL (e.g., 'http://localhost:8080') */
+  /** Trino server URL (use memory.read('database', 'trino_url') for secure credentials) */
   serverUrl: string;
-  /** Trino catalog to query */
+  /** Trino catalog to query (use memory.read('database', 'trino_catalog') for secure credentials) */
   catalog?: string;
-  /** Trino schema to query */
+  /** Trino schema to query (use memory.read('database', 'trino_schema') for secure credentials) */
   schema?: string;
-  /** Username for authentication */
+  /** Username for authentication (use memory.read('database', 'trino_username') for secure credentials) */
   username?: string;
-  /** Password for authentication (basic auth) */
+  /** Password for authentication (use memory.read('database', 'trino_password') for secure credentials) */
   password?: string;
   /** Return format: 'json' (default), 'raw' */
   format?: "json" | "raw";
@@ -100,19 +111,24 @@ export interface TrinoResult {
 }
 
 /**
- * Create a Trino query function using HTTP REST API
+ * Create a Trino query function for distributed SQL queries
  *
  * Uses Trino's REST API for distributed SQL queries.
  *
+ * Credentials should be stored in memory and accessed via memory.read():
+ * await memory({ action: 'set', category: 'database', key: 'trino_url', value: 'http://...' });
+ * await memory({ action: 'set', category: 'database', key: 'trino_catalog', value: 'hive' });
+ * await memory({ action: 'set', category: 'database', key: 'trino_schema', value: 'default' });
+ * await memory({ action: 'set', category: 'database', key: 'trino_username', value: 'trino' });
+ * await memory({ action: 'set', category: 'database', key: 'trino_password', value: 'secret' });
+ *
  * Usage in script tool:
  *
- * // Query the database:
+ * // RECOMMENDED: Query using memory.read() for credentials:
  * const results = await trino({
  *   query: 'SELECT * FROM customers LIMIT 10',
- *   serverUrl: 'http://localhost:8080',
- *   catalog: 'hive',
- *   schema: 'default',
- *   username: 'trino'
+ *   serverUrl: memory.read('database', 'trino_url'),
+ *   catalog: memory.read('database', 'trino_catalog')
  * });
  * console.log(`Found ${results.rowCount} rows`);
  * console.log(results.data);
@@ -120,65 +136,61 @@ export interface TrinoResult {
  * // Query with aggregation:
  * const stats = await trino({
  *   query: 'SELECT region, COUNT(*) as count FROM orders GROUP BY region',
- *   serverUrl: 'http://localhost:8080',
- *   catalog: 'hive',
- *   schema: 'default'
- * });
- *
- * // Query with custom timeout:
- * const large = await trino({
- *   query: 'SELECT * FROM large_table',
- *   serverUrl: 'http://localhost:8080',
- *   catalog: 'hive',
- *   schema: 'default',
- *   timeout: 60000 // 60 seconds
+ *   serverUrl: memory.read('database', 'trino_url')
  * });
  */
 export function createTrinoFunction() {
   return async (options: TrinoOptions): Promise<TrinoResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
-        "trino requires an options object. Usage: trino({ query: 'SELECT * FROM table', serverUrl: 'http://localhost:8080', catalog: 'hive', schema: 'default' })"
+        "trino requires an options object. Usage: trino({ query: 'SELECT * FROM table', serverUrl: memory.read('database', 'trino_url') })"
       );
     }
 
     if (!options.query) {
       throw new Error(
-        "trino requires 'query' parameter. Usage: trino({ query: 'SELECT * FROM table', serverUrl: 'http://localhost:8080' })"
+        "trino requires 'query' parameter. Usage: trino({ query: 'SELECT * FROM table', serverUrl: memory.read('database', 'trino_url') })"
       );
     }
 
     if (!options.serverUrl) {
       throw new Error(
-        "trino requires 'serverUrl' parameter. Usage: trino({ query: '...', serverUrl: 'http://localhost:8080' })"
+        "trino requires 'serverUrl' parameter. " +
+        "Use memory.read(): serverUrl: memory.read('database', 'trino_url') or direct URL: 'http://localhost:8080'"
       );
     }
+
+    const serverUrl = options.serverUrl;
+    const catalog = options.catalog;
+    const schema = options.schema;
+    const username = options.username;
+    const password = options.password;
 
     const format = options.format || "json";
     const timeout = options.timeout || 30000;
     const startTime = Date.now();
 
     try {
-      const serverUrl = options.serverUrl.replace(/\/$/, ""); // Remove trailing slash
-      const endpoint = `${serverUrl}/v1/statement`;
+      const cleanServerUrl = serverUrl.replace(/\/$/, ""); // Remove trailing slash
+      const endpoint = `${cleanServerUrl}/v1/statement`;
 
       // Prepare headers
       const headers: Record<string, string> = {
         "Content-Type": "text/plain",
-        "X-Trino-User": options.username || "trino",
+        "X-Trino-User": username || "trino",
       };
 
-      if (options.catalog) {
-        headers["X-Trino-Catalog"] = options.catalog;
+      if (catalog) {
+        headers["X-Trino-Catalog"] = catalog;
       }
 
-      if (options.schema) {
-        headers["X-Trino-Schema"] = options.schema;
+      if (schema) {
+        headers["X-Trino-Schema"] = schema;
       }
 
       // Add basic auth if password is provided
-      if (options.password) {
-        const credentials = btoa(`${options.username || "trino"}:${options.password}`);
+      if (password) {
+        const credentials = btoa(`${username || "trino"}:${password}`);
         headers["Authorization"] = `Basic ${credentials}`;
       }
 
@@ -213,7 +225,7 @@ export function createTrinoFunction() {
           const nextResponse = await fetch(result.nextUri, {
             method: "GET",
             headers: {
-              "X-Trino-User": options.username || "trino",
+              "X-Trino-User": username || "trino",
             },
             signal: controller.signal,
           });
@@ -305,7 +317,7 @@ export function createTrinoFunction() {
       // Check for common errors
       if (error.message?.includes("fetch failed") || error.message?.includes("ECONNREFUSED")) {
         throw new Error(
-          `Trino connection failed: Unable to connect to server at ${options.serverUrl}. Check your server URL and ensure Trino is running. ${error.message}`
+          `Trino connection failed: Unable to connect to server at ${serverUrl}. Check your server URL and ensure Trino is running. ${error.message}`
         );
       }
 

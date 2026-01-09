@@ -13,6 +13,8 @@ Use pdfReader() to extract text from PDF files.
 
 **IMPORTANT:** When using pdfReader with files from \`file({ action: 'list' })\`, use ONLY the filename (pdf.name), NOT the full path (pdf.path)!
 
+**SECURITY:** For password-protected PDFs, store the password in memory and use \`memory.read()\` function!
+
 #### EXAMPLES
 
 \`\`\`typescript
@@ -22,9 +24,15 @@ const pdf = await pdfReader({ filePath: 'document.pdf' });
 progress(\`Extracted \${pdf.totalPages} pages\`);
 return { text: pdf.text, pages: pdf.totalPages, preview: pdf.text.substring(0, 500) + '...' };
 
-// Read password-protected PDF
+// RECOMMENDED: For password-protected PDFs, store password in memory first (do this once):
+await memory({ action: 'set', category: 'credentials', key: 'pdf_password', value: 'secret123' });
+
+// Then use memory.read() to get the password (CLEAR and type-safe):
 progress('Opening encrypted PDF...');
-const secure = await pdfReader({ filePath: 'secure.pdf', password: 'secret123' });
+const secure = await pdfReader({
+  filePath: 'secure.pdf',
+  password: memory.read('credentials', 'pdf_password')  // Function call - type-safe!
+});
 return { text: secure.text, pages: secure.totalPages };
 
 // Preview first 3 pages
@@ -42,6 +50,9 @@ for (const pdf of pdfs) {
   results.push({ file: pdf.name, pages: content.totalPages, textLength: content.text.length, preview: content.text.substring(0, 200) });
 }
 return { processed: results.length, results };
+
+// ALTERNATIVE: Direct password (password visible in code)
+const direct = await pdfReader({ filePath: 'secure.pdf', password: 'secret123' });
 \`\`\``
 };
 
@@ -53,7 +64,7 @@ export interface PDFReaderOptions {
   filePath?: string;
   /** PDF buffer data (alternative to filePath) */
   buffer?: Buffer;
-  /** Password for encrypted PDFs (note: pdf-parse has limited password support) */
+  /** Password for encrypted PDFs (use memory.read('credentials', 'pdf_password') for secure credentials) */
   password?: string;
   /** Maximum number of pages to read (0 = all pages) */
   maxPages?: number;
@@ -88,6 +99,16 @@ export interface PDFReaderResult {
  * - Reading from file path or buffer
  * - Page extraction
  * - Metadata extraction
+ * - Password-protected PDFs
+ *
+ * Passwords should be stored in memory and accessed via memory.read():
+ * await memory({ action: 'set', category: 'credentials', key: 'pdf_password', value: 'secret' });
+ *
+ * Usage in script tool:
+ * const pdf = await pdfReader({
+ *   filePath: 'secure.pdf',
+ *   password: memory.read('credentials', 'pdf_password')
+ * });
  *
  * @param cwd - Working directory for resolving relative file paths
  */
@@ -104,6 +125,8 @@ export function createPDFReaderFunction(cwd?: string) {
         "pdfReader requires either 'filePath' or 'buffer' parameter. Usage: pdfReader({ filePath: 'document.pdf' })"
       );
     }
+
+    const password = options.password;
 
     try {
       let dataBuffer: Buffer;
@@ -140,7 +163,7 @@ export function createPDFReaderFunction(cwd?: string) {
       // Create PDFParse instance with the buffer data
       const pdfParser = new PDFParse({
         data: dataBuffer,
-        password: options.password,
+        password: password,
       });
 
       // Parse options for text extraction

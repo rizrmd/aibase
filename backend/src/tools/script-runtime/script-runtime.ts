@@ -69,7 +69,9 @@ await todo({ action: 'add', texts });
 return { created: texts.length };
 \`\`\`
 
-**Available:** fetch, progress(msg), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), convId, projectId, CURRENT_UID, console`;
+**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), convId, projectId, CURRENT_UID, console
+
+**IMPORTANT:** Use \`memory.read('category', 'key')\` to securely read stored credentials in database functions!`;
 };
 
 /**
@@ -142,6 +144,9 @@ export class ScriptRuntime {
       // Inject progress function for status updates
       progress: this.createProgressFunction(),
 
+      // Inject memory object with read function
+      memory: this.createMemoryObject(),
+
       // Inject DuckDB query function
       duckdb: this.createDuckDBFunction(),
 
@@ -202,6 +207,54 @@ export class ScriptRuntime {
   }
 
   /**
+   * Create the memory object with read function for accessing stored credentials
+   */
+  private createMemoryObject() {
+    const projectId = this.context.projectId;
+
+    return {
+      read: async (category: string, key: string): Promise<any> => {
+        // Load memory from file
+        const fs = await import("fs/promises");
+        const path = await import("path");
+
+        const memoryPath = path.join(
+          process.cwd(),
+          "data",
+          projectId,
+          "memory.json"
+        );
+
+        try {
+          const content = await fs.readFile(memoryPath, "utf-8");
+          const memory = JSON.parse(content);
+
+          if (!memory[category]) {
+            throw new Error(
+              `Memory category "${category}" not found. Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+            );
+          }
+
+          if (!(key in memory[category])) {
+            throw new Error(
+              `Memory key "${key}" not found in category "${category}". Store it first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+            );
+          }
+
+          return memory[category][key];
+        } catch (error: any) {
+          if (error.code === "ENOENT") {
+            throw new Error(
+              `Memory not initialized. Store a value first: await memory({ action: 'set', category: '${category}', key: '${key}', value: '...' })`
+            );
+          }
+          throw error;
+        }
+      },
+    };
+  }
+
+  /**
    * Get the DuckDB query function
    */
   private createDuckDBFunction() {
@@ -215,7 +268,7 @@ export class ScriptRuntime {
    * Get the PostgreSQL query function
    */
   private createPostgreSQLFunction() {
-    // Return the PostgreSQL function (requires direct connection URL)
+    // Return the PostgreSQL function
     return createPostgreSQLFunction();
   }
 
@@ -223,7 +276,7 @@ export class ScriptRuntime {
    * Get the ClickHouse query function
    */
   private createClickHouseFunction() {
-    // Return the ClickHouse function (requires server URL)
+    // Return the ClickHouse function
     return createClickHouseFunction();
   }
 
@@ -231,7 +284,7 @@ export class ScriptRuntime {
    * Get the Trino query function
    */
   private createTrinoFunction() {
-    // Return the Trino function (requires server URL)
+    // Return the Trino function
     return createTrinoFunction();
   }
 
@@ -241,7 +294,7 @@ export class ScriptRuntime {
   private createPDFReaderFunction() {
     // Set working directory to the conversation's files directory
     const cwd = `data/${this.context.projectId}/${this.context.convId}/files`;
-    // Return the PDF reader function from the modular implementation
+    // Return the PDF reader function
     return createPDFReaderFunction(cwd);
   }
 

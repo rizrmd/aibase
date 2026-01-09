@@ -46,10 +46,17 @@ export const context = async () => {
  * - duckdb(options) for SQL queries on data files
  *   Options: { query, database?, format?, readonly? }
  * - postgresql(options) for PostgreSQL database queries
- *   Options: { query, connectionUrl, format?, timeout? }
- *   Note: connectionUrl is required
+ *   Options: { query, connectionUrl?, format?, timeout? }
+ *   Note: Credentials can be stored in memory for security
+ * - clickhouse(options) for ClickHouse database queries
+ *   Options: { query, serverUrl?, database?, username?, password?, format?, timeout?, params? }
+ *   Note: Credentials can be stored in memory for security
+ * - trino(options) for Trino distributed queries
+ *   Options: { query, serverUrl?, catalog?, schema?, username?, password?, format?, timeout? }
+ *   Note: Credentials can be stored in memory for security
  * - pdfReader(options) for extracting text from PDF files
  *   Options: { filePath?, buffer?, password?, maxPages?, debug? }
+ *   Note: Passwords can be stored in memory for security
  * - convId, projectId, and CURRENT_UID for context
  * - console for debugging
  * - fetch for HTTP requests
@@ -59,7 +66,8 @@ export class ScriptTool extends Tool {
 
   description = `Execute Bun TypeScript code with programmatic access to other tools.
 Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
-Available functions: progress(message, data?), duckdb(options), postgresql(options), pdfReader(options), showChart(options), showTable(options), and all registered tools as async functions.
+Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), and all registered tools as async functions.
+Security: Store database credentials and PDF passwords in memory, then use memory.read() function to access them (e.g., connectionUrl: memory.read('database', 'postgresql_url')). This provides type-safe credential access and makes it clear which credentials are being used.
 Context variables: convId, projectId, CURRENT_UID. Note: Bun is used instead of Node.js (Do not use require).`;
 
   parameters = {
@@ -118,29 +126,43 @@ DuckDB query examples (read CSV/Excel/Parquet files):
   });
   return result.data;
 
-PostgreSQL query examples (requires direct connection URL):
-  // Query users from PostgreSQL
+PostgreSQL query examples (RECOMMENDED: store credentials in memory):
+  // FIRST TIME: Store credentials in memory (do this once):
+  await memory({
+    action: 'set',
+    category: 'database',
+    key: 'postgresql_url',
+    value: 'postgresql://user:pass@localhost:5432/mydb'
+  });
+
+  // Then use memory.read() to get the credential (CLEAR and type-safe):
   const users = await postgresql({
     query: "SELECT * FROM users WHERE active = true LIMIT 10",
-    connectionUrl: "postgresql://user:pass@localhost:5432/mydb"
+    connectionUrl: memory.read('database', 'postgresql_url')  // Function call - type-safe!
   });
   progress(\`Found \${users.rowCount} users\`);
   return users.data;
 
-  // Query with aggregation
+  // Query with aggregation (using memory.read())
   const stats = await postgresql({
     query: "SELECT status, COUNT(*) as count FROM orders GROUP BY status",
-    connectionUrl: "postgresql://user:pass@localhost:5432/mydb"
+    connectionUrl: memory.read('database', 'postgresql_url')
   });
   return stats.data;
 
-  // Query with timeout
+  // Query with timeout (using memory.read())
   const large = await postgresql({
     query: "SELECT * FROM large_table",
-    connectionUrl: "postgresql://user:pass@localhost:5432/mydb",
+    connectionUrl: memory.read('database', 'postgresql_url'),
     timeout: 60000 // 60 seconds
   });
   return { rowCount: large.rowCount, executionTime: large.executionTime };
+
+  // ALTERNATIVE: Direct connection URL (credentials visible in code)
+  const direct = await postgresql({
+    query: "SELECT * FROM items",
+    connectionUrl: "postgresql://user:pass@localhost:5432/mydb"
+  });
 
 PDF reader examples (extract text from PDF files):
   // Read entire PDF
@@ -150,10 +172,18 @@ PDF reader examples (extract text from PDF files):
   progress(\`Extracted \${pdf.totalPages} pages\`);
   return { text: pdf.text, pages: pdf.totalPages };
 
-  // Read password-protected PDF
+  // RECOMMENDED: For password-protected PDFs, store password in memory (do this once):
+  await memory({
+    action: 'set',
+    category: 'credentials',
+    key: 'pdf_password',
+    value: 'secret123'
+  });
+
+  // Then use memory.read() to get the password (CLEAR and type-safe):
   const secure = await pdfReader({
     filePath: "secure.pdf",
-    password: "secret123"
+    password: memory.read('credentials', 'pdf_password')  // Function call - type-safe!
   });
   return secure.text;
 
@@ -173,7 +203,13 @@ PDF reader examples (extract text from PDF files):
     const content = await pdfReader({ filePath: pdf.name });
     results.push({ file: pdf.name, pages: content.totalPages, text: content.text });
   }
-  return results;`,
+  return results;
+
+  // ALTERNATIVE: Direct password (password visible in code)
+  const direct = await pdfReader({
+    filePath: "secure.pdf",
+    password: "secret123"
+  });`,
       },
     },
     required: ["purpose", "code"],

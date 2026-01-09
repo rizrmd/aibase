@@ -12,34 +12,50 @@ Use postgresql() for direct PostgreSQL database queries.
 
 **Available:** postgresql({ query, connectionUrl, format?, timeout? })
 
+**SECURITY:** Store credentials in memory and use \`memory.read()\` function!
+
 #### EXAMPLES
 
 \`\`\`typescript
-// Simple query
+// RECOMMENDED: Store credentials in memory first (do this once):
+await memory({
+  action: 'set',
+  category: 'database',
+  key: 'postgresql_url',
+  value: 'postgresql://user:pass@localhost:5432/mydb'
+});
+
+// Then use memory.read() to get the credential (CLEAR and type-safe):
 progress('Querying PostgreSQL...');
 const result = await postgresql({
   query: 'SELECT * FROM users WHERE active = true LIMIT 10',
-  connectionUrl: 'postgresql://user:pass@localhost:5432/mydb'
+  connectionUrl: memory.read('database', 'postgresql_url')  // Function call - type-safe!
 });
 progress(\`Found \${result.rowCount} users\`);
 return { count: result.rowCount, users: result.data };
 
-// Query with aggregation
+// Query with aggregation (using memory.read())
 progress('Analyzing orders...');
 const stats = await postgresql({
   query: 'SELECT status, COUNT(*) as count, SUM(total) as revenue FROM orders GROUP BY status ORDER BY revenue DESC',
-  connectionUrl: 'postgresql://user:pass@localhost:5432/mydb'
+  connectionUrl: memory.read('database', 'postgresql_url')
 });
 return { breakdown: stats.data, totalStatuses: stats.rowCount };
 
-// Query with custom timeout
+// Query with custom timeout (using memory.read())
 progress('Querying large table...');
 const products = await postgresql({
   query: 'SELECT * FROM products WHERE price > 100 ORDER BY price DESC',
-  connectionUrl: 'postgresql://user:pass@localhost:5432/shop',
+  connectionUrl: memory.read('database', 'postgresql_url'),
   timeout: 60000
 });
 return { products: products.rowCount, data: products.data };
+
+// ALTERNATIVE: Direct connection URL (credentials visible in code)
+const direct = await postgresql({
+  query: 'SELECT * FROM items',
+  connectionUrl: 'postgresql://user:pass@localhost:5432/shop'
+});
 \`\`\``
 };
 
@@ -49,7 +65,7 @@ return { products: products.rowCount, data: products.data };
 export interface PostgreSQLOptions {
   /** SQL query to execute */
   query: string;
-  /** PostgreSQL connection URL */
+  /** PostgreSQL connection URL (use memory.read('database', 'postgresql_url') for secure credentials) */
   connectionUrl: string;
   /** Return format: 'json' (default), 'raw' */
   format?: "json" | "raw";
@@ -74,16 +90,19 @@ export interface PostgreSQLResult {
 }
 
 /**
- * Create a PostgreSQL query function using direct connection URL
+ * Create a PostgreSQL query function for secure database queries
  *
  * Uses Bun's native SQL API for PostgreSQL database queries.
  *
+ * Credentials should be stored in memory and accessed via memory.read():
+ * await memory({ action: 'set', category: 'database', key: 'postgresql_url', value: 'postgresql://...' });
+ *
  * Usage in script tool:
  *
- * // Query the database:
+ * // RECOMMENDED: Query using memory.read() for credentials:
  * const users = await postgresql({
  *   query: 'SELECT * FROM users WHERE active = true LIMIT 10',
- *   connectionUrl: 'postgresql://user:password@localhost:5432/mydb'
+ *   connectionUrl: memory.read('database', 'postgresql_url')
  * });
  * console.log(`Found ${users.rowCount} users`);
  * console.log(users.data); // Array of user objects
@@ -91,13 +110,13 @@ export interface PostgreSQLResult {
  * // Query with aggregation:
  * const stats = await postgresql({
  *   query: 'SELECT status, COUNT(*) as count FROM orders GROUP BY status',
- *   connectionUrl: 'postgresql://user:password@localhost:5432/mydb'
+ *   connectionUrl: memory.read('database', 'postgresql_url')
  * });
  *
  * // Query with custom timeout:
  * const large = await postgresql({
  *   query: 'SELECT * FROM large_table',
- *   connectionUrl: 'postgresql://user:password@localhost:5432/mydb',
+ *   connectionUrl: memory.read('database', 'postgresql_url'),
  *   timeout: 60000 // 60 seconds
  * });
  */
@@ -105,21 +124,24 @@ export function createPostgreSQLFunction() {
   return async (options: PostgreSQLOptions): Promise<PostgreSQLResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
-        "postgresql requires an options object. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: 'postgresql://...' })"
+        "postgresql requires an options object. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: memory.read('database', 'postgresql_url') })"
       );
     }
 
     if (!options.query) {
       throw new Error(
-        "postgresql requires 'query' parameter. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: 'postgresql://...' })"
+        "postgresql requires 'query' parameter. Usage: postgresql({ query: 'SELECT * FROM users', connectionUrl: memory.read('database', 'postgresql_url') })"
       );
     }
 
     if (!options.connectionUrl) {
       throw new Error(
-        "postgresql requires 'connectionUrl' parameter. Usage: postgresql({ query: '...', connectionUrl: 'postgresql://user:pass@host:5432/db' })"
+        "postgresql requires 'connectionUrl' parameter. " +
+        "Use memory.read(): connectionUrl: memory.read('database', 'postgresql_url') or direct URL: 'postgresql://user:pass@host:5432/db'"
       );
     }
+
+    const connectionUrl = options.connectionUrl;
 
     const format = options.format || "json";
     const timeout = options.timeout || 30000;
