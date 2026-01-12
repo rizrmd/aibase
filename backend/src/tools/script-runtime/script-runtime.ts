@@ -69,7 +69,7 @@ await todo({ action: 'add', texts });
 return { created: texts.length };
 \`\`\`
 
-**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), convId, projectId, CURRENT_UID, console
+**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console
 
 **IMPORTANT:** Use \`memory.read('category', 'key')\` to securely read stored credentials in database functions!`;
 };

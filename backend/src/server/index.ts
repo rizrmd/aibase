@@ -250,9 +250,17 @@ export class WebSocketServer {
             convId = `embed_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
           }
 
-          // Upgrade to WebSocket with embed flag
+          // Extract session token if provided (for uid-based authentication)
+          // When embed chat includes a uid parameter, the frontend calls /api/embed/auth
+          // to create/retrieve an embed user (username: embed_{projectId}_{uid}) and
+          // returns a session token. This token is then passed here as a query parameter
+          // so we can authenticate the specific embed user and make their ID available
+          // as CURRENT_UID in the script execution environment.
+          const sessionToken = url.searchParams.get("token");
+
+          // Upgrade to WebSocket with embed flag and session token
           const upgraded = server.upgrade(req, {
-            data: { convId, projectId, isEmbed: true }
+            data: { convId, projectId, isEmbed: true, token: sessionToken }
           });
 
           if (upgraded) {
