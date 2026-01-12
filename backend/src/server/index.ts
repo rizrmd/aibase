@@ -254,13 +254,16 @@ export class WebSocketServer {
           // When embed chat includes a uid parameter, the frontend calls /api/embed/auth
           // to create/retrieve an embed user (username: embed_{projectId}_{uid}) and
           // returns a session token. This token is then passed here as a query parameter
-          // so we can authenticate the specific embed user and make their ID available
-          // as CURRENT_UID in the script execution environment.
+          // so we can authenticate the specific embed user.
           const sessionToken = url.searchParams.get("token");
 
-          // Upgrade to WebSocket with embed flag and session token
+          // Extract uid parameter to use as CURRENT_UID (the external user identifier)
+          // This is the original uid value passed in the embed URL, not the database user ID
+          const embedUid = url.searchParams.get("uid");
+
+          // Upgrade to WebSocket with embed flag, session token, and uid
           const upgraded = server.upgrade(req, {
-            data: { convId, projectId, isEmbed: true, token: sessionToken }
+            data: { convId, projectId, isEmbed: true, token: sessionToken, embedUid }
           });
 
           if (upgraded) {

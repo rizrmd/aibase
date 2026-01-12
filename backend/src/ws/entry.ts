@@ -20,6 +20,7 @@ import { generateConversationTitle, getConversationTitle } from "../llm/conversa
 import * as fs from "fs/promises";
 import * as path from "path";
 import { AuthService } from "../services/auth-service";
+import { ProjectStorage } from "../storage/project-storage";
 
 const authService = AuthService.getInstance();
 
@@ -388,6 +389,9 @@ export class WSServer extends WSEventEmitter {
       console.warn("Failed to extract token:", error);
     }
 
+    // Extract embedUid for embed connections (used as CURRENT_UID instead of database user ID)
+    const embedUid = ws.data?.embedUid || null;
+
     // Validate token if present
     let authenticatedUser = null;
     if (token) {
@@ -444,10 +448,26 @@ export class WSServer extends WSEventEmitter {
       Array.from(this.streamingManager["activeStreams"].keys())
     );
 
+    // For embed connections with uid, check if project allows uid-based identification
+    // Only use embedUid as CURRENT_UID if project.use_client_uid is true
+    let effectiveUserId = authenticatedUser?.id;
+
+    if (embedUid && ws.data?.isEmbed) {
+      // Check if project allows uid-based user identification
+      const projectStorage = ProjectStorage.getInstance();
+      const project = projectStorage.getById(projectId);
+
+      if (project?.use_client_uid) {
+        // Use the external uid as CURRENT_UID (not the database user ID)
+        effectiveUserId = embedUid;
+        console.log(`[WSServer] Using embedUid as CURRENT_UID: ${embedUid}`);
+      }
+    }
+
     const connectionInfo: ConnectionInfo = {
       convId,
       projectId,
-      userId: authenticatedUser?.id,
+      userId: effectiveUserId,
       sessionId,
       connectedAt: Date.now(),
       lastActivity: Date.now(),
@@ -470,7 +490,7 @@ export class WSServer extends WSEventEmitter {
     // Create conversation for this session with existing history
     // Load from disk if available
     const existingHistory = await this.messagePersistence.getClientHistory(convId, projectId);
-    const conversation = await this.createConversation(existingHistory, convId, projectId, authenticatedUser?.id);
+    const conversation = await this.createConversation(existingHistory, convId, projectId, effectiveUserId);
     connectionInfo.conversation = conversation;
 
     // Hook into conversation to persist changes to MessagePersistence

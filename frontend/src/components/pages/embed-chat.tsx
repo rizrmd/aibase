@@ -100,8 +100,10 @@ export function EmbedChatPage() {
   }, [embedInfo.customCss]);
 
   // Build public WebSocket URL
+  // Include uid parameter if present so backend can use it as CURRENT_UID
+  const uidParam = uid ? `&uid=${encodeURIComponent(uid)}` : '';
   const wsUrl = typeof window !== 'undefined' && projectId && embedToken
-    ? buildWsUrl(`/api/embed/ws?projectId=${encodeURIComponent(projectId)}&embedToken=${encodeURIComponent(embedToken)}`)
+    ? buildWsUrl(`/api/embed/ws?projectId=${encodeURIComponent(projectId)}&embedToken=${encodeURIComponent(embedToken)}${uidParam}`)
     : '';
 
   if (isValidating) {
