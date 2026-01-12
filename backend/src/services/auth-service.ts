@@ -124,8 +124,11 @@ export class AuthService {
       throw new Error('Invalid email format');
     }
 
-    if (!this.validateUsername(data.username)) {
-      throw new Error('Username must be 3-20 characters and contain only letters, numbers, and underscores');
+    // Skip username validation for embed users (they have special format)
+    if (!data.username.startsWith('embed_')) {
+      if (!this.validateUsername(data.username)) {
+        throw new Error('Username must be 3-20 characters and contain only letters, numbers, and underscores');
+      }
     }
 
     const passwordValidation = this.validatePassword(data.password);

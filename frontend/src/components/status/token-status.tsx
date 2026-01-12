@@ -15,9 +15,6 @@ export function TokenStatus({ convId }: TokenStatusProps) {
   const tokenUsage = useChatStore((state) => state.tokenUsage);
   const maxTokens = useChatStore((state) => state.maxTokens) || 200000;
 
-  console.log(`[TokenStatus] tokenUsage from store:`, tokenUsage);
-  console.log(`[TokenStatus] maxTokens from store:`, maxTokens);
-
   const tokenStats = {
     totalTokens: tokenUsage?.totalTokens || 0,
     promptTokens: tokenUsage?.promptTokens || 0,

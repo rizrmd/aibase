@@ -42,6 +42,8 @@ export function useMessageSubmission({
 }: UseMessageSubmissionProps) {
   // Track if we're currently submitting to prevent double submissions
   const isSubmittingRef = useRef(false);
+  // Track last submit time to prevent rapid duplicate submissions
+  const lastSubmitTimeRef = useRef<number>(0);
 
   const handleSubmit = useCallback(
     async (
@@ -50,16 +52,26 @@ export function useMessageSubmission({
     ) => {
       e?.preventDefault?.();
 
+      // Prevent rapid duplicate submissions (within 100ms)
+      const now = Date.now();
+      if (now - lastSubmitTimeRef.current < 100) {
+        console.log("[Submit] Ignoring rapid duplicate submission");
+        return;
+      }
+      lastSubmitTimeRef.current = now;
+
+      const isConnected = wsClient?.isConnected() === true;
+
       console.log(
         "[Submit] Called with input:",
         input?.substring(0, 50),
         "isConnected:",
-        wsClient?.isConnected(),
+        isConnected,
         "attachments:",
         options?.experimental_attachments?.length || 0
       );
 
-      if (!input.trim() || !wsClient?.isConnected()) {
+      if (!input.trim() || !isConnected) {
         console.log("[Submit] Skipping - no input or not connected");
         return;
       }
