@@ -49,15 +49,6 @@ const filtered = await clickhouse({
   params: { minAge: 25, country: 'US', limit: 100 }
 });
 return { users: filtered.rowCount, data: filtered.data };
-
-// ALTERNATIVE: Direct credentials (credentials visible in code)
-const direct = await clickhouse({
-  query: 'SELECT * FROM items',
-  serverUrl: 'http://localhost:8123',
-  database: 'shop',
-  username: 'user',
-  password: 'pass'
-});
 \`\`\``
 };
 

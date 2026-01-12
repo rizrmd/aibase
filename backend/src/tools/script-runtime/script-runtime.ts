@@ -71,7 +71,7 @@ return { created: texts.length };
 
 **Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console
 
-**IMPORTANT:** Use \`memory.read('category', 'key')\` to securely read stored credentials in database functions!`;
+**SECURITY MANDATORY:** NEVER hardcode credentials (API keys, passwords, database URLs) in script code. Always store credentials in memory first, then use \`memory.read('category', 'key')\` to access them securely. Hardcoding credentials exposes secrets and is a security violation.`;
 };
 
 /**

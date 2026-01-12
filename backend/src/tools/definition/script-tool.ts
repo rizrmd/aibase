@@ -67,7 +67,7 @@ export class ScriptTool extends Tool {
   description = `Execute Bun TypeScript code with programmatic access to other tools.
 Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
 Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), and all registered tools as async functions.
-Security: Store database credentials and PDF passwords in memory, then use memory.read() function to access them (e.g., connectionUrl: memory.read('database', 'postgresql_url')). This provides type-safe credential access and makes it clear which credentials are being used.
+SECURITY REQUIREMENT: NEVER hardcode credentials (API keys, database URLs, passwords) directly in script code. ALWAYS store credentials in memory first using the memory tool, then access them using memory.read(category, key). This is a mandatory security practice - hardcoding credentials exposes secrets in code history and logs.
 Context variables: convId, projectId, CURRENT_UID (user ID from authentication token - will be empty string "" if not authenticated). Note: Bun is used instead of Node.js (Do not use require).`;
 
   parameters = {
@@ -158,12 +158,6 @@ PostgreSQL query examples (RECOMMENDED: store credentials in memory):
   });
   return { rowCount: large.rowCount, executionTime: large.executionTime };
 
-  // ALTERNATIVE: Direct connection URL (credentials visible in code)
-  const direct = await postgresql({
-    query: "SELECT * FROM items",
-    connectionUrl: "postgresql://user:pass@localhost:5432/mydb"
-  });
-
 PDF reader examples (extract text from PDF files):
   // Read entire PDF
   const pdf = await pdfReader({
@@ -203,13 +197,7 @@ PDF reader examples (extract text from PDF files):
     const content = await pdfReader({ filePath: pdf.name });
     results.push({ file: pdf.name, pages: content.totalPages, text: content.text });
   }
-  return results;
-
-  // ALTERNATIVE: Direct password (password visible in code)
-  const direct = await pdfReader({
-    filePath: "secure.pdf",
-    password: "secret123"
-  });`,
+  return results;`,
       },
     },
     required: ["purpose", "code"],

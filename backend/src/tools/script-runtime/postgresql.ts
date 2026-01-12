@@ -50,12 +50,6 @@ const products = await postgresql({
   timeout: 60000
 });
 return { products: products.rowCount, data: products.data };
-
-// ALTERNATIVE: Direct connection URL (credentials visible in code)
-const direct = await postgresql({
-  query: 'SELECT * FROM items',
-  connectionUrl: 'postgresql://user:pass@localhost:5432/shop'
-});
 \`\`\``
 };
 

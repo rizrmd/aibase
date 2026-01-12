@@ -49,16 +49,6 @@ const secured = await trino({
   timeout: 60000
 });
 return { days: secured.rowCount, orderTrend: secured.data };
-
-// ALTERNATIVE: Direct credentials (credentials visible in code)
-const direct = await trino({
-  query: 'SELECT * FROM items',
-  serverUrl: 'http://localhost:8080',
-  catalog: 'hive',
-  schema: 'warehouse',
-  username: 'user',
-  password: 'secret'
-});
 \`\`\``
 };
 
