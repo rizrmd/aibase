@@ -68,7 +68,7 @@ export class ScriptTool extends Tool {
 Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
 Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), and all registered tools as async functions.
 Security: Store database credentials and PDF passwords in memory, then use memory.read() function to access them (e.g., connectionUrl: memory.read('database', 'postgresql_url')). This provides type-safe credential access and makes it clear which credentials are being used.
-Context variables: convId, projectId, CURRENT_UID. Note: Bun is used instead of Node.js (Do not use require).`;
+Context variables: convId, projectId, CURRENT_UID (user ID from authentication token - will be empty string "" if not authenticated). Note: Bun is used instead of Node.js (Do not use require).`;
 
   parameters = {
     type: "object",

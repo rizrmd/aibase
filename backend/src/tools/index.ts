@@ -25,9 +25,7 @@ export function getBuiltinTools(
   const scriptTool = new ScriptTool();
   scriptTool.setConvId(convId);
   scriptTool.setProjectId(projectId);
-  if (userId) {
-    scriptTool.setUserId(userId);
-  }
+  scriptTool.setUserId(userId || "");
 
   const memoryTool = new MemoryTool();
   memoryTool.setProjectId(projectId);
