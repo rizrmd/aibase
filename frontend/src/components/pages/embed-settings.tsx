@@ -107,7 +107,22 @@ export function EmbedSettings() {
         use_client_uid: userMode === "uid",
       };
 
-      await updateProject(currentProject.id, configUpdates);
+      const response = await fetch(
+        `${API_BASE_URL}/api/projects/${currentProject.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(configUpdates),
+        }
+      );
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to save configuration");
+      }
+
+      // Update local store with the returned project data
+      updateProject(currentProject.id, data.data.project);
       toast.success("Configuration saved successfully");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to save configuration";
