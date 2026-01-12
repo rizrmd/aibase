@@ -149,7 +149,7 @@ const COMPONENTS = {
   strong: withClass("strong", "font-semibold"),
   a: ({ node, ...props }: any) => (
     <a
-      className="text-primary underline underline-offset-2"
+      className="underline underline-offset-2"
       target="_blank"
       rel="noopener noreferrer"
       {...props}
