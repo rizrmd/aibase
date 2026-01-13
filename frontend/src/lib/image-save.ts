@@ -33,8 +33,8 @@ async function convertSvgToPng(svg: SVGElement, scale: number = 3): Promise<stri
   let width = 800;
   let height = 600;
 
-  // Try to get dimensions from viewBox first
-  if (svg.viewBox.baseVal) {
+  // Try to get dimensions from viewBox first (only available on SVGSVGElement)
+  if (svg instanceof SVGSVGElement && svg.viewBox.baseVal) {
     const vb = svg.viewBox.baseVal;
     if (vb.width > 0) width = vb.width;
     if (vb.height > 0) height = vb.height;

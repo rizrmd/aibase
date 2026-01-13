@@ -129,13 +129,13 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
           const isMermaid = invocation.toolName === "show-mermaid";
 
           // Check if this script invocation has visualizations in its result
-          const scriptVisualizations = isScript && invocation.result?.__visualizations
+          const scriptVisualizations = isScript && 'result' in invocation && invocation.result?.__visualizations
             ? invocation.result.__visualizations
             : null;
 
           // Debug logging to see what's in the result
           if (isScript) {
-            console.log('[ToolCall] Script invocation result:', invocation.result);
+            console.log('[ToolCall] Script invocation result:', 'result' in invocation ? invocation.result : undefined);
             console.log('[ToolCall] Script visualizations found:', scriptVisualizations);
           }
 
@@ -156,17 +156,17 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
               // For executing state, code might be in result field
               const code =
                 invocation.args?.code ||
-                (invocation.state === "executing" && invocation.result?.code) ||
+                (invocation.state === "executing" && 'result' in invocation && invocation.result?.code) ||
                 "";
               const purpose =
                 invocation.args?.purpose ||
                 (invocation.state === "executing" &&
-                  invocation.result?.purpose) ||
+                  'result' in invocation && invocation.result?.purpose) ||
                 "Script execution";
 
               if (code) {
                 // Result is now directly available without nesting
-                const actualResult = invocation.result;
+                const actualResult = 'result' in invocation ? invocation.result : undefined;
 
                 // Debug logging
                 console.log("[Dialog Open] Script invocation data:", {
@@ -246,6 +246,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
           // Check for cancelled state - handle both formats
           const isCancelled =
             invocation.state === "result" &&
+            'result' in invocation &&
             invocation.result?.__cancelled === true;
 
           if (isCancelled) {
@@ -322,7 +323,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     {toolName}
                   </div>
-                  {invocation.result?.code && (
+                  {'result' in invocation && invocation.result?.code && (
                     <pre className="ml-6 text-purple-600/70 dark:text-purple-400/70 font-mono text-xs line-clamp-2 whitespace-pre-wrap">
                       {invocation.result.code.substring(0, 100)}
                       {invocation.result.code.length > 100 && "..."}
@@ -344,7 +345,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                     <Loader2 className="h-3 w-3 animate-spin" />
                     {toolName}
                   </div>
-                  {invocation.result?.message && (
+                  {'result' in invocation && invocation.result?.message && (
                     <div className="text-amber-600 dark:text-amber-500 ml-5">
                       {invocation.result.message}
                     </div>
@@ -399,7 +400,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
               );
             case "error":
               // Extract error message from result or error field
-              const errorMessage = invocation.result?.error || invocation.error;
+              const errorMessage = ('result' in invocation && invocation.result?.error) || invocation.error;
 
               return (
                 <div
