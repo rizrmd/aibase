@@ -16,7 +16,7 @@ export const context = async () => {
 
 All file paths are relative to the conversation's files directory.
 
-**Available actions:** list, info, delete, rename, uploadUrl
+**Available actions:** list, info, delete, rename, uploadUrl, write, read, peek
 
 **File Scopes:**
 - user: Only visible to the user who uploaded (default)
@@ -41,28 +41,37 @@ await file({ action: 'rename', path: 'old-name.txt', newPath: 'new-name.txt' });
 
 // Upload file from URL
 await file({ action: 'uploadUrl', url: 'https://example.com/file.pdf', path: 'downloaded.pdf' });
+
+// Write content to a file (creates new or overwrites existing)
+await file({ action: 'write', path: 'output.txt', content: 'Hello World' });
+
+// Read file content (returns up to ~8000 characters, roughly 2000 tokens)
+await file({ action: 'read', path: 'data.json' });
+
+// Peek at file with offset and limit (for paginated reading)
+await file({ action: 'peek', path: 'large-file.log', offset: 0, limit: 100 });
 \`\`\``;
 };
 
 /**
  * File Tool - Built-in file operations
- * Actions: list, info, delete, rename, uploadUrl
+ * Actions: list, info, delete, rename, uploadUrl, write, read, peek
  * All operations are restricted to /data/{proj-id}/{conv-id}/files/ pattern
  */
 export class FileTool extends Tool {
   name = "file";
-  description = "Perform file operations: list files in directory, get file info, delete file, rename/move file, or upload file from URL. All paths are relative to the project directory (/data/{proj-id}/) and must be within {conv-id}/files/ subdirectories.";
+  description = "Perform file operations: list files in directory, get file info, delete file, rename/move file, upload file from URL, write content to file, read file content (max 8000 chars ~2000 tokens), or peek at file with pagination. All paths are relative to the project directory (/data/{proj-id}/) and must be within {conv-id}/files/ subdirectories.";
   parameters = {
     type: "object",
     properties: {
       action: {
         type: "string",
-        enum: ["list", "info", "delete", "rename", "uploadUrl"],
+        enum: ["list", "info", "delete", "rename", "uploadUrl", "write", "read", "peek"],
         description: "The action to perform",
       },
       path: {
         type: "string",
-        description: "File or directory path relative to project directory (must be within {conv-id}/files/ subdirectories). For list action, defaults to listing all files across all conversations if not specified. For uploadUrl, this is the destination filename.",
+        description: "File or directory path relative to project directory (must be within {conv-id}/files/ subdirectories). For list action, defaults to listing all files across all conversations if not specified. For uploadUrl/write/read/peek, this is the filename.",
       },
       newPath: {
         type: "string",
@@ -71,6 +80,18 @@ export class FileTool extends Tool {
       url: {
         type: "string",
         description: "URL to download file from (required only for uploadUrl action)",
+      },
+      content: {
+        type: "string",
+        description: "Content to write to file (required for write action)",
+      },
+      offset: {
+        type: "number",
+        description: "Starting character position for peek action (default: 0)",
+      },
+      limit: {
+        type: "number",
+        description: "Maximum number of characters to return for peek action (default: 1000)",
       },
       scope: {
         type: "string",
@@ -226,10 +247,13 @@ ${frontmatter}
   }
 
   async execute(args: {
-    action: "list" | "info" | "delete" | "rename" | "uploadUrl";
+    action: "list" | "info" | "delete" | "rename" | "uploadUrl" | "write" | "read" | "peek";
     path?: string;
     newPath?: string;
     url?: string;
+    content?: string;
+    offset?: number;
+    limit?: number;
     scope?: FileScope;
   }): Promise<string> {
     try {
@@ -262,6 +286,24 @@ ${frontmatter}
             throw new Error("path is required for uploadUrl action (destination filename)");
           }
           return await this.uploadFromUrl(args.url, args.path);
+        case "write":
+          if (!args.path) {
+            throw new Error("path is required for write action");
+          }
+          if (args.content === undefined) {
+            throw new Error("content is required for write action");
+          }
+          return await this.writeFile(args.path, args.content);
+        case "read":
+          if (!args.path) {
+            throw new Error("path is required for read action");
+          }
+          return await this.readFile(args.path);
+        case "peek":
+          if (!args.path) {
+            throw new Error("path is required for peek action");
+          }
+          return await this.peekFile(args.path, args.offset, args.limit);
         default:
           throw new Error(`Unknown action: ${args.action}`);
       }
@@ -540,6 +582,127 @@ ${frontmatter}
       created: stats.birthtime.toISOString(),
       scope: 'user',
     });
+  }
+
+  /**
+   * Write content to a file (creates new file or overwrites existing)
+   */
+  private async writeFile(filePath: string, content: string): Promise<string> {
+    const resolvedPath = await this.resolvePath(filePath);
+    const baseDir = this.getBaseDir();
+    const relativePath = path.relative(baseDir, resolvedPath);
+
+    // Ensure parent directory exists
+    const parentDir = path.dirname(resolvedPath);
+    await fs.mkdir(parentDir, { recursive: true });
+
+    // Write content to file
+    await fs.writeFile(resolvedPath, content, 'utf-8');
+
+    // Save metadata with default 'user' scope if creating new file
+    try {
+      await fs.access(resolvedPath);
+      await this.saveFileMeta(resolvedPath, { scope: 'user' });
+    } catch (error) {
+      // File might already have metadata, ignore
+    }
+
+    // Get file stats
+    const stats = await fs.stat(resolvedPath);
+
+    return JSON.stringify({
+      success: true,
+      message: `File written: ${relativePath}`,
+      path: relativePath,
+      name: path.basename(resolvedPath),
+      size: stats.size,
+      sizeHuman: this.formatBytes(stats.size),
+      contentLength: content.length,
+      created: stats.birthtime.toISOString(),
+      scope: 'user',
+    });
+  }
+
+  /**
+   * Read file content with a maximum limit of ~8000 characters (roughly 2000 tokens)
+   * Large files are truncated with a warning - no error is thrown
+   */
+  private async readFile(filePath: string): Promise<string> {
+    const resolvedPath = await this.resolvePath(filePath);
+    const baseDir = this.getBaseDir();
+    const stats = await fs.stat(resolvedPath);
+    const relativePath = path.relative(baseDir, resolvedPath);
+
+    // Maximum characters to return (approximately 2000 tokens, assuming ~4 chars per token)
+    const MAX_CHARS = 8000;
+
+    // Read file content
+    const content = await fs.readFile(resolvedPath, 'utf-8');
+
+    // Truncate if exceeds max length (don't error, just warn)
+    let truncated = false;
+    let returnedContent = content;
+    let warning = undefined;
+
+    if (content.length > MAX_CHARS) {
+      returnedContent = content.substring(0, MAX_CHARS);
+      truncated = true;
+      warning = `⚠️ FILE TRUNCATED: This file has ${content.length} characters. Only first ${MAX_CHARS} characters (~2000 tokens) are shown. To read more, use: file({ action: 'peek', path: '${filePath}', offset: ${MAX_CHARS}, limit: 1000 })`;
+    }
+
+    return JSON.stringify({
+      success: true,
+      path: relativePath,
+      name: path.basename(resolvedPath),
+      size: stats.size,
+      sizeHuman: this.formatBytes(stats.size),
+      totalCharacters: content.length,
+      returnedCharacters: returnedContent.length,
+      truncated,
+      warning,
+      content: returnedContent,
+    }, null, 2);
+  }
+
+  /**
+   * Peek at file content with offset and limit for pagination
+   */
+  private async peekFile(filePath: string, offset?: number, limit?: number): Promise<string> {
+    const resolvedPath = await this.resolvePath(filePath);
+    const baseDir = this.getBaseDir();
+    const stats = await fs.stat(resolvedPath);
+    const relativePath = path.relative(baseDir, resolvedPath);
+
+    // Set defaults
+    const startOffset = offset ?? 0;
+    const maxChars = limit ?? 1000;
+
+    // Read file content
+    const content = await fs.readFile(resolvedPath, 'utf-8');
+
+    // Validate offset
+    if (startOffset < 0 || startOffset >= content.length) {
+      throw new Error(`Invalid offset ${startOffset}. File has ${content.length} characters.`);
+    }
+
+    // Extract the requested portion
+    const endOffset = Math.min(startOffset + maxChars, content.length);
+    const peekContent = content.substring(startOffset, endOffset);
+
+    return JSON.stringify({
+      success: true,
+      path: relativePath,
+      name: path.basename(resolvedPath),
+      size: stats.size,
+      sizeHuman: this.formatBytes(stats.size),
+      totalCharacters: content.length,
+      offset: startOffset,
+      limit: maxChars,
+      returnedCharacters: peekContent.length,
+      nextOffset: endOffset < content.length ? endOffset : null,
+      hasMore: endOffset < content.length,
+      content: peekContent,
+    }, null, 2);
   }
 
   private formatBytes(bytes: number): string {

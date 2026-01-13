@@ -8,6 +8,8 @@ import { context as pdfreaderContext } from "../script-runtime/pdfreader";
 import { context as webSearchContext } from "../script-runtime/web-search";
 import { context as showChartContext } from "../script-runtime/show-chart";
 import { context as showTableContext } from "../script-runtime/show-table";
+import { context as showMermaidContext } from "../script-runtime/show-mermaid";
+import { context as convertDocumentContext } from "../script-runtime/convert-document";
 import { storeOutput } from "../script-runtime/output-storage";
 
 /**
@@ -24,6 +26,8 @@ export const context = async () => {
     webSearchContext(),
     showChartContext(),
     showTableContext(),
+    showMermaidContext(),
+    convertDocumentContext(),
   ]);
 
   return contexts.join("\n\n");
@@ -66,7 +70,7 @@ export class ScriptTool extends Tool {
 
   description = `Execute Bun TypeScript code with programmatic access to other tools.
 Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
-Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), and all registered tools as async functions.
+Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), showMermaid(options), and all registered tools as async functions.
 SECURITY REQUIREMENT: NEVER hardcode credentials (API keys, database URLs, passwords) directly in script code. ALWAYS store credentials in memory first using the memory tool, then access them using memory.read(category, key). This is a mandatory security practice - hardcoding credentials exposes secrets in code history and logs.
 Context variables: convId, projectId, CURRENT_UID (user ID from authentication token - will be empty string "" if not authenticated). Note: Bun is used instead of Node.js (Do not use require).`;
 
@@ -100,6 +104,25 @@ Example (multi-line):
     // process file...
   }
   return { processed: files.length };
+
+File write/read/peek examples (create, read, and paginate through files):
+  // Write content to a file
+  await file({ action: 'write', path: 'output.txt', content: 'Hello World' });
+  return { success: true };
+
+  // Write JSON data to a file
+  const data = { users: [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }] };
+  await file({ action: 'write', path: 'users.json', content: JSON.stringify(data, null, 2) });
+  return { written: data.users.length };
+
+  // Read file (returns up to 8000 chars ~2000 tokens)
+  const result = await file({ action: 'read', path: 'data.json' });
+  return { content: result.content, truncated: result.truncated };
+
+  // Peek at large file with pagination
+  const page1 = await file({ action: 'peek', path: 'large.log', offset: 0, limit: 1000 });
+  const page2 = await file({ action: 'peek', path: 'large.log', offset: page1.nextOffset, limit: 1000 });
+  return { page1: page1.content, page2: page2.content, hasMore: page2.hasMore };
 
 DuckDB query examples (read CSV/Excel/Parquet files):
   // Query a CSV file
@@ -431,37 +454,29 @@ PDF reader examples (extract text from PDF files):
         toolName: "script",
         args,
         status: "complete",
-        result: {
-          purpose: args.purpose,
-          result,
-        },
+        result,
       });
 
-      // Return success result with purpose
-      return {
-        purpose: args.purpose,
-        result,
-        status: "success",
-      };
+      // Return result directly without extra nesting
+      return result;
     } catch (error: any) {
+      const errorResult = {
+        __error: true,
+        error: error.message,
+        purpose: args.purpose,
+      };
+
       // Broadcast error state
       this.broadcastFn("tool_call", {
         toolCallId: this.currentToolCallId,
         toolName: "script",
         args,
         status: "error",
-        result: {
-          purpose: args.purpose,
-          error: error.message,
-        },
+        result: errorResult,
       });
 
       // Return error result instead of throwing to prevent hanging
-      return {
-        purpose: args.purpose,
-        error: error.message,
-        status: "error",
-      };
+      return errorResult;
     }
   }
 }

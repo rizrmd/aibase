@@ -15,7 +15,6 @@ export interface StoredFile {
   path: string;
   uploadedAt: number;
   scope: FileScope;
-  originalName?: string;
 }
 
 export class FileStorage {
@@ -64,7 +63,7 @@ export class FileStorage {
     convId: string,
     fileName: string,
     projectId: string,
-    meta: { scope: FileScope; originalName?: string; uploadedAt?: number; size?: number; type?: string }
+    meta: { scope: FileScope; uploadedAt?: number; size?: number; type?: string }
   ): Promise<void> {
     const metaPath = this.getMetaFilePath(convId, fileName, projectId);
 
@@ -88,7 +87,7 @@ ${frontmatter}
     convId: string,
     fileName: string,
     projectId: string
-  ): Promise<{ scope: FileScope; originalName?: string; uploadedAt?: number; size?: number; type?: string }> {
+  ): Promise<{ scope: FileScope; uploadedAt?: number; size?: number; type?: string }> {
     const metaPath = this.getMetaFilePath(convId, fileName, projectId);
 
     try {
@@ -137,6 +136,7 @@ ${frontmatter}
 
   /**
    * Save a file to disk
+   * @throws Error if a file with the same name already exists
    */
   async saveFile(
     convId: string,
@@ -151,13 +151,19 @@ ${frontmatter}
     // Sanitize filename to prevent directory traversal
     const sanitizedFileName = path.basename(fileName);
 
-    // Add unique ID to prevent overwrites
-    const timestamp = Date.now();
-    const ext = path.extname(sanitizedFileName);
-    const nameWithoutExt = path.basename(sanitizedFileName, ext);
-    const uniqueFileName = `${nameWithoutExt}_${timestamp}${ext}`;
+    const filePath = path.join(this.getConvDir(convId, projectId), sanitizedFileName);
 
-    const filePath = path.join(this.getConvDir(convId, projectId), uniqueFileName);
+    // Check if file already exists to prevent overwrites
+    try {
+      await fs.access(filePath);
+      throw new Error(`File "${sanitizedFileName}" already exists. Please use a different filename.`);
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        // Re-throw if it's not a "file doesn't exist" error
+        throw error;
+      }
+      // File doesn't exist, proceed with save
+    }
 
     // Write buffer directly to disk
     await fs.writeFile(filePath, fileBuffer);
@@ -166,23 +172,21 @@ ${frontmatter}
     const stats = await fs.stat(filePath);
     const uploadedAt = Date.now();
 
-    // Save metadata with original name and more info
-    await this.saveFileMeta(convId, uniqueFileName, projectId, {
+    // Save metadata
+    await this.saveFileMeta(convId, sanitizedFileName, projectId, {
       scope,
-      originalName: fileName,
       uploadedAt,
       size: stats.size,
       type: fileType
     });
 
     return {
-      name: uniqueFileName,
+      name: sanitizedFileName,
       size: stats.size,
       type: fileType,
       path: filePath,
       uploadedAt,
       scope,
-      originalName: fileName,
     };
   }
 

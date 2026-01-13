@@ -12,7 +12,7 @@ You call \`showTable()\` directly within your TypeScript/JavaScript code - it is
 
 Do NOT format data as markdown tables using pipe characters (\`|\`). Always use the \`showTable()\` function for any tabular data you want to display.
 
-**Available:** showTable({ title, description?, columns, data })
+**Available:** showTable({ title, description?, columns, data, saveTo? })
 
 #### PARAMETERS
 
@@ -22,6 +22,7 @@ Do NOT format data as markdown tables using pipe characters (\`|\`). Always use 
   - Each column has: key (string), label (string)
 - data: Array of data objects (required)
   - Each object's keys should match column keys
+- saveTo: Optional filename to save table as PNG (e.g., 'users-table.png')
 
 #### EXAMPLE
 
@@ -42,6 +43,9 @@ const items = [
   { product: 'Mouse', price: '$25', stock: 150 }
 ];
 await showTable({ title: 'Inventory', description: 'Current product stock', columns: cols, data: items });
+
+// Table with auto-save
+await showTable({ title: 'Users', columns, data, saveTo: 'users-table.png' });
 return { table: 'displayed' };
 \`\`\`
 
@@ -73,22 +77,16 @@ await showTable({
  * Create a showTable function that broadcasts a tool call to the frontend
  */
 export function createShowTableFunction(broadcast: (type: "tool_call" | "tool_result", data: any) => void) {
-    return async (args: { title: string; description?: string; columns: any[]; data: any[] }) => {
+    return async (args: { title: string; description?: string; columns: any[]; data: any[]; saveTo?: string }) => {
         const toolCallId = `call_${Date.now()}_table`;
 
-        // Broadcast the tool call so the frontend renders it
-        broadcast("tool_call", {
-            toolCallId,
-            toolName: "show-table",
-            args,
-            status: "call"
-        });
-
-        // Return a success message for the script
+        // Return data for history persistence (no broadcast - will be included in script result)
         return {
-            status: "success",
-            message: "Table rendered in frontend",
-            toolCallId
+            __visualization: {
+                type: "show-table",
+                toolCallId,
+                args
+            }
         };
     };
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   PageActionButton,
   PageActionGroup,
@@ -19,6 +19,13 @@ export function ContextEditor() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { currentProject } = useProjectStore();
+
+  // Use refs to track latest state values for keyboard shortcut
+  const contentRef = useRef(content);
+  const originalContentRef = useRef(originalContent);
+  const isSavingRef = useRef(isSaving);
+  const isLoadingRef = useRef(isLoading);
+  const handleSaveRef = useRef<(() => Promise<void>) | null>(null);
 
   const loadContext = async () => {
     if (!currentProject) {
@@ -52,7 +59,7 @@ export function ContextEditor() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!currentProject) {
       toast.error("No project selected");
       return;
@@ -87,7 +94,16 @@ export function ContextEditor() {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [currentProject, content]);
+
+  // Update refs when state/handler changes
+  useEffect(() => {
+    contentRef.current = content;
+    originalContentRef.current = originalContent;
+    isSavingRef.current = isSaving;
+    isLoadingRef.current = isLoading;
+    handleSaveRef.current = handleSave;
+  }, [content, originalContent, isSaving, isLoading, handleSave]);
 
   const handleReset = () => {
     setContent(originalContent);
@@ -132,16 +148,19 @@ export function ContextEditor() {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault(); // Prevent browser's default save dialog
 
+        // Use refs to check latest state values (avoid stale closure)
+        const hasChanges = contentRef.current !== originalContentRef.current;
+
         // Only save if there are changes and not already saving
-        if (hasChanges && !isSaving && !isLoading) {
-          handleSave();
+        if (hasChanges && !isSavingRef.current && !isLoadingRef.current && handleSaveRef.current) {
+          handleSaveRef.current();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hasChanges, isSaving, isLoading]); // Re-attach listener when these change
+  }, []); // Empty deps - refs are updated separately
 
   if (error) {
     return (

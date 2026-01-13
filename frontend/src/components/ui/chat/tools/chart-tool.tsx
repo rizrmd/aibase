@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import ReactECharts from "echarts-for-react";
 import { useTheme } from "next-themes";
+import { useVisualizationSave } from "@/hooks/use-visualization-save";
 
 interface ChartToolProps {
     toolInvocation: {
@@ -11,6 +12,7 @@ interface ChartToolProps {
             description?: string;
             chartType: string;
             data: any;
+            saveTo?: string;
         };
         result?: any;
     };
@@ -18,7 +20,15 @@ interface ChartToolProps {
 
 export function ChartTool({ toolInvocation }: ChartToolProps) {
     const { theme } = useTheme();
-    const { title, description, chartType, data } = toolInvocation.args;
+    const { title, description, chartType, data, saveTo } = toolInvocation.args;
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Auto-save if saveTo is provided
+    useVisualizationSave({
+        toolCallId: toolInvocation.toolCallId,
+        saveTo,
+        shouldSave: !!saveTo,
+    });
 
     const option = useMemo(() => {
         // If data is already a full ECharts option, use it
@@ -120,7 +130,11 @@ export function ChartTool({ toolInvocation }: ChartToolProps) {
     }, [chartType, data, theme]);
 
     return (
-        <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
+        <div
+            ref={containerRef}
+            data-tool-call-id={toolInvocation.toolCallId}
+            className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm"
+        >
             <div className="flex flex-col gap-1">
                 <h3 className="font-semibold leading-none tracking-tight">{title}</h3>
                 {description && (

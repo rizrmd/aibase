@@ -7,6 +7,7 @@ import { MemoryToolGroup } from "./memory-tool-group";
 import { FileToolGroup } from "./file-tool-group";
 import { ChartTool } from "./chart-tool";
 import { TableTool } from "./table-tool";
+import { MermaidTool } from "./mermaid-tool";
 import type { ToolInvocation } from "./types";
 
 // Helper function to format duration display
@@ -125,6 +126,18 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
           const isFileTool = invocation.toolName === "file";
           const isChart = invocation.toolName === "show-chart";
           const isTable = invocation.toolName === "show-table";
+          const isMermaid = invocation.toolName === "show-mermaid";
+
+          // Check if this script invocation has visualizations in its result
+          const scriptVisualizations = isScript && invocation.result?.__visualizations
+            ? invocation.result.__visualizations
+            : null;
+
+          // Debug logging to see what's in the result
+          if (isScript) {
+            console.log('[ToolCall] Script invocation result:', invocation.result);
+            console.log('[ToolCall] Script visualizations found:', scriptVisualizations);
+          }
 
           if (isChart) {
             return <ChartTool key={index} toolInvocation={invocation as any} />;
@@ -132,6 +145,10 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
 
           if (isTable) {
             return <TableTool key={index} toolInvocation={invocation as any} />;
+          }
+
+          if (isMermaid) {
+            return <MermaidTool key={index} toolInvocation={invocation as any} />;
           }
 
           const handleScriptClick = () => {
@@ -148,16 +165,8 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                 "Script execution";
 
               if (code) {
-                // Extract the actual result from the wrapped response
-                let actualResult = undefined;
-                if ("result" in invocation && invocation.result) {
-                  // For completed scripts, result is wrapped as { purpose, result }
-                  // Extract the nested result if it exists, otherwise use the whole result
-                  actualResult =
-                    invocation.result.result !== undefined
-                      ? invocation.result.result
-                      : invocation.result;
-                }
+                // Result is now directly available without nesting
+                const actualResult = invocation.result;
 
                 // Debug logging
                 console.log("[Dialog Open] Script invocation data:", {
@@ -232,7 +241,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
             }
           };
 
-          if (invocation.toolName === "todo") return <></>;
+          if (invocation.toolName === "todo") return null;
 
           // Check for cancelled state - handle both formats
           const isCancelled =
@@ -344,23 +353,48 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
               );
             case "result":
               return (
-                <div
-                  key={index}
-                  onClick={handleClick}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-xl border border-green-200 bg-green-50/50 px-2.5 py-1.5 text-xs dark:border-green-800 dark:bg-green-950/30",
-                    "cursor-pointer hover:bg-green-100/50 dark:hover:bg-green-900/40"
-                  )}
-                >
-                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                    <Code2 className="h-3 w-3" />
-                    {toolName}
-                    {formatDuration(invocation.duration) && (
-                      <span className="ml-auto text-green-600 dark:text-green-500">
-                        [{formatDuration(invocation.duration)}]
-                      </span>
+                <div key={index}>
+                  <div
+                    onClick={handleClick}
+                    className={cn(
+                      "flex flex-col gap-1 rounded-xl border border-green-200 bg-green-50/50 px-2.5 py-1.5 text-xs dark:border-green-800 dark:bg-green-950/30",
+                      "cursor-pointer hover:bg-green-100/50 dark:hover:bg-green-900/40"
                     )}
+                  >
+                    <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                      <Code2 className="h-3 w-3" />
+                      {toolName}
+                      {formatDuration(invocation.duration) && (
+                        <span className="ml-auto text-green-600 dark:text-green-500">
+                          [{formatDuration(invocation.duration)}]
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {/* Render visualizations from script result */}
+                  {scriptVisualizations && scriptVisualizations.length > 0 && (
+                    <div className="mt-2 mb-4">
+                      {scriptVisualizations
+                        .filter((viz: any) => ["show-chart", "show-table", "show-mermaid"].includes(viz.type))
+                        .map((viz: any, vizIndex: number) => {
+                          const vizInvocation = {
+                            toolName: viz.type,
+                            toolCallId: viz.toolCallId,
+                            args: viz.args,
+                            state: "result" as const,
+                            result: { __visualization: viz }
+                          };
+
+                          if (viz.type === "show-chart") {
+                            return <ChartTool key={`${index}-viz-${vizIndex}`} toolInvocation={vizInvocation} />;
+                          }
+                          if (viz.type === "show-table") {
+                            return <TableTool key={`${index}-viz-${vizIndex}`} toolInvocation={vizInvocation} />;
+                          }
+                          return <MermaidTool key={`${index}-viz-${vizIndex}`} toolInvocation={vizInvocation} />;
+                        })}
+                    </div>
+                  )}
                 </div>
               );
             case "error":

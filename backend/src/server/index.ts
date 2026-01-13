@@ -36,6 +36,7 @@ export { Conversation, Tool } from "../llm/conversation";
 import type { WSClientOptions, WSServerOptions } from "../ws/types";
 import { WSServer } from "../ws/entry";
 import { handleFileUpload, handleFileDownload } from "./upload-handler";
+import { handleSaveImage } from "./image-save-handler";
 import { handleGetMemory, handleSetMemory, handleDeleteMemory } from "./memory-handler";
 import { handleGetContext, handleUpdateContext, handleGetDefaultContext } from "./context-handler";
 import {
@@ -291,6 +292,11 @@ export class WebSocketServer {
         // Handle file upload (POST /api/upload?convId=xxx)
         if (pathname === "/api/upload" && req.method === "POST") {
           return handleFileUpload(req);
+        }
+
+        // Handle image save from base64 (POST /api/save-image?convId=xxx&projectId=xxx)
+        if (pathname === "/api/save-image" && req.method === "POST") {
+          return handleSaveImage(req);
         }
 
         // Handle file download (GET /api/files/{projectId}/{convId}/{fileName})

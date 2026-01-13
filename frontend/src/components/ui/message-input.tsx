@@ -52,7 +52,6 @@ export function MessageInput({
   transcribeAudio,
   ...props
 }: MessageInputProps) {
-  const pasteTimestampRef = useRef<number>(0);
 
   // Zustand stores
   const { showInterruptPrompt, textAreaHeight, setShowInterruptPrompt, setTextAreaHeight } = useUIStore(
@@ -133,24 +132,13 @@ export function MessageInput({
     const items = event.clipboardData?.items
     if (!items) return
 
-    const text = event.clipboardData.getData("text")
-    if (text && text.length > 500 && props.allowAttachments) {
-      event.preventDefault()
-      const blob = new Blob([text], { type: "text/plain" })
-      pasteTimestampRef.current = Date.now()
-      const file = new File([blob], "Pasted text", {
-        type: "text/plain",
-        lastModified: pasteTimestampRef.current,
-      })
-      addFiles([file])
-      return
-    }
-
+    // Only handle file pastes (images, documents, etc.), let text paste normally
     const files = Array.from(items)
       .map((item) => item.getAsFile())
       .filter((file) => file !== null)
 
     if (props.allowAttachments && files.length > 0) {
+      event.preventDefault()
       addFiles(files)
     }
   }
@@ -314,7 +302,7 @@ export function MessageInput({
             size="icon"
             className="h-8 w-8 transition-opacity"
             aria-label="Send message"
-            disabled={props.value === "" || isGenerating || props.uploadProgress !== null}
+            disabled={(!props.value && !(props.allowAttachments && props.files?.length)) || isGenerating || props.uploadProgress !== null}
           >
             {props.uploadProgress !== null ? (
               <Loader2 className="h-4 w-4 animate-spin" />

@@ -7,6 +7,8 @@ import { createPDFReaderFunction } from "./pdfreader";
 import { createWebSearchFunction, createImageSearchFunction } from "./web-search";
 import { createShowChartFunction } from "./show-chart";
 import { createShowTableFunction } from "./show-table";
+import { createShowMermaidFunction } from "./show-mermaid";
+import { createConvertDocumentFunction } from "./convert-document";
 import { peek, peekInfo } from "./peek-output";
 
 /**
@@ -69,7 +71,12 @@ await todo({ action: 'add', texts });
 return { created: texts.length };
 \`\`\`
 
-**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console
+**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), showChart(...), showTable(...), showMermaid(...), convertDocument(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console
+
+**FILE ACTIONS:**
+- \`file({ action: 'write', path: 'filename.txt', content: '...' })\` - Write/create a file
+- \`file({ action: 'read', path: 'filename.txt' })\` - Read file (max 8000 chars ~2000 tokens)
+- \`file({ action: 'peek', path: 'file.log', offset: 0, limit: 1000 })\` - Paginated read
 
 **SECURITY MANDATORY:** NEVER hardcode credentials (API keys, passwords, database URLs) in script code. Always store credentials in memory first, then use \`memory.read('category', 'key')\` to access them securely. Hardcoding credentials exposes secrets and is a security violation.`;
 };
@@ -94,6 +101,8 @@ export interface ScriptContext {
  * Bun handles TypeScript syntax natively in AsyncFunction
  */
 export class ScriptRuntime {
+  private collectedVisualizations: any[] = [];
+
   constructor(private context: ScriptContext) {
     // No transpiler needed - Bun handles TypeScript in AsyncFunction natively
   }
@@ -103,6 +112,9 @@ export class ScriptRuntime {
    */
   async execute(code: string): Promise<any> {
     try {
+      // Reset collected visualizations for this execution
+      this.collectedVisualizations = [];
+
       // Build execution scope with injected functions and context
       const scope = this.buildScope();
 
@@ -118,11 +130,53 @@ export class ScriptRuntime {
       const result = await fn(...argValues);
       console.log('[ScriptRuntime] Execution completed successfully');
 
+      // Extract visualizations from the result if present (for direct returns)
+      const extractedVisualizations = this.extractVisualizations(result);
+      console.log('[ScriptRuntime] Extracted visualizations from result:', extractedVisualizations);
+
+      // Combine collected visualizations (from showChart/showTable/showMermaid calls) with extracted ones
+      const allVisualizations = [
+        ...this.collectedVisualizations,
+        ...extractedVisualizations
+      ];
+      console.log('[ScriptRuntime] Total collected visualizations:', this.collectedVisualizations.length);
+      console.log('[ScriptRuntime] All visualizations to include:', allVisualizations.length);
+
+      // If visualizations were found, include them in the result
+      if (allVisualizations.length > 0) {
+        const finalResult = {
+          ...result,
+          __visualizations: allVisualizations
+        };
+        console.log('[ScriptRuntime] Final result with visualizations:', JSON.stringify(finalResult, null, 2));
+        return finalResult;
+      }
+
       return result;
     } catch (error: any) {
       console.error('[ScriptRuntime] Execution error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Extract visualization data from script execution result
+   */
+  private extractVisualizations(result: any): any[] {
+    const visualizations: any[] = [];
+
+    // If result has __visualizations property, use it
+    if (result && typeof result === 'object' && result.__visualizations) {
+      return Array.isArray(result.__visualizations) ? result.__visualizations : [result.__visualizations];
+    }
+
+    // Otherwise, scan the result for __visualization properties
+    // This handles cases where the script returns the result of showChart/showTable/showMermaid directly
+    if (result && typeof result === 'object' && result.__visualization) {
+      visualizations.push(result.__visualization);
+    }
+
+    return visualizations;
   }
 
   /**
@@ -168,11 +222,17 @@ export class ScriptRuntime {
       // Inject image search function
       imageSearch: this.createImageSearchFunction(),
 
-      // Inject showChart function
-      showChart: this.createShowChartFunction(),
+      // Inject showChart function with visualization collection
+      showChart: this.createShowChartFunctionWithCollection(this.collectedVisualizations),
 
-      // Inject showTable function
-      showTable: this.createShowTableFunction(),
+      // Inject showTable function with visualization collection
+      showTable: this.createShowTableFunctionWithCollection(this.collectedVisualizations),
+
+      // Inject showMermaid function with visualization collection
+      showMermaid: this.createShowMermaidFunctionWithCollection(this.collectedVisualizations),
+
+      // Inject convertDocument function
+      convertDocument: this.createConvertDocumentFunction(),
 
       // Inject peek function for accessing stored large outputs
       peek: peek,
@@ -342,10 +402,67 @@ export class ScriptRuntime {
   }
 
   /**
+   * Get the showChart function with visualization collection
+   */
+  private createShowChartFunctionWithCollection(collectedVisualizations: any[]) {
+    const baseFunction = this.createShowChartFunction();
+    return async (args: any) => {
+      const result = await baseFunction(args);
+      if (result.__visualization) {
+        collectedVisualizations.push(result.__visualization);
+      }
+      return result;
+    };
+  }
+
+  /**
    * Get the showTable function
    */
   private createShowTableFunction() {
     return createShowTableFunction(this.context.broadcast);
+  }
+
+  /**
+   * Get the showTable function with visualization collection
+   */
+  private createShowTableFunctionWithCollection(collectedVisualizations: any[]) {
+    const baseFunction = this.createShowTableFunction();
+    return async (args: any) => {
+      const result = await baseFunction(args);
+      if (result.__visualization) {
+        collectedVisualizations.push(result.__visualization);
+      }
+      return result;
+    };
+  }
+
+  /**
+   * Get the showMermaid function
+   */
+  private createShowMermaidFunction() {
+    return createShowMermaidFunction(this.context.broadcast);
+  }
+
+  /**
+   * Get the showMermaid function with visualization collection
+   */
+  private createShowMermaidFunctionWithCollection(collectedVisualizations: any[]) {
+    const baseFunction = this.createShowMermaidFunction();
+    return async (args: any) => {
+      const result = await baseFunction(args);
+      if (result.__visualization) {
+        collectedVisualizations.push(result.__visualization);
+      }
+      return result;
+    };
+  }
+
+  /**
+   * Get the convertDocument function
+   */
+  private createConvertDocumentFunction() {
+    const cwd = `data/${this.context.projectId}/${this.context.convId}/files`;
+    return createConvertDocumentFunction(cwd);
   }
 
   /**

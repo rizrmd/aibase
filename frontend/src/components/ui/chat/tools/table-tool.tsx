@@ -1,4 +1,6 @@
 
+import { useRef } from "react";
+import { useVisualizationSave } from "@/hooks/use-visualization-save";
 
 interface TableToolProps {
     toolInvocation: {
@@ -9,13 +11,22 @@ interface TableToolProps {
             description?: string;
             columns: { key: string; label: string }[];
             data: any[];
+            saveTo?: string;
         };
         result?: any;
     };
 }
 
 export function TableTool({ toolInvocation }: TableToolProps) {
-    const { title, description, columns, data } = toolInvocation.args;
+    const { title, description, columns, data, saveTo } = toolInvocation.args;
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Auto-save if saveTo is provided
+    useVisualizationSave({
+        toolCallId: toolInvocation.toolCallId,
+        saveTo,
+        shouldSave: !!saveTo,
+    });
 
     // Fallback if Shadcn Table is not available (I'll assume it is based on project description, but safe to check)
     // Since I can't check file existence inside write_to_file, I'll use standard HTML table with Tailwind classes
@@ -25,7 +36,11 @@ export function TableTool({ toolInvocation }: TableToolProps) {
     // I'll try to use the standard HTML structure that matches Shadcn UI.
 
     return (
-        <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm overflow-hidden">
+        <div
+            ref={containerRef}
+            data-tool-call-id={toolInvocation.toolCallId}
+            className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm overflow-hidden"
+        >
             <div className="flex flex-col gap-1 mb-2">
                 <h3 className="font-semibold leading-none tracking-tight">{title}</h3>
                 {description && (

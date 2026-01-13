@@ -10,7 +10,7 @@ You call \`showChart()\` directly within your TypeScript/JavaScript code - it is
 
 Use showChart() to display interactive charts in the frontend.
 
-**Available:** showChart({ title, description?, chartType, data })
+**Available:** showChart({ title, description?, chartType, data, saveTo? })
 
 #### PARAMETERS
 
@@ -18,6 +18,7 @@ Use showChart() to display interactive charts in the frontend.
 - description: Optional chart description
 - chartType: 'bar', 'line', 'pie', 'area', etc. (required)
 - data: Chart data with xAxis and series (required)
+- saveTo: Optional filename to save chart as PNG (e.g., 'sales-chart.png')
   - xAxis: Array of x-axis labels
   - series: Array of data series, each with name and data array
 
@@ -31,6 +32,9 @@ await showChart({ title: 'Monthly Sales', chartType: 'bar', data });
 // Line chart with description
 const sales = { xAxis: ['Q1', 'Q2', 'Q3', 'Q4'], series: [{ name: 'Revenue', data: [1000, 1500, 1200, 1800] }] };
 await showChart({ title: 'Quarterly Revenue', description: 'Revenue in thousands', chartType: 'line', data: sales });
+
+// Chart with auto-save
+await showChart({ title: 'Sales Report', chartType: 'bar', data, saveTo: 'sales-report.png' });
 return { chart: 'displayed' };
 \`\`\``
 };
@@ -39,22 +43,16 @@ return { chart: 'displayed' };
  * Create a showChart function that broadcasts a tool call to the frontend
  */
 export function createShowChartFunction(broadcast: (type: "tool_call" | "tool_result", data: any) => void) {
-    return async (args: { title: string; description?: string; chartType: string; data: any }) => {
+    return async (args: { title: string; description?: string; chartType: string; data: any; saveTo?: string }) => {
         const toolCallId = `call_${Date.now()}_chart`;
 
-        // Broadcast the tool call so the frontend renders it
-        broadcast("tool_call", {
-            toolCallId,
-            toolName: "show-chart",
-            args,
-            status: "call"
-        });
-
-        // Return a success message for the script
+        // Return data for history persistence (no broadcast - will be included in script result)
         return {
-            status: "success",
-            message: "Chart rendered in frontend",
-            toolCallId
+            __visualization: {
+                type: "show-chart",
+                toolCallId,
+                args
+            }
         };
     };
 }
