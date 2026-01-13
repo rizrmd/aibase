@@ -18,7 +18,7 @@ export function UserMenu() {
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm">
           <User />
-          {auth.user?.username}
+          <span className="hidden sm:inline">{auth.user?.username}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2" align="end">
