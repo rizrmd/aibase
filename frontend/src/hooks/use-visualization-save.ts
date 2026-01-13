@@ -19,7 +19,7 @@ export function useVisualizationSave({
   shouldSave,
 }: UseVisualizationSaveOptions) {
   const hasSavedRef = useRef(false);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const { currentProject } = useProjectStore();
 
   useEffect(() => {
