@@ -192,7 +192,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                       ? "call"
                       : invocation.state,
                   result: actualResult,
-                  error: ('result' in invocation && invocation.result?.error) || invocation.error,
+                  error: ('result' in invocation && invocation.result?.error) || ('error' in invocation ? invocation.error : undefined),
                 });
               }
             }
@@ -400,7 +400,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
               );
             case "error":
               // Extract error message from result or error field
-              const errorMessage = ('result' in invocation && invocation.result?.error) || invocation.error;
+              const errorMessage = ('result' in invocation && invocation.result?.error) || ('error' in invocation ? invocation.error : undefined);
 
               return (
                 <div
