@@ -1131,7 +1131,9 @@ export function useWebSocketHandlers({
       );
 
       // Update or create assistant message to include tool invocations
-      setMessages((prev) => {
+      // Use flushSync to ensure immediate rendering, especially for errors
+      flushSync(() => {
+        setMessages((prev) => {
         const toolInvocations = Array.from(
           currentToolInvocationsRef.current.values()
         );
@@ -1264,6 +1266,7 @@ export function useWebSocketHandlers({
         return !hasThinkingIndicator && thinkingIndicator
           ? [...updated, thinkingIndicator]
           : updated;
+        });
       });
     };
 

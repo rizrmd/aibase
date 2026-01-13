@@ -398,6 +398,9 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                 </div>
               );
             case "error":
+              // Extract error message from result or error field
+              const errorMessage = invocation.result?.error || invocation.error;
+
               return (
                 <div
                   key={index}
@@ -416,6 +419,11 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                       </span>
                     )}
                   </div>
+                  {errorMessage && (
+                    <div className="text-red-600 dark:text-red-500 ml-5 font-mono">
+                      {errorMessage}
+                    </div>
+                  )}
                 </div>
               );
             default:
