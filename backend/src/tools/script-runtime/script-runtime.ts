@@ -275,11 +275,11 @@ export class ScriptRuntime {
     const projectId = this.context.projectId;
     const context = this.context;
 
-    // Create the read function
-    const read = async (category: string, key: string): Promise<any> => {
-      // Load memory from file
-      const fs = await import("fs/promises");
-      const path = await import("path");
+    // Create the read function (synchronous)
+    const read = (category: string, key: string): any => {
+      // Load memory from file synchronously
+      const fs = require("fs");
+      const path = require("path");
 
       const memoryPath = path.join(
         process.cwd(),
@@ -289,7 +289,7 @@ export class ScriptRuntime {
       );
 
       try {
-        const content = await fs.readFile(memoryPath, "utf-8");
+        const content = fs.readFileSync(memoryPath, "utf-8");
         const memory = JSON.parse(content);
 
         if (!memory[category]) {
