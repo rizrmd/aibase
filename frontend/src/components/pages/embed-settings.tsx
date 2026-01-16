@@ -33,9 +33,6 @@ export function EmbedSettings() {
 
   // Config state
   const [showHistory, setShowHistory] = useState(false);
-  const [showFiles, setShowFiles] = useState(false);
-  const [showContext, setShowContext] = useState(false);
-  const [showMemory, setShowMemory] = useState(false);
   const [userMode, setUserMode] = useState<"current" | "uid">("current");
 
   // Load custom CSS
@@ -72,9 +69,6 @@ export function EmbedSettings() {
 
       // Load config from project
       setShowHistory(currentProject.show_history ?? false);
-      setShowFiles(currentProject.show_files ?? false);
-      setShowContext(currentProject.show_context ?? false);
-      setShowMemory(currentProject.show_memory ?? false);
       setUserMode(currentProject.use_client_uid ? "uid" : "current");
 
       await loadCustomCss();
@@ -101,9 +95,6 @@ export function EmbedSettings() {
     try {
       const configUpdates = {
         show_history: showHistory,
-        show_files: showFiles,
-        show_context: showContext,
-        show_memory: showMemory,
         use_client_uid: userMode === "uid",
       };
 
@@ -272,33 +263,6 @@ export function EmbedSettings() {
                     <Label htmlFor="show-history" className="cursor-pointer">Conversation History</Label>
                     <p className="text-xs text-muted-foreground">Show sidebar with conversation list (only when user identification is enabled)</p>
                   </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="show-files"
-                    checked={showFiles}
-                    onCheckedChange={(c) => setShowFiles(c === true)}
-                  />
-                  <Label htmlFor="show-files">Files</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="show-context"
-                    checked={showContext}
-                    onCheckedChange={(c) => setShowContext(c === true)}
-                  />
-                  <Label htmlFor="show-context">Context</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="show-memory"
-                    checked={showMemory}
-                    onCheckedChange={(c) => setShowMemory(c === true)}
-                  />
-                  <Label htmlFor="show-memory">Memory</Label>
                 </div>
 
                 <div className="space-y-2 pt-4 border-t">
