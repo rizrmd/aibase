@@ -44,18 +44,19 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
 
   return (
     <SidebarProvider>
-      <AppSidebar />
-      <div className="flex h-screen flex-col">
-        {/* Sidebar Trigger for mobile - Show on all pages except login and embed */}
-        {!isLoginRoute && !isEmbedRoute && (
-          <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
-            <SidebarTrigger />
-            <span className="font-semibold">{currentProject?.name || "AI Base"}</span>
-          </header>
-        )}
+      <div className="flex h-screen bg-background">
+        <AppSidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Sidebar Trigger for mobile - Show on all pages except login and embed */}
+          {!isLoginRoute && !isEmbedRoute && (
+            <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
+              <SidebarTrigger />
+              <span className="font-semibold">{currentProject?.name || "AI Base"}</span>
+            </header>
+          )}
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-hidden">
+          {/* Content Area */}
+          <main className="flex-1 overflow-auto">
           <Routes>
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
@@ -165,10 +166,11 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           {/* Catch-all route - redirect to root */}
           <Route path="*" element={<ProtectedRoute><ProjectSelectorPage /></ProtectedRoute>} />
         </Routes>
-      </div>
+        </main>
 
-      {/* Toast Notifications */}
-      <Toaster />
+        {/* Toast Notifications */}
+        <Toaster />
+      </div>
     </div>
     </SidebarProvider>
   );
