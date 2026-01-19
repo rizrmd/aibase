@@ -44,19 +44,20 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen bg-background">
-        <AppSidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Sidebar Trigger for mobile - Show on all pages except login and embed */}
-          {!isLoginRoute && !isEmbedRoute && (
-            <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
-              <SidebarTrigger />
-              <span className="font-semibold">{currentProject?.name || "AI Base"}</span>
-            </header>
-          )}
+      {/* AppSidebar includes the sidebar-gap div that reserves space */}
+      <AppSidebar />
+      {/* Content area - the sidebar's gap div reserves the necessary space */}
+      <div className="flex flex-1 flex-col bg-background min-h-screen">
+        {/* Sidebar Trigger for mobile - Show on all pages except login and embed */}
+        {!isLoginRoute && !isEmbedRoute && (
+          <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
+            <SidebarTrigger />
+            <span className="font-semibold">{currentProject?.name || "AI Base"}</span>
+          </header>
+        )}
 
-          {/* Content Area */}
-          <main className="flex-1 overflow-auto">
+        {/* Content Area */}
+        <main className="flex-1 overflow-auto p-4 md:p-6">
           <Routes>
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
@@ -171,7 +172,6 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
         {/* Toast Notifications */}
         <Toaster />
       </div>
-    </div>
     </SidebarProvider>
   );
 }
