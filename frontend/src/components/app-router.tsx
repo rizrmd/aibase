@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { MainChat } from "./pages/main-chat";
 import { MemoryEditor } from "./pages/memory-editor";
 import { ContextEditor } from "./pages/context-editor";
@@ -14,27 +14,12 @@ import { ExtensionsSettings } from "./pages/extensions-settings";
 import { ExtensionEditor } from "./pages/extension-editor";
 import { ProjectRouteHandler } from "./project/project-route-handler";
 import { ProtectedRoute } from "./auth/protected-route";
-import { Button } from "./ui/button";
-import { UserMenu } from "./ui/user-menu";
-import {
-  MessageSquare,
-  ListTodo,
-  ArrowLeft,
-  MessagesSquare,
-  Users,
-  Code,
-  Brain,
-  ScrollText,
-  FolderTree,
-  Puzzle,
-} from "lucide-react";
 import { Toaster } from "./ui/sonner";
-import { useState, useEffect } from "react";
-import { useChatStore } from "@/stores/chat-store";
+import { useEffect } from "react";
 import { useProjectStore } from "@/stores/project-store";
 import { useConversationStore } from "@/stores/conversation-store";
-import { useAuthStore } from "@/stores/auth-store";
-import { useShallow } from "zustand/react/shallow";
+import { AppSidebar } from "./app-sidebar";
+import { SidebarProvider, SidebarTrigger } from "./ui/sidebar";
 
 interface AppRouterProps {
   wsUrl: string;
@@ -42,21 +27,9 @@ interface AppRouterProps {
 
 export function AppRouter({ wsUrl }: AppRouterProps) {
   const location = useLocation();
-  const navigate = useNavigate();
-  const [isTodoPanelVisible, setIsTodoPanelVisible] = useState(true);
-
-  const { todos } = useChatStore(
-    useShallow((state) => ({
-      todos: state.todos,
-    }))
-  );
 
   const { currentProject } = useProjectStore();
-  const { conversations, loadConversations } = useConversationStore();
-  const currentUser = useAuthStore((state) => state.user);
-
-  // Check user roles
-  const isAdmin = currentUser?.role === "admin";
+  const { loadConversations } = useConversationStore();
 
   // Load conversations when project changes
   useEffect(() => {
@@ -66,164 +39,24 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
   }, [currentProject?.id, loadConversations]);
 
   // Check if we're on a chat-related route
-  const isChatRoute = location.pathname.startsWith("/projects/");
   const isLoginRoute = location.pathname === "/login";
   const isEmbedRoute = location.pathname === "/embed";
 
   return (
-    <div className="flex h-screen flex-col">
-      {/* Navigation Bar - Only show on chat routes */}
-      {isChatRoute && currentProject && (
-        <div className="absolute top-0 left-0 m-3 z-10 flex flex-wrap gap-2 max-w-[calc(100%-80px)] sm:max-w-none">
-          {/* Back to Projects Button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/")}
-            title="Back to Projects"
-          >
-            <ArrowLeft />
-          </Button>
+    <SidebarProvider>
+      <AppSidebar />
+      <div className="flex h-screen flex-col">
+        {/* Sidebar Trigger for mobile - Show on all pages except login and embed */}
+        {!isLoginRoute && !isEmbedRoute && (
+          <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
+            <SidebarTrigger />
+            <span className="font-semibold">{currentProject?.name || "AI Base"}</span>
+          </header>
+        )}
 
-          {/* Navigation Buttons */}
-          <Button
-            variant={
-              location.pathname === `/projects/${currentProject.id}/chat`
-                ? "default"
-                : "ghost"
-            }
-            size="sm"
-            onClick={() => navigate(`/projects/${currentProject.id}/chat`)}
-          >
-            <MessageSquare />
-            {location.pathname === `/projects/${currentProject.id}/chat` && (
-              <span className="hidden sm:inline">Chat</span>
-            )}
-          </Button>
-          {conversations.length > 0 && (
-            <Button
-              variant={
-                location.pathname === `/projects/${currentProject.id}/history`
-                  ? "default"
-                  : "ghost"
-              }
-              size="sm"
-              onClick={() => navigate(`/projects/${currentProject.id}/history`)}
-              title="Conversation History"
-            >
-              <MessagesSquare />
-              {location.pathname ===
-                `/projects/${currentProject.id}/history` && <span className="hidden sm:inline">History</span>}
-            </Button>
-          )}
-          <Button
-            variant={
-              location.pathname === `/projects/${currentProject.id}/memory`
-                ? "default"
-                : "ghost"
-            }
-            size="sm"
-            onClick={() => navigate(`/projects/${currentProject.id}/memory`)}
-          >
-            <Brain />
-            {location.pathname === `/projects/${currentProject.id}/memory` && (
-              <span className="hidden sm:inline">Memory</span>
-            )}
-          </Button>
-          <Button
-            variant={
-              location.pathname === `/projects/${currentProject.id}/context`
-                ? "default"
-                : "ghost"
-            }
-            size="sm"
-            onClick={() => navigate(`/projects/${currentProject.id}/context`)}
-          >
-            <ScrollText />
-            {location.pathname === `/projects/${currentProject.id}/context` && (
-              <span className="hidden sm:inline">Context</span>
-            )}
-          </Button>
-          <Button
-            variant={
-              location.pathname === `/projects/${currentProject.id}/files`
-                ? "default"
-                : "ghost"
-            }
-            size="sm"
-            onClick={() => navigate(`/projects/${currentProject.id}/files`)}
-          >
-            <FolderTree />
-            {location.pathname === `/projects/${currentProject.id}/files` && (
-              <span className="hidden sm:inline">Files</span>
-            )}
-          </Button>
-          <Button
-            variant={
-              location.pathname === `/projects/${currentProject.id}/embed`
-                ? "default"
-                : "ghost"
-            }
-            size="sm"
-            onClick={() => navigate(`/projects/${currentProject.id}/embed`)}
-          >
-            <Code />
-            {location.pathname === `/projects/${currentProject.id}/embed` && (
-              <span className="hidden sm:inline">Embed</span>
-            )}
-          </Button>
-          <Button
-            variant={
-              location.pathname.startsWith(`/projects/${currentProject.id}/extensions`)
-                ? "default"
-                : "ghost"
-            }
-            size="sm"
-            onClick={() => navigate(`/projects/${currentProject.id}/extensions`)}
-          >
-            <Puzzle />
-            {location.pathname.startsWith(`/projects/${currentProject.id}/extensions`) && (
-              <span className="hidden sm:inline">Extensions</span>
-            )}
-          </Button>
-          {location.pathname === `/projects/${currentProject.id}/chat` &&
-            todos?.items?.length > 0 && (
-              <Button
-                variant={isTodoPanelVisible ? "outline" : "ghost"}
-                size="sm"
-                onClick={() => setIsTodoPanelVisible(!isTodoPanelVisible)}
-                title={isTodoPanelVisible ? "Hide tasks" : "Show tasks"}
-              >
-                <ListTodo />
-                {isTodoPanelVisible && <span className="hidden sm:inline">Tasks</span>}
-              </Button>
-            )}
-        </div>
-      )}
-
-      {/* Top Right Navigation - Show on all pages except login and embed */}
-      {!isLoginRoute && !isEmbedRoute && (
-        <div className="absolute top-0 right-0 m-3 z-10 flex gap-2">
-          {/* Users button (admin only, not on chat routes) */}
-          {isAdmin && !isChatRoute && (
-            <Button
-              variant={
-                location.pathname === "/admin/users" ? "default" : "ghost"
-              }
-              size="sm"
-              onClick={() => navigate("/admin/users")}
-            >
-              <Users />
-              {location.pathname === "/admin/users" && <span className="hidden sm:inline">Users</span>}
-            </Button>
-          )}
-          {!isChatRoute && <UserMenu />}
-        </div>
-      )}
-
-      {/* Content Area */}
-      <div className="flex-1 overflow-hidden">
-        <Routes>
+        {/* Content Area */}
+        <div className="flex-1 overflow-hidden">
+          <Routes>
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/admin-setup" element={<AdminSetupPage />} />
@@ -253,7 +86,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
                 <ProjectRouteHandler>
                   <MainChat
                     wsUrl={wsUrl}
-                    isTodoPanelVisible={isTodoPanelVisible}
+                    isTodoPanelVisible={true}
                   />
                 </ProjectRouteHandler>
               </ProtectedRoute>
@@ -337,5 +170,6 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
       {/* Toast Notifications */}
       <Toaster />
     </div>
+    </SidebarProvider>
   );
 }
