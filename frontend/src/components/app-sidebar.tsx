@@ -6,8 +6,10 @@ import {
   MessageSquare,
   History,
   Database,
-  FileText,
-  Code,
+  FolderOpen,
+  Files,
+  Terminal,
+  Puzzle,
   LifeBuoy,
   Send,
   Users,
@@ -64,12 +66,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       {
         title: "Context",
         url: getUrl("context"),
-        icon: FileText,
+        icon: FolderOpen,
       },
       {
         title: "Files",
         url: getUrl("files"),
-        icon: FileText,
+        icon: Files,
       },
       {
         title: "Memory",
@@ -82,12 +84,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       {
         title: "Embed",
         url: getUrl("embed"),
-        icon: Code,
+        icon: Terminal,
       },
       {
         title: "Extensions",
         url: getUrl("extensions"),
-        icon: Code,
+        icon: Puzzle,
       },
       ...(isAdmin ? [{
         title: "Admin",
