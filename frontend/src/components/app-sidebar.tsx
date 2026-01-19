@@ -13,8 +13,7 @@ import {
   Users,
 } from "lucide-react"
 
-import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
+import { NavSection } from "@/components/nav-section"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -40,32 +39,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return `/projects/${currentProject.id}/${path}`
   }
 
-  // Project-specific items that will appear in the Projects dropdown
-  const projectItems = [
-    {
-      name: "Context",
-      url: getUrl("context"),
-      icon: FileText,
-    },
-    {
-      name: "Files",
-      url: getUrl("files"),
-      icon: FileText,
-    },
-    {
-      name: "Memory",
-      url: getUrl("memory"),
-      icon: Database,
-    },
-  ]
-
   const data = {
     user: {
       name: (currentUser as any)?.name || "User",
       email: currentUser?.email || "",
       avatar: (currentUser as any)?.avatar || "/avatars/default.jpg",
     },
-    navMain: [
+    // Primary actions (no label)
+    primaryActions: [
       {
         title: "Chat",
         url: getUrl("chat"),
@@ -77,6 +58,27 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: getUrl("history"),
         icon: History,
       },
+    ],
+    // Workspace section - project data/content
+    workspace: [
+      {
+        title: "Context",
+        url: getUrl("context"),
+        icon: FileText,
+      },
+      {
+        title: "Files",
+        url: getUrl("files"),
+        icon: FileText,
+      },
+      {
+        title: "Memory",
+        url: getUrl("memory"),
+        icon: Database,
+      },
+    ],
+    // Developer section - integration/dev tools
+    developer: [
       {
         title: "Embed",
         url: getUrl("embed"),
@@ -105,7 +107,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         icon: Send,
       },
     ],
-    projects: projectItems,
   }
 
   return (
@@ -128,8 +129,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
+        {/* Primary actions - no label */}
+        <NavSection items={data.primaryActions} />
+        {/* Workspace - project data/content */}
+        <NavSection title="Workspace" items={data.workspace} />
+        {/* Developer - integration/dev tools */}
+        <NavSection title="Developer" items={data.developer} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
