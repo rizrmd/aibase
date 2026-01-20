@@ -5,6 +5,7 @@
 
 import * as fs from 'fs/promises';
 import mammoth from 'mammoth';
+import pdf from 'pdf-parse';
 
 /**
  * Extract text from a .docx file
@@ -22,10 +23,32 @@ export async function extractTextFromDocx(filePath: string): Promise<string> {
 }
 
 /**
+ * Extract text from a .pdf file
+ * @param filePath - Path to the .pdf file
+ * @returns Extracted text content
+ */
+export async function extractTextFromPdf(filePath: string): Promise<string> {
+  try {
+    const dataBuffer = await fs.readFile(filePath);
+    const data = await pdf(dataBuffer);
+    return data.text;
+  } catch (error: any) {
+    throw new Error(`Failed to extract text from .pdf file: ${error.message}`);
+  }
+}
+
+/**
  * Check if a file is a .docx file
  */
 export function isDocxFile(fileName: string): boolean {
   return fileName.toLowerCase().endsWith('.docx');
+}
+
+/**
+ * Check if a file is a .pdf file
+ */
+export function isPdfFile(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith('.pdf');
 }
 
 /**
@@ -39,6 +62,10 @@ export async function extractTextFromFile(filePath: string, fileName: string): P
     return await extractTextFromDocx(filePath);
   }
 
-  // For non-docx files, just read as text
+  if (isPdfFile(fileName)) {
+    return await extractTextFromPdf(filePath);
+  }
+
+  // For other files, just read as text
   return await fs.readFile(filePath, 'utf-8');
 }

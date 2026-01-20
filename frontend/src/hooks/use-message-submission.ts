@@ -134,7 +134,6 @@ export function useMessageSubmission({
 
       try {
         let uploadedFiles: any[] | undefined = undefined;
-        let fileListText = "";
 
         // Upload files FIRST if any are attached
         if (options?.experimental_attachments && options.experimental_attachments.length > 0) {
@@ -158,11 +157,6 @@ export function useMessageSubmission({
 
             console.log("[Submit] Files uploaded successfully:", uploadedFiles);
             setUploadProgress(null);
-
-            // Create a simple text list for the backend
-            fileListText = "\n\n[Files: " +
-              uploadedFiles.map(f => f.name).join(", ") +
-              "]";
           } catch (uploadError) {
             console.error("[Submit] File upload failed:", uploadError);
             setUploadProgress(null);
@@ -204,7 +198,7 @@ export function useMessageSubmission({
         );
 
         // Send message with file IDs to backend so AI can read them
-        await wsClient.sendMessage(messageText + fileListText, {
+        await wsClient.sendMessage(messageText, {
           fileIds: uploadedFiles?.map(f => f.id)
         });
         console.log("[Submit] Message sent successfully");

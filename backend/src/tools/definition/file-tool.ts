@@ -1,7 +1,7 @@
 import { Tool } from "../../llm/conversation";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { extractTextFromFile, isDocxFile } from "../../utils/document-extractor";
+import { extractTextFromFile, isDocxFile, isPdfFile } from "../../utils/document-extractor";
 
 type FileScope = 'user' | 'public';
 
@@ -26,6 +26,7 @@ All file paths are relative to the conversation's files directory.
 **Supported File Types:**
 - Plain text files (.txt, .md, .json, .csv, etc.)
 - Word documents (.docx) - text is automatically extracted
+- PDF documents (.pdf) - text is automatically extracted
 - Other binary formats may not be readable
 
 ### Examples:
@@ -52,9 +53,10 @@ await file({ action: 'uploadUrl', url: 'https://example.com/file.pdf', path: 'do
 await file({ action: 'write', path: 'output.txt', content: 'Hello World' });
 
 // Read file content (returns up to ~8000 characters, roughly 2000 tokens)
-// For .docx files, text is automatically extracted
+// For .docx and .pdf files, text is automatically extracted
 await file({ action: 'read', path: 'data.json' });
 await file({ action: 'read', path: 'document.docx' });
+await file({ action: 'read', path: 'report.pdf' });
 
 // Peek at file with offset and limit (for paginated reading)
 await file({ action: 'peek', path: 'large-file.log', offset: 0, limit: 100 });
@@ -645,10 +647,10 @@ ${frontmatter}
     // Maximum characters to return (approximately 2000 tokens, assuming ~4 chars per token)
     const MAX_CHARS = 8000;
 
-    // Read file content - use document extractor for .docx files
+    // Read file content - use document extractor for .docx and .pdf files
     let content: string;
-    if (isDocxFile(fileName)) {
-      // Extract text from .docx file
+    if (isDocxFile(fileName) || isPdfFile(fileName)) {
+      // Extract text from .docx or .pdf file
       content = await extractTextFromFile(resolvedPath, fileName);
     } else {
       // Read as plain text
@@ -694,10 +696,10 @@ ${frontmatter}
     const startOffset = offset ?? 0;
     const maxChars = limit ?? 1000;
 
-    // Read file content - use document extractor for .docx files
+    // Read file content - use document extractor for .docx and .pdf files
     let content: string;
-    if (isDocxFile(fileName)) {
-      // Extract text from .docx file
+    if (isDocxFile(fileName) || isPdfFile(fileName)) {
+      // Extract text from .docx or .pdf file
       content = await extractTextFromFile(resolvedPath, fileName);
     } else {
       // Read as plain text
