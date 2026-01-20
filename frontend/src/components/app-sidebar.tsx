@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 
 import { NavSection } from "@/components/nav-section"
-import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
   SidebarContent,
@@ -26,10 +25,12 @@ import {
 } from "@/components/ui/sidebar"
 import { useProjectStore } from "@/stores/project-store"
 import { useAuthStore } from "@/stores/auth-store"
+import { UserAccountMenu } from "@/components/user-account-menu"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { currentProject } = useProjectStore()
   const currentUser = useAuthStore((state) => state.user)
+  const logout = useAuthStore((state) => state.logout)
   const isAdmin = currentUser?.role === "admin"
 
   // Generate the URL for the current project
@@ -38,63 +39,55 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return `/projects/${currentProject.id}/${path}`
   }
 
-  const data = {
-    user: {
-      name: (currentUser as any)?.name || "User",
-      email: currentUser?.email || "",
-      avatar: (currentUser as any)?.avatar || "/avatars/default.jpg",
+  const primaryActions = [
+    {
+      title: "Chat",
+      url: getUrl("chat"),
+      icon: MessageSquare,
+      isActive: true,
     },
-    // Primary actions (no label)
-    primaryActions: [
-      {
-        title: "Chat",
-        url: getUrl("chat"),
-        icon: MessageSquare,
-        isActive: true,
-      },
-      {
-        title: "History",
-        url: getUrl("history"),
-        icon: History,
-      },
-    ],
-    // Workspace section - project data/content
-    workspace: [
-      {
-        title: "Context",
-        url: getUrl("context"),
-        icon: FolderOpen,
-      },
-      {
-        title: "Files",
-        url: getUrl("files"),
-        icon: Files,
-      },
-      {
-        title: "Memory",
-        url: getUrl("memory"),
-        icon: Database,
-      },
-    ],
-    // Developer section - integration/dev tools
-    developer: [
-      {
-        title: "Embed",
-        url: getUrl("embed"),
-        icon: Terminal,
-      },
-      {
-        title: "Extensions",
-        url: getUrl("extensions"),
-        icon: Puzzle,
-      },
-      ...(isAdmin ? [{
-        title: "Admin",
-        url: "/admin/users",
-        icon: Users,
-      }] : []),
-    ],
-  }
+    {
+      title: "History",
+      url: getUrl("history"),
+      icon: History,
+    },
+  ]
+
+  const workspace = [
+    {
+      title: "Context",
+      url: getUrl("context"),
+      icon: FolderOpen,
+    },
+    {
+      title: "Files",
+      url: getUrl("files"),
+      icon: Files,
+    },
+    {
+      title: "Memory",
+      url: getUrl("memory"),
+      icon: Database,
+    },
+  ]
+
+  const developer = [
+    {
+      title: "Embed",
+      url: getUrl("embed"),
+      icon: Terminal,
+    },
+    {
+      title: "Extensions",
+      url: getUrl("extensions"),
+      icon: Puzzle,
+    },
+    ...(isAdmin ? [{
+      title: "Admin",
+      url: "/admin/users",
+      icon: Users,
+    }] : []),
+  ]
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -117,15 +110,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         {/* Primary actions - no label */}
-        <NavSection items={data.primaryActions} />
+        <NavSection items={primaryActions} />
         {/* Workspace - project data/content */}
-        <NavSection title="Workspace" items={data.workspace} />
+        <NavSection title="Workspace" items={workspace} />
         {/* Developer - integration/dev tools */}
-        <NavSection title="Developer" items={data.developer} />
+        <NavSection title="Developer" items={developer} />
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={data.user} />
-      </SidebarFooter>
+      {/* User account menu at bottom of sidebar */}
+      {currentUser && (
+        <SidebarFooter>
+          <UserAccountMenu
+            user={{
+              username: currentUser.username,
+              email: currentUser.email,
+            }}
+            onLogout={logout}
+          />
+        </SidebarFooter>
+      )}
     </Sidebar>
   )
 }

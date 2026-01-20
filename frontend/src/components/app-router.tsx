@@ -18,7 +18,9 @@ import { Toaster } from "./ui/sonner";
 import { useEffect } from "react";
 import { useProjectStore } from "@/stores/project-store";
 import { useConversationStore } from "@/stores/conversation-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { AppSidebar } from "./app-sidebar";
+import { UserAccountMenu } from "./user-account-menu";
 import { SidebarProvider, SidebarTrigger } from "./ui/sidebar";
 
 interface AppRouterProps {
@@ -30,6 +32,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
 
   const { currentProject } = useProjectStore();
   const { loadConversations } = useConversationStore();
+  const { user, logout } = useAuthStore();
 
   // Load conversations when project changes
   useEffect(() => {
@@ -38,18 +41,40 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
     }
   }, [currentProject?.id, loadConversations]);
 
-  // Check if we're on a chat-related route
+  // Check if we're on routes that should NOT have sidebar
   const isLoginRoute = location.pathname === "/login";
   const isEmbedRoute = location.pathname === "/embed";
+  const isRootRoute = location.pathname === "/";
+  const isAdminSetupRoute = location.pathname === "/admin-setup";
+  const isAdminRoute = location.pathname === "/admin/users";
+
+  // Show sidebar only when inside a project
+  const shouldShowSidebar = !isLoginRoute && !isEmbedRoute && !isRootRoute && !isAdminSetupRoute && !isAdminRoute;
+
+  // Show top header account menu only when NOT inside a project (root/home or admin pages)
+  const shouldShowTopAccountMenu = !isLoginRoute && user && !shouldShowSidebar;
 
   return (
     <SidebarProvider>
       {/* AppSidebar includes the sidebar-gap div that reserves space */}
-      <AppSidebar />
+      {/* Only show sidebar when inside a project */}
+      {shouldShowSidebar && <AppSidebar />}
       {/* Content area - the sidebar's gap div reserves the necessary space */}
       <div className="flex flex-1 flex-col bg-background min-h-screen">
-        {/* Sidebar Trigger for mobile - Show on all pages except login and embed */}
-        {!isLoginRoute && !isEmbedRoute && (
+        {/* Top header bar with user account - Show only when NOT inside a project */}
+        {shouldShowTopAccountMenu && (
+          <header className="flex items-center justify-end border-b px-4 py-2 bg-background">
+            <UserAccountMenu
+              user={{
+                username: user.username,
+                email: user.email,
+              }}
+              onLogout={logout}
+            />
+          </header>
+        )}
+        {/* Sidebar Trigger for mobile - Show only when sidebar is visible */}
+        {shouldShowSidebar && (
           <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
             <SidebarTrigger />
             <span className="font-semibold">{currentProject?.name || "AI Base"}</span>
@@ -57,7 +82,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
         )}
 
         {/* Content Area */}
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+        <main className="flex-1 overflow-hidden">
           <Routes>
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
