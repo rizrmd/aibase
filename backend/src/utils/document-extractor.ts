@@ -11,7 +11,7 @@ import { createRequire } from 'module';
 // Use createRequire to load CommonJS modules in ESM
 const require = createRequire(import.meta.url);
 const XLSX = require('xlsx');
-const pptxParser = require('node-pptx-parser');
+const officeParser = require('officeparser');
 
 /**
  * Extract text from a .docx file
@@ -144,43 +144,39 @@ export async function extractTextFromExcel(filePath: string): Promise<string> {
  */
 export async function extractTextFromPowerPoint(filePath: string): Promise<string> {
   try {
-    // Parse the PowerPoint file using node-pptx-parser
-    const pptx = await pptxParser.parse(filePath);
+    // Use officeparser to extract text from PowerPoint
+    const result = await officeParser.parseOffice(filePath);
 
-    // Extract text from all slides
-    const allText: string[] = [];
-
-    if (pptx.slides && Array.isArray(pptx.slides)) {
-      pptx.slides.forEach((slide: any, index: number) => {
-        allText.push(`\n=== Slide ${index + 1} ===`);
-
-        // Extract text from the slide
-        if (slide.content) {
-          if (typeof slide.content === 'string') {
-            allText.push(slide.content);
-          } else if (Array.isArray(slide.content)) {
-            slide.content.forEach((item: any) => {
-              if (typeof item === 'string') {
-                allText.push(item);
-              } else if (item && item.text) {
-                allText.push(item.text);
-              }
-            });
-          }
-        }
-
-        // Extract text from shapes/nodes
-        if (slide.nodes && Array.isArray(slide.nodes)) {
-          slide.nodes.forEach((node: any) => {
-            if (node.text) {
-              allText.push(node.text);
-            }
-          });
-        }
-      });
+    // officeparser returns structured data, extract text from it
+    if (typeof result === 'string') {
+      return result;
+    } else if (result && typeof result === 'object') {
+      // Try to extract text from structured result
+      if (result.text) {
+        return result.text;
+      } else if (result.data && Array.isArray(result.data)) {
+        // Join all data/text elements
+        return result.data
+          .map((item: any) => {
+            if (typeof item === 'string') return item;
+            if (item && item.text) return item.text;
+            return '';
+          })
+          .filter(Boolean)
+          .join('\n');
+      } else if (result.slides && Array.isArray(result.slides)) {
+        // Extract from slides array
+        return result.slides
+          .map((slide: any, index: number) => {
+            const slideText = typeof slide === 'string' ? slide : (slide.text || JSON.stringify(slide));
+            return `=== Slide ${index + 1} ===\n${slideText}`;
+          })
+          .join('\n\n');
+      }
     }
 
-    return allText.join('\n').trim();
+    // Fallback: stringify the result
+    return JSON.stringify(result, null, 2);
   } catch (error: any) {
     throw new Error(`Failed to extract text from PowerPoint file: ${error.message}`);
   }
