@@ -175,6 +175,7 @@ func main() {
 		"PORT=" + whatsappPort,
 		"BASE_URL=http://localhost:" + whatsappPort,
 		"CALLBACK_URL=http://localhost:" + backendPort + "/api/whatsapp/webhook",
+		"DATA_DIR=.", // Use current working directory (data/whatsapp) for data storage
 	}
 	orch.AddProcess("whatsapp", whatsappDataDir, aimeowBinary, []string{}, whatsappEnv, whatsappLogsPath)
 

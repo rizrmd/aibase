@@ -69,13 +69,15 @@ type WhatsAppClient struct {
 }
 
 type ClientManager struct {
-	clients       map[string]*WhatsAppClient
-	container     *sqlstore.Container
-	callbackURL   string
-	configPath    string            // Path to configuration file
-	clientIDMap   map[string]string // Maps WhatsApp device ID -> UUID
-	clientMapPath string            // Path to client ID mapping file
-	mutex         sync.RWMutex
+	clients          map[string]*WhatsAppClient
+	container        *sqlstore.Container
+	callbackURL      string
+	configPath       string            // Path to configuration file
+	clientIDMap      map[string]string // Maps WhatsApp device ID -> UUID
+	clientMapPath    string            // Path to client ID mapping file
+	pendingClients   map[string]PendingClient // Maps clientID -> PendingClient
+	pendingClientsPath string          // Path to pending clients file
+	mutex            sync.RWMutex
 }
 
 // Config represents the persistent configuration
@@ -88,21 +90,37 @@ type ClientIDMapping struct {
 	Mappings map[string]string `json:"mappings"` // WhatsApp device ID -> UUID
 }
 
+// PendingClient represents a client that was created but hasn't connected yet
+type PendingClient struct {
+	ClientID string `json:"clientId"` // The custom ID (projectId)
+	OSName   string `json:"osName"`
+	Created  int64  `json:"created"` // Unix timestamp
+}
+
+// PendingClients represents the persistent storage of pending clients
+type PendingClients struct {
+	Clients map[string]PendingClient `json:"clients"` // clientID -> PendingClient
+}
+
 var manager *ClientManager
 var baseURL string // Base URL for generating file URLs in webhooks
+var dataDir string // Data directory for storing files and database
 
 func NewClientManager(container *sqlstore.Container, configPath string) *ClientManager {
 	// Derive client map path from config path
 	configDir := filepath.Dir(configPath)
 	clientMapPath := filepath.Join(configDir, "client_mappings.json")
+	pendingClientsPath := filepath.Join(configDir, "pending_clients.json")
 
 	cm := &ClientManager{
-		clients:       make(map[string]*WhatsAppClient),
-		container:     container,
-		callbackURL:   "",
-		configPath:    configPath,
-		clientIDMap:   make(map[string]string),
-		clientMapPath: clientMapPath,
+		clients:            make(map[string]*WhatsAppClient),
+		container:          container,
+		callbackURL:        "",
+		configPath:         configPath,
+		clientIDMap:        make(map[string]string),
+		clientMapPath:      clientMapPath,
+		pendingClients:     make(map[string]PendingClient),
+		pendingClientsPath: pendingClientsPath,
 	}
 	// Load configuration from file
 	if err := cm.loadConfig(); err != nil {
@@ -116,6 +134,10 @@ func NewClientManager(container *sqlstore.Container, configPath string) *ClientM
 	// Load client ID mappings
 	if err := cm.loadClientMappings(); err != nil {
 		fmt.Printf("Failed to load client mappings (will use defaults): %v\n", err)
+	}
+	// Load pending clients
+	if err := cm.loadPendingClients(); err != nil {
+		fmt.Printf("Failed to load pending clients (will use defaults): %v\n", err)
 	}
 	return cm
 }
@@ -225,6 +247,60 @@ func (cm *ClientManager) saveClientMappings() error {
 	return nil
 }
 
+// loadPendingClients loads pending clients from JSON file
+func (cm *ClientManager) loadPendingClients() error {
+	data, err := os.ReadFile(cm.pendingClientsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Pending clients file doesn't exist yet, that's okay
+			return nil
+		}
+		return fmt.Errorf("failed to read pending clients file: %w", err)
+	}
+
+	var pendingClients PendingClients
+	if err := json.Unmarshal(data, &pendingClients); err != nil {
+		return fmt.Errorf("failed to parse pending clients file: %w", err)
+	}
+
+	cm.mutex.Lock()
+	cm.pendingClients = pendingClients.Clients
+	if cm.pendingClients == nil {
+		cm.pendingClients = make(map[string]PendingClient)
+	}
+	cm.mutex.Unlock()
+
+	fmt.Printf("Pending clients loaded: %d pending clients\n", len(pendingClients.Clients))
+	return nil
+}
+
+// savePendingClients saves pending clients to JSON file
+func (cm *ClientManager) savePendingClients() error {
+	cm.mutex.RLock()
+	pendingClients := PendingClients{
+		Clients: cm.pendingClients,
+	}
+	cm.mutex.RUnlock()
+
+	data, err := json.MarshalIndent(pendingClients, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal pending clients: %w", err)
+	}
+
+	// Write to temp file first, then rename for atomic operation
+	tempPath := cm.pendingClientsPath + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp pending clients file: %w", err)
+	}
+
+	if err := os.Rename(tempPath, cm.pendingClientsPath); err != nil {
+		return fmt.Errorf("failed to rename temp pending clients file: %w", err)
+	}
+
+	fmt.Printf("Pending clients saved to %s\n", cm.pendingClientsPath)
+	return nil
+}
+
 func (cm *ClientManager) createClient(osName string, customID string) (*WhatsAppClient, string, error) {
 	// Use custom ID if provided, otherwise generate a UUID
 	var clientID string
@@ -261,7 +337,24 @@ func (cm *ClientManager) createClient(osName string, customID string) (*WhatsApp
 	// Store client with our generated UUID-based ID
 	cm.mutex.Lock()
 	manager.clients[clientID] = waClient
-	cm.mutex.Unlock()
+
+	// Save pending client info for new clients with custom IDs
+	// This allows us to recreate the client if the service restarts
+	if customID != "" {
+		cm.pendingClients[customID] = PendingClient{
+			ClientID: customID,
+			OSName:   osName,
+			Created:  time.Now().Unix(),
+		}
+		cm.mutex.Unlock()
+
+		// Save pending clients to disk
+		if err := cm.savePendingClients(); err != nil {
+			fmt.Printf("Warning: Failed to save pending clients: %v\n", err)
+		}
+	} else {
+		cm.mutex.Unlock()
+	}
 
 	return waClient, clientID, nil
 }
@@ -379,7 +472,21 @@ func (cm *ClientManager) eventHandler(client *WhatsAppClient) func(interface{}) 
 				}
 				if ourUUID != "" {
 					cm.clientIDMap[whatsappID] = ourUUID
-					cm.mutex.Unlock()
+
+					// Remove from pending clients since it's now connected
+					if _, exists := cm.pendingClients[ourUUID]; exists {
+						delete(cm.pendingClients, ourUUID)
+						cm.mutex.Unlock()
+						// Save updated pending clients to disk
+						if err := cm.savePendingClients(); err != nil {
+							fmt.Printf("Warning: Failed to save pending clients: %v\n", err)
+						} else {
+							fmt.Printf("Removed client from pending list: %s\n", ourUUID)
+						}
+					} else {
+						cm.mutex.Unlock()
+					}
+
 					// Save mappings to disk
 					if err := cm.saveClientMappings(); err != nil {
 						fmt.Printf("Warning: Failed to save client mappings: %v\n", err)
@@ -1847,7 +1954,7 @@ func (cm *ClientManager) downloadImage(client *WhatsAppClient, message interface
 	}
 
 	// Create client directory using UUID (no need to sanitize since UUIDs don't have special chars)
-	clientDir := filepath.Join("files", clientID)
+	clientDir := filepath.Join(dataDir, "files", clientID)
 	err := os.MkdirAll(clientDir, 0755)
 	if err != nil {
 		fmt.Printf("Failed to create client directory: %v\n", err)
@@ -2252,6 +2359,84 @@ func loadExistingClients(container *sqlstore.Container) error {
 	return nil
 }
 
+// recreatePendingClients recreates clients that were created but not yet connected
+func recreatePendingClients(container *sqlstore.Container) error {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+
+	if len(manager.pendingClients) == 0 {
+		fmt.Println("No pending clients to recreate")
+		return nil
+	}
+
+	fmt.Printf("Recreating %d pending client(s)...\n", len(manager.pendingClients))
+
+	for clientID, pendingClient := range manager.pendingClients {
+		// Check if client already exists in memory
+		if _, exists := manager.clients[clientID]; exists {
+			fmt.Printf("Pending client %s already exists in memory, skipping\n", clientID)
+			continue
+		}
+
+		fmt.Printf("Recreating pending client: %s (OS: %s)\n", clientID, pendingClient.OSName)
+
+		// Create a new device store
+		deviceStore := container.NewDevice()
+		if deviceStore == nil {
+			fmt.Printf("Failed to create device store for pending client %s\n", clientID)
+			continue
+		}
+
+		clientLog := waLog.Stdout("Client", "DEBUG", true)
+		client := whatsmeow.NewClient(deviceStore, clientLog)
+
+		waClient := &WhatsAppClient{
+			client:       client,
+			deviceStore:  deviceStore,
+			isConnected:  false,
+			messages:     make([]string, 0),
+			images:       make(map[string]string),
+			osName:       pendingClient.OSName,
+			typingTimers: make(map[string]*time.Timer),
+			typingActive: make(map[string]bool),
+		}
+
+		client.AddEventHandler(manager.eventHandler(waClient))
+		manager.clients[clientID] = waClient
+
+		fmt.Printf("Successfully recreated pending client: %s\n", clientID)
+
+		// Start connection process in background
+		localClientID := clientID
+		localWaClient := waClient
+		go func() {
+			qrChan, err := localWaClient.client.GetQRChannel(context.Background())
+			if err != nil {
+				fmt.Printf("Failed to get QR channel for pending client %s: %v\n", localClientID, err)
+				return
+			}
+
+			err = localWaClient.client.Connect()
+			if err != nil {
+				fmt.Printf("Failed to connect pending client %s: %v\n", localClientID, err)
+				return
+			}
+
+			for evt := range qrChan {
+				if evt.Event == "code" {
+					localWaClient.mutex.Lock()
+					localWaClient.qrCode = evt.Code
+					localWaClient.mutex.Unlock()
+					fmt.Printf("QR code received for pending client %s\n", localClientID)
+				}
+			}
+		}()
+	}
+
+	fmt.Printf("Finished recreating %d pending client(s)\n", len(manager.pendingClients))
+	return nil
+}
+
 func main() {
 	fmt.Println("Starting Aimeow WhatsApp API Server...")
 
@@ -2266,20 +2451,27 @@ func main() {
 	dbLog := waLog.Stdout("Database", "DEBUG", true)
 	ctx := context.Background()
 
-	// Create files directory if it does not exist
-	filesDir := "/app/files"
-	if err := os.MkdirAll(filesDir, 0755); err != nil {
-		fmt.Printf("Warning: Failed to create files directory: %v\n", err)
-		// Try alternative directory
-		filesDir = "/tmp/files"
-		if err := os.MkdirAll(filesDir, 0755); err != nil {
-			panic(fmt.Errorf("failed to create alternative files directory: %w", err))
-		}
-		fmt.Printf("Using alternative files directory: %s\n", filesDir)
+	// Determine data directory - use DATA_DIR env var or default to data/aimeow
+	dataDir = os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		// Default to data/aimeow relative to current working directory
+		dataDir = "data/aimeow"
 	}
 
+	// Create data directory if it does not exist
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		fmt.Printf("Warning: Failed to create data directory: %v\n", err)
+		// Try alternative directory
+		dataDir = "/tmp/aimeow"
+		if err := os.MkdirAll(dataDir, 0755); err != nil {
+			panic(fmt.Errorf("failed to create alternative data directory: %w", err))
+		}
+		fmt.Printf("Using alternative data directory: %s\n", dataDir)
+	}
+	fmt.Printf("Using data directory: %s\n", dataDir)
+
 	// Create database path
-	dbPath := filepath.Join(filesDir, "aimeow.db")
+	dbPath := filepath.Join(dataDir, "aimeow.db")
 	fmt.Printf("Database path: %s\n", dbPath)
 
 	// Check if database file exists
@@ -2308,7 +2500,7 @@ func main() {
 	fmt.Printf("Database container initialized successfully\n")
 
 	// Initialize client manager with config path
-	configPath := filepath.Join(filesDir, "config.json")
+	configPath := filepath.Join(dataDir, "config.json")
 	fmt.Printf("Configuration file path: %s\n", configPath)
 	manager = NewClientManager(container, configPath)
 
@@ -2319,6 +2511,12 @@ func main() {
 		fmt.Printf("Failed to load existing clients: %v\n", err)
 	} else {
 		fmt.Printf("Existing clients loaded successfully\n")
+	}
+
+	// Recreate pending clients (created but not yet connected)
+	err = recreatePendingClients(container)
+	if err != nil {
+		fmt.Printf("Failed to recreate pending clients: %v\n", err)
 	}
 
 	// Setup Gin router
