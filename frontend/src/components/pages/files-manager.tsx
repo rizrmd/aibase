@@ -89,14 +89,19 @@ export function FilesManagerPage() {
       console.log("[FilesPage] Loading files for project:", projectId);
       const projectFiles = await fetchProjectFiles(projectId);
 
+      console.log("[FilesPage] Raw response from API:", projectFiles);
+
       // Validate response data
       if (!Array.isArray(projectFiles)) {
         console.error("[FilesPage] Invalid files response:", projectFiles);
         throw new Error("Invalid files data received from server");
       }
 
+      console.log(`[FilesPage] Response is array with ${projectFiles.length} items`);
+
       // Validate each file object
       const validFiles = projectFiles.filter((file) => {
+        console.log("[FilesPage] Checking file:", file);
         const isValid = file && typeof file === 'object' &&
           file.name && typeof file.name === 'string' &&
           file.size && typeof file.size === 'number' &&
@@ -108,7 +113,7 @@ export function FilesManagerPage() {
         return isValid;
       });
 
-      console.log(`[FilesPage] Loaded ${validFiles.length} files (${projectFiles.length} total received)`);
+      console.log(`[FilesPage] Loaded ${validFiles.length} valid files (${projectFiles.length} total received)`);
 
       setFiles(validFiles);
     } catch (error) {
