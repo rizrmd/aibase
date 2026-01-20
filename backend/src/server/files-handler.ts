@@ -42,20 +42,38 @@ export async function handleGetProjectFiles(req: Request): Promise<Response> {
       );
     }
 
-    // Get all conversations for the project
-    const conversations = await chatHistoryStorage.listAllConversations(projectId);
+    // Get all conversation directories for the project (including those without chat history)
+    const projectDir = path.join(process.cwd(), 'data', projectId);
 
-    // Get files for each conversation
-    const filesPromises = conversations.map(async (conv) => {
-      const files = await fileStorage.listFiles(conv.convId, projectId);
+    // Check if project directory exists
+    try {
+      await fs.access(projectDir);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        return Response.json({
+          success: true,
+          data: { files: [] },
+        });
+      }
+      throw error;
+    }
+
+    // Read all conversation directories
+    const entries = await fs.readdir(projectDir, { withFileTypes: true });
+    const convDirs = entries.filter(entry => entry.isDirectory());
+
+    // Get files for each conversation directory
+    const filesPromises = convDirs.map(async (convDir) => {
+      const convId = convDir.name;
+      const files = await fileStorage.listFiles(convId, projectId);
 
       return files.map(file => ({
         name: file.name,
         size: file.size,
         type: file.type,
         uploadedAt: file.uploadedAt,
-        convId: conv.convId,
-        url: `/api/files/${projectId}/${conv.convId}/${file.name}`,
+        convId: convId,
+        url: `/api/files/${projectId}/${convId}/${file.name}`,
         scope: file.scope,
       }));
     });
