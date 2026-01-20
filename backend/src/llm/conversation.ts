@@ -400,13 +400,15 @@ export class Conversation {
    * - Non-streaming: `const fullText = await conversation.sendMessage("hello")`
    */
   sendMessage(
-    message: string
+    message: string,
+    attachments?: any[]
   ): HybridGenerator {
     // Create new AbortController for this message
     this.currentAbortController = new AbortController();
     const generator = this.streamMessageInternal(
       message,
-      this.currentAbortController
+      this.currentAbortController,
+      attachments
     );
 
     // Make the generator both awaitable and iterable
@@ -459,7 +461,8 @@ export class Conversation {
    */
   private async *streamMessageInternal(
     message: string,
-    abortController: AbortController
+    abortController: AbortController,
+    attachments?: any[]
   ): AsyncGenerator<string, void, unknown> {
     let fullText = "";
     try {
@@ -467,9 +470,10 @@ export class Conversation {
       await this.hooks.message?.start?.();
 
       // Add user message to history
-      const userMessage: ChatCompletionMessageParam = {
+      const userMessage: ChatCompletionMessageParam & { _attachments?: any[] } = {
         role: "user",
         content: message,
+        ...(attachments && attachments.length > 0 && { _attachments: attachments }),
       };
       this.addMessage(userMessage);
 

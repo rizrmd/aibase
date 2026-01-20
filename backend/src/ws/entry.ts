@@ -21,6 +21,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { AuthService } from "../services/auth-service";
 import { ProjectStorage } from "../storage/project-storage";
+import { FileStorage } from "../storage/file-storage";
 
 const authService = AuthService.getInstance();
 
@@ -687,12 +688,35 @@ export class WSServer extends WSEventEmitter {
       let chunkCount = 0;
 
       // Log file IDs for debugging
+      let attachments: any[] | undefined = undefined;
       if (userData.fileIds && userData.fileIds.length > 0) {
         console.log("[UserMessage] Processing message with file IDs:", userData.fileIds);
+
+        // Fetch file metadata for attachments
+        try {
+          const fileStorage = FileStorage.getInstance();
+          const allFiles = await fileStorage.listFiles(connectionInfo.convId, connectionInfo.projectId);
+
+          // Format all files as attachments (fileIds are just for logging/verification)
+          attachments = allFiles.map(file => ({
+            id: `file_${file.uploadedAt}_${Math.random().toString(36).slice(2, 11)}`,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            url: `/api/files/${connectionInfo.projectId}/${connectionInfo.convId}/${file.name}`,
+            uploadedAt: file.uploadedAt,
+          }));
+
+          console.log("[UserMessage] Fetched attachment metadata:", attachments.length, "files");
+          console.log("[UserMessage] Attachment URLs:", attachments.map((a: any) => a.url));
+        } catch (error) {
+          console.error("[UserMessage] Error fetching file metadata:", error);
+          // Continue without attachments if fetch fails
+        }
       }
 
       // Process message with streaming - no timeouts
-      for await (const chunk of conversation.sendMessage(userData.text)) {
+      for await (const chunk of conversation.sendMessage(userData.text, attachments)) {
         fullResponse += chunk;
         chunkCount++;
 
