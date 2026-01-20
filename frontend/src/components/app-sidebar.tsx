@@ -11,6 +11,7 @@ import {
   Terminal,
   Puzzle,
   Users,
+  MessageCircle,
 } from "lucide-react"
 
 import { NavSection } from "@/components/nav-section"
@@ -73,6 +74,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   ]
 
   const developer = [
+    {
+      title: "WhatsApp",
+      url: getUrl("whatsapp"),
+      icon: MessageCircle,
+    },
     {
       title: "Embed",
       url: getUrl("embed"),

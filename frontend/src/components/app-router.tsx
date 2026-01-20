@@ -12,6 +12,7 @@ import { EmbedChatPage } from "./pages/embed-chat";
 import { EmbedSettings } from "./pages/embed-settings";
 import { ExtensionsSettings } from "./pages/extensions-settings";
 import { ExtensionEditor } from "./pages/extension-editor";
+import { WhatsAppSettings } from "./pages/whatsapp-settings";
 import { ProjectRouteHandler } from "./project/project-route-handler";
 import { ProtectedRoute } from "./auth/protected-route";
 import { Toaster } from "./ui/sonner";
@@ -156,6 +157,16 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
               <ProtectedRoute>
                 <ProjectRouteHandler>
                   <FilesManagerPage />
+                </ProjectRouteHandler>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId/whatsapp"
+            element={
+              <ProtectedRoute>
+                <ProjectRouteHandler>
+                  <WhatsAppSettings />
                 </ProjectRouteHandler>
               </ProtectedRoute>
             }

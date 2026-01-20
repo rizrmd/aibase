@@ -34,7 +34,7 @@ func main() {
 	color.Cyan("AIBase Development Environment v%s\n", version)
 	color.Cyan("=====================================\n\n")
 
-	totalSteps := 6
+	totalSteps := 7
 	currentStep := 0
 
 	// Get project root (parent of bins/)
@@ -87,7 +87,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Step 4: Download service binaries (Qdrant)
+	// Step 4: Build aimeow WhatsApp service
+	currentStep++
+	showProgress(currentStep, totalSteps, "Building WhatsApp service...")
+	aimeowBinary, err := buildAimeow(projectRoot)
+	if err != nil {
+		fmt.Println()
+		color.Red("Error building aimeow: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Step 5: Download service binaries (Qdrant)
 	currentStep++
 	showProgress(currentStep, totalSteps, "Checking service binaries...")
 	qdrantBinary, err := ensureServiceBinaries(qdrantBinDir)
@@ -109,10 +119,13 @@ func main() {
 		qdrantGrpcPort = "6334"
 	}
 
-	// Clean up any processes using our ports
-	killProcessesOnPorts(backendPort, qdrantHttpPort, qdrantGrpcPort)
+	// WhatsApp service port
+	whatsappPort := "7031"
 
-	// Step 5: Start all processes
+	// Clean up any processes using our ports
+	killProcessesOnPorts(backendPort, qdrantHttpPort, qdrantGrpcPort, whatsappPort)
+
+	// Step 6: Start all processes
 	currentStep++
 	showProgress(currentStep, totalSteps, "Starting services...")
 	orch := NewOrchestrator(projectRoot, bunExecutable)
@@ -151,6 +164,20 @@ func main() {
 	}
 	orch.AddProcess("backend", projectRoot, bunExecutable, []string{"--env-file=" + envFile, "run", "backend/src/server/index.ts"}, backendEnv, backendLogsPath)
 
+	// WhatsApp service (aimeow)
+	whatsappLogsPath := filepath.Join(dataDir, "whatsapp", "logs")
+	whatsappDataDir := filepath.Join(dataDir, "whatsapp")
+	whatsappFilesDir := filepath.Join(whatsappDataDir, "files")
+	os.MkdirAll(whatsappLogsPath, 0755)
+	os.MkdirAll(whatsappFilesDir, 0755)
+
+	whatsappEnv := []string{
+		"PORT=" + whatsappPort,
+		"BASE_URL=http://localhost:" + whatsappPort,
+		"CALLBACK_URL=http://localhost:" + backendPort + "/api/whatsapp/webhook",
+	}
+	orch.AddProcess("whatsapp", whatsappDataDir, aimeowBinary, []string{}, whatsappEnv, whatsappLogsPath)
+
 	// Start all processes
 	if err := orch.Start(); err != nil {
 		fmt.Println()
@@ -158,7 +185,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Step 6: All services ready
+	// Step 7: All services ready
 	currentStep++
 	showProgress(currentStep, totalSteps, "All services ready!")
 	fmt.Println()
@@ -173,6 +200,7 @@ func main() {
 
 	color.Green("\n✓ All services started successfully\n")
 	color.Cyan("\n→ Backend URL: %s\n", displayURL)
+	color.Cyan("→ WhatsApp API: http://localhost:%s\n", whatsappPort)
 	color.Cyan("\nPress Ctrl+C to stop all services\n\n")
 
 	// Setup signal handling for graceful shutdown
@@ -336,9 +364,7 @@ storage:
 }
 
 // killProcessesOnPorts kills any processes using our required ports
-func killProcessesOnPorts(backendPort, qdrantHttpPort, qdrantGrpcPort string) {
-	ports := []string{backendPort, qdrantHttpPort, qdrantGrpcPort}
-
+func killProcessesOnPorts(ports ...string) {
 	for _, port := range ports {
 		killProcessOnPort(port)
 	}
@@ -418,4 +444,31 @@ func envToSlice(envMap map[string]string) []string {
 		envSlice = append(envSlice, fmt.Sprintf("%s=%s", key, value))
 	}
 	return envSlice
+}
+
+// buildAimeow builds the aimeow WhatsApp service binary
+func buildAimeow(projectRoot string) (string, error) {
+	aimeowDir := filepath.Join(projectRoot, "bins", "aimeow")
+	aimeowBinary := filepath.Join(aimeowDir, "aimeow")
+
+	// Check if binary exists and is newer than source
+	binaryInfo, err := os.Stat(aimeowBinary)
+	if err == nil {
+		mainGoPath := filepath.Join(aimeowDir, "main.go")
+		mainGoInfo, err := os.Stat(mainGoPath)
+		if err == nil && binaryInfo.ModTime().After(mainGoInfo.ModTime()) {
+			// Binary is up to date
+			return aimeowBinary, nil
+		}
+	}
+
+	// Build the binary
+	cmd := exec.Command("go", "build", "-o", "aimeow", "main.go")
+	cmd.Dir = aimeowDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("aimeow build failed: %w\n%s", err, string(output))
+	}
+
+	return aimeowBinary, nil
 }
