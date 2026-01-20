@@ -1,0 +1,70 @@
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Install swag for generating docs
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
+# Generate swagger documentation
+RUN swag init
+
+# Build the application
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o aimeow .
+
+# Final stage
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates sqlite curl
+
+# Create non-root user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder /app/aimeow .
+RUN chmod +x ./aimeow
+
+# Copy documentation files
+COPY --from=builder /app/docs ./docs
+
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Create files directory with proper permissions
+RUN mkdir -p /app/files && \
+    chown -R appuser:appgroup /app
+
+# Volume mount for persistent data
+VOLUME ["/app/files"]
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 7030
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:7030/health || curl -f http://localhost:7030/ || exit 1
+
+# Run the application via entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]

@@ -1,0 +1,2394 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/cors"
+	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/mdp/qrterminal/v3"
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store"
+	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
+	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
+
+	// Swagger docs
+	_ "rizrmd/aimeow/docs"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+)
+
+// @title Aimeow WhatsApp Bot API
+// @version 1.0
+// @description A REST API for managing multiple WhatsApp clients
+// @BasePath /api/v1
+
+// Helper function to get the base URL from the request
+func getBaseURL(c *gin.Context) string {
+	scheme := "http"
+	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := c.Request.Host
+	if forwardedHost := c.GetHeader("X-Forwarded-Host"); forwardedHost != "" {
+		host = forwardedHost
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+type WhatsAppClient struct {
+	client        *whatsmeow.Client
+	deviceStore   *store.Device
+	isConnected   bool
+	qrCode        string
+	connectedAt   *time.Time
+	messages      []string
+	images        map[string]string // image_id -> file_path
+	osName        string            // OS name to set after connection
+	typingTimers  map[string]*time.Timer // chat_id -> typing timer
+	typingActive  map[string]bool        // chat_id -> is currently typing
+	mutex         sync.RWMutex
+}
+
+type ClientManager struct {
+	clients       map[string]*WhatsAppClient
+	container     *sqlstore.Container
+	callbackURL   string
+	configPath    string            // Path to configuration file
+	clientIDMap   map[string]string // Maps WhatsApp device ID -> UUID
+	clientMapPath string            // Path to client ID mapping file
+	mutex         sync.RWMutex
+}
+
+// Config represents the persistent configuration
+type Config struct {
+	CallbackURL string `json:"callbackUrl"`
+}
+
+// ClientIDMapping represents the persistent mapping of WhatsApp IDs to UUIDs
+type ClientIDMapping struct {
+	Mappings map[string]string `json:"mappings"` // WhatsApp device ID -> UUID
+}
+
+var manager *ClientManager
+var baseURL string // Base URL for generating file URLs in webhooks
+
+func NewClientManager(container *sqlstore.Container, configPath string) *ClientManager {
+	// Derive client map path from config path
+	configDir := filepath.Dir(configPath)
+	clientMapPath := filepath.Join(configDir, "client_mappings.json")
+
+	cm := &ClientManager{
+		clients:       make(map[string]*WhatsAppClient),
+		container:     container,
+		callbackURL:   "",
+		configPath:    configPath,
+		clientIDMap:   make(map[string]string),
+		clientMapPath: clientMapPath,
+	}
+	// Load configuration from file
+	if err := cm.loadConfig(); err != nil {
+		fmt.Printf("Failed to load config (will use defaults): %v\n", err)
+	}
+	// Override with environment variable if set
+	if envCallbackURL := os.Getenv("CALLBACK_URL"); envCallbackURL != "" {
+		cm.callbackURL = envCallbackURL
+		fmt.Printf("Callback URL set from environment: %s\n", envCallbackURL)
+	}
+	// Load client ID mappings
+	if err := cm.loadClientMappings(); err != nil {
+		fmt.Printf("Failed to load client mappings (will use defaults): %v\n", err)
+	}
+	return cm
+}
+
+// loadConfig loads configuration from JSON file
+func (cm *ClientManager) loadConfig() error {
+	data, err := os.ReadFile(cm.configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Config file doesn't exist yet, that's okay
+			return nil
+		}
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	cm.mutex.Lock()
+	cm.callbackURL = config.CallbackURL
+	cm.mutex.Unlock()
+
+	fmt.Printf("Configuration loaded: callbackURL=%s\n", config.CallbackURL)
+	return nil
+}
+
+// saveConfig saves configuration to JSON file
+func (cm *ClientManager) saveConfig() error {
+	cm.mutex.RLock()
+	config := Config{
+		CallbackURL: cm.callbackURL,
+	}
+	cm.mutex.RUnlock()
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Write to temp file first, then rename for atomic operation
+	tempPath := cm.configPath + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp config file: %w", err)
+	}
+
+	if err := os.Rename(tempPath, cm.configPath); err != nil {
+		return fmt.Errorf("failed to rename temp config file: %w", err)
+	}
+
+	fmt.Printf("Configuration saved to %s\n", cm.configPath)
+	return nil
+}
+
+// loadClientMappings loads client ID mappings from JSON file
+func (cm *ClientManager) loadClientMappings() error {
+	data, err := os.ReadFile(cm.clientMapPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Mapping file doesn't exist yet, that's okay
+			return nil
+		}
+		return fmt.Errorf("failed to read client mappings file: %w", err)
+	}
+
+	var mapping ClientIDMapping
+	if err := json.Unmarshal(data, &mapping); err != nil {
+		return fmt.Errorf("failed to parse client mappings file: %w", err)
+	}
+
+	cm.mutex.Lock()
+	cm.clientIDMap = mapping.Mappings
+	if cm.clientIDMap == nil {
+		cm.clientIDMap = make(map[string]string)
+	}
+	cm.mutex.Unlock()
+
+	fmt.Printf("Client mappings loaded: %d mappings\n", len(mapping.Mappings))
+	return nil
+}
+
+// saveClientMappings saves client ID mappings to JSON file
+func (cm *ClientManager) saveClientMappings() error {
+	cm.mutex.RLock()
+	mapping := ClientIDMapping{
+		Mappings: cm.clientIDMap,
+	}
+	cm.mutex.RUnlock()
+
+	data, err := json.MarshalIndent(mapping, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal client mappings: %w", err)
+	}
+
+	// Write to temp file first, then rename for atomic operation
+	tempPath := cm.clientMapPath + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp client mappings file: %w", err)
+	}
+
+	if err := os.Rename(tempPath, cm.clientMapPath); err != nil {
+		return fmt.Errorf("failed to rename temp client mappings file: %w", err)
+	}
+
+	fmt.Printf("Client mappings saved to %s\n", cm.clientMapPath)
+	return nil
+}
+
+func (cm *ClientManager) createClient(osName string) (*WhatsAppClient, string, error) {
+	// Generate a UUID-based client ID that we'll use consistently
+	clientUUID := uuid.New()
+	clientID := clientUUID.String()
+
+	// Create a device store with proper initialization but don't save to database yet
+	deviceStore := cm.container.NewDevice()
+	if deviceStore == nil {
+		return nil, "", fmt.Errorf("failed to create new device: container returned nil")
+	}
+
+	clientLog := waLog.Stdout("Client", "DEBUG", true)
+	client := whatsmeow.NewClient(deviceStore, clientLog)
+	fmt.Printf("Created new client: %s\n", clientID)
+
+	waClient := &WhatsAppClient{
+		client:       client,
+		deviceStore:  deviceStore,
+		isConnected:  false,
+		messages:     make([]string, 0),
+		images:       make(map[string]string),
+		osName:       osName, // Store OS name for later setting
+		typingTimers: make(map[string]*time.Timer),
+		typingActive: make(map[string]bool),
+	}
+
+	client.AddEventHandler(cm.eventHandler(waClient))
+
+	// Store client with our generated UUID-based ID
+	cm.mutex.Lock()
+	manager.clients[clientID] = waClient
+	cm.mutex.Unlock()
+
+	return waClient, clientID, nil
+}
+
+func (cm *ClientManager) getClient(clientID string) (*WhatsAppClient, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	client, exists := cm.clients[clientID]
+	if !exists {
+		return nil, fmt.Errorf("client not found")
+	}
+	return client, nil
+}
+
+func (cm *ClientManager) getAllClients() map[string]*WhatsAppClient {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	// Return a copy to avoid race conditions
+	result := make(map[string]*WhatsAppClient)
+	for id, client := range cm.clients {
+		result[id] = client
+	}
+	return result
+}
+
+func (cm *ClientManager) eventHandler(client *WhatsAppClient) func(interface{}) {
+	return func(evt interface{}) {
+		client.mutex.Lock()
+		defer client.mutex.Unlock()
+
+		switch v := evt.(type) {
+		case *events.Message:
+			message := fmt.Sprintf("Message: %s", v.Message.GetConversation())
+			client.messages = append(client.messages, message)
+			if len(client.messages) > 100 { // Keep last 100 messages
+				client.messages = client.messages[1:]
+			}
+
+			// Store LID to phone number mapping using whatsmeow's built-in method
+			if v.Info.SenderAlt.User != "" && (v.Info.Chat.User != "" || v.Info.Sender.User != "") {
+				var lidJID types.JID
+				var phoneJID types.JID
+
+				// Identify LID and phone JIDs
+				if strings.Contains(v.Info.Chat.String(), "@lid") {
+					lidJID = v.Info.Chat
+					phoneJID = v.Info.SenderAlt
+				} else if strings.Contains(v.Info.Sender.String(), "@lid") {
+					lidJID = v.Info.Sender
+					phoneJID = v.Info.SenderAlt
+				}
+
+				if lidJID.User != "" && phoneJID.User != "" {
+					// Use whatsmeow's built-in LID to phone number mapping
+					client.client.StoreLIDPNMapping(context.Background(), lidJID, phoneJID)
+					fmt.Printf("[LID Mapping] Stored mapping using whatsmeow: %s -> %s\n", lidJID.String(), phoneJID.String())
+				}
+			}
+
+			// Mark message as read and start typing
+			if !v.Info.IsFromMe {
+				chatJID := v.Info.Chat
+				go func() {
+					// Mark as read
+					err := client.client.MarkRead(context.Background(), []types.MessageID{v.Info.ID}, v.Info.Timestamp, chatJID, v.Info.Sender)
+					if err != nil {
+						fmt.Printf("Failed to mark message as read: %v\n", err)
+					} else {
+						fmt.Printf("Marked message as read from %s\n", chatJID.String())
+					}
+
+					// Start typing indicator
+					cm.startTyping(client, chatJID)
+				}()
+			}
+
+			// Download media first if message contains media (synchronous to ensure fileUrl is available)
+			// Note: Location messages (static and live) don't have downloadable files
+			if v.Message.GetImageMessage() != nil || v.Message.GetVideoMessage() != nil || v.Message.GetAudioMessage() != nil || v.Message.GetDocumentMessage() != nil {
+				fmt.Printf("Media message detected for client %s, downloading before webhook...\n", client.deviceStore.ID.String())
+				// Release mutex during download to avoid blocking other operations
+				client.mutex.Unlock()
+				cm.downloadImage(client, v)
+				client.mutex.Lock()
+			}
+
+			// Send webhook callback if configured (now includes fileUrl for media messages)
+			if cm.callbackURL != "" {
+				go cm.sendWebhook(client, v)
+			}
+		case *events.Connected:
+			client.isConnected = true
+			now := time.Now()
+			client.connectedAt = &now
+
+			// Set OS name if provided and device has JID
+			if client.osName != "" && client.deviceStore.ID != nil {
+				store.DeviceProps.Os = &client.osName
+			}
+
+			// Save the mapping from WhatsApp device ID to our UUID
+			// Find our UUID for this client by searching through manager.clients
+			if client.deviceStore.ID != nil {
+				whatsappID := client.deviceStore.ID.String()
+				cm.mutex.Lock()
+				// Find the UUID key for this client
+				var ourUUID string
+				for uuid, c := range cm.clients {
+					if c == client {
+						ourUUID = uuid
+						break
+					}
+				}
+				if ourUUID != "" {
+					cm.clientIDMap[whatsappID] = ourUUID
+					cm.mutex.Unlock()
+					// Save mappings to disk
+					if err := cm.saveClientMappings(); err != nil {
+						fmt.Printf("Warning: Failed to save client mappings: %v\n", err)
+					} else {
+						fmt.Printf("Saved client mapping: %s -> %s\n", whatsappID, ourUUID)
+					}
+				} else {
+					cm.mutex.Unlock()
+				}
+			}
+		case *events.LoggedOut:
+			client.isConnected = false
+		case *events.QR:
+			client.qrCode = v.Codes[0]
+		}
+	}
+}
+
+// startTyping starts the typing indicator for a chat and sets up a 1-minute timeout
+func (cm *ClientManager) startTyping(client *WhatsAppClient, chatJID types.JID) {
+	chatID := chatJID.String()
+
+	client.mutex.Lock()
+	defer client.mutex.Unlock()
+
+	// If already typing for this chat, cancel the existing timer
+	if timer, exists := client.typingTimers[chatID]; exists && timer != nil {
+		timer.Stop()
+	}
+
+	// Send typing indicator
+	err := client.client.SendChatPresence(context.Background(), chatJID, types.ChatPresenceComposing, types.ChatPresenceMediaText)
+	if err != nil {
+		fmt.Printf("Failed to send typing indicator: %v\n", err)
+		return
+	}
+
+	client.typingActive[chatID] = true
+	fmt.Printf("Started typing indicator for %s\n", chatID)
+
+	// Set up timer to stop typing after 1 minute
+	client.typingTimers[chatID] = time.AfterFunc(60*time.Second, func() {
+		cm.stopTyping(client, chatJID)
+	})
+}
+
+// stopTyping stops the typing indicator for a chat
+func (cm *ClientManager) stopTyping(client *WhatsAppClient, chatJID types.JID) {
+	chatID := chatJID.String()
+
+	client.mutex.Lock()
+	defer client.mutex.Unlock()
+
+	// Check if we're actually typing for this chat
+	if !client.typingActive[chatID] {
+		return
+	}
+
+	// Cancel timer if it exists
+	if timer, exists := client.typingTimers[chatID]; exists && timer != nil {
+		timer.Stop()
+		delete(client.typingTimers, chatID)
+	}
+
+	// Send stop typing indicator (paused)
+	err := client.client.SendChatPresence(context.Background(), chatJID, types.ChatPresencePaused, types.ChatPresenceMediaText)
+	if err != nil {
+		fmt.Printf("Failed to stop typing indicator: %v\n", err)
+	} else {
+		fmt.Printf("Stopped typing indicator for %s\n", chatID)
+	}
+
+	delete(client.typingActive, chatID)
+}
+
+// Response structs
+type ClientResponse struct {
+	ID           string     `json:"id"`
+	Phone        string     `json:"phone,omitempty"`
+	IsConnected  bool       `json:"isConnected"`
+	QRCode       string     `json:"qrCode,omitempty"`
+	ConnectedAt  *time.Time `json:"connectedAt,omitempty"`
+	MessageCount int        `json:"messageCount"`
+}
+
+type CreateClientResponse struct {
+	ID    string `json:"id"`
+	QRURL string `json:"qrUrl"`
+}
+
+type CreateClientRequest struct {
+	OSName string `json:"osName,omitempty"`
+}
+
+type ConfigRequest struct {
+	CallbackURL string `json:"callbackUrl" binding:"required,url"`
+}
+
+type ConfigResponse struct {
+	CallbackURL string `json:"callbackUrl"`
+}
+
+type MessageResponse struct {
+	Messages []string `json:"messages"`
+}
+
+// Request and Response structs for sending messages
+type SendMessageRequest struct {
+	Phone    string `json:"phone" binding:"required"`
+	Message  string `json:"message" binding:"required"`
+}
+
+type SendImageRequest struct {
+	Phone     string `json:"phone" binding:"required"`
+	ImageURL  string `json:"imageUrl" binding:"required,url"`
+	Caption   string `json:"caption,omitempty"`
+}
+
+type SendMultipleImagesRequest struct {
+	Phone     string `json:"phone" binding:"required"`
+	Images    []ImageItem `json:"images" binding:"required,min=1"`
+}
+
+type SendDocumentRequest struct {
+	Phone       string `json:"phone" binding:"required"`
+	DocumentURL string `json:"documentUrl" binding:"required,url"`
+	Filename    string `json:"filename,omitempty"`
+	Caption     string `json:"caption,omitempty"`
+}
+
+type SendDocumentBase64Request struct {
+	Phone      string `json:"phone" binding:"required"`
+	Base64Data string `json:"base64Data" binding:"required"`
+	Filename   string `json:"filename" binding:"required"`
+	MimeType   string `json:"mimeType,omitempty"`
+	Caption    string `json:"caption,omitempty"`
+}
+
+type ImageItem struct {
+	ImageURL string `json:"imageUrl" binding:"required,url"`
+	Caption  string `json:"caption,omitempty"`
+}
+
+type SendMessageResponse struct {
+	Success   bool   `json:"success"`
+	MessageID string `json:"messageId,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+type DeleteMessageRequest struct {
+	Phone     string `json:"phone" binding:"required"`
+	MessageID string `json:"messageId" binding:"required"`
+}
+
+type ProfilePictureResponse struct {
+	Phone      string `json:"phone"`
+	PictureURL string `json:"pictureUrl,omitempty"`
+	HasPicture bool   `json:"hasPicture"`
+	Error      string `json:"error,omitempty"`
+}
+
+type CheckWhatsAppResponse struct {
+	Phone        string `json:"phone"`
+	IsRegistered bool   `json:"isRegistered"`
+	JID          string `json:"jid,omitempty"`
+	Error        string `json:"error,omitempty"`
+}
+
+// @Summary Create a new WhatsApp client
+// @Description Creates a new WhatsApp client and returns QR code for pairing
+// @Tags clients
+// @Accept json
+// @Produce json
+// @Param config body CreateClientRequest false "Configuration object"
+// @Success 200 {object} CreateClientResponse
+// @Failure 500 {object} map[string]string
+// @Router /clients/new [post]
+func createClient(c *gin.Context) {
+	var req CreateClientRequest
+
+	// Parse request body (empty body is also allowed)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// If binding fails due to empty body, use empty struct
+		req = CreateClientRequest{}
+	}
+
+	waClient, clientID, err := manager.createClient(req.OSName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Start connection process
+	go func() {
+		qrChan, err := waClient.client.GetQRChannel(context.Background())
+		if err != nil {
+			fmt.Printf("Failed to get QR channel: %v\n", err)
+			return
+		}
+
+		err = waClient.client.Connect()
+		if err != nil {
+			fmt.Printf("Failed to connect client: %v\n", err)
+			return
+		}
+
+		for evt := range qrChan {
+			if evt.Event == "code" {
+				waClient.mutex.Lock()
+				waClient.qrCode = evt.Code
+				waClient.mutex.Unlock()
+			}
+		}
+	}()
+
+	qrURL := fmt.Sprintf("%s/qr?client_id=%s", getBaseURL(c), clientID)
+
+	c.JSON(http.StatusOK, CreateClientResponse{
+		ID:    clientID,
+		QRURL: qrURL,
+	})
+}
+
+// @Summary Get all clients
+// @Description Returns list of all WhatsApp clients
+// @Tags clients
+// @Accept json
+// @Produce json
+// @Success 200 {array} ClientResponse
+// @Router /clients [get]
+func getAllClients(c *gin.Context) {
+	clients := manager.getAllClients()
+
+	response := make([]ClientResponse, 0)
+	for id, client := range clients {
+		client.mutex.RLock()
+		resp := ClientResponse{
+			ID:           id,
+			IsConnected:  client.isConnected,
+			QRCode:       client.qrCode,
+			ConnectedAt:  client.connectedAt,
+			MessageCount: len(client.messages),
+		}
+		// Add phone number if device is connected
+		if client.deviceStore != nil && client.deviceStore.ID != nil {
+			resp.Phone = client.deviceStore.ID.User
+		}
+		if resp.QRCode == "" {
+			resp.QRCode = "not_available"
+		}
+		response = append(response, resp)
+		client.mutex.RUnlock()
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Set webhook callback URL
+// @Description Sets the callback URL for receiving message webhooks
+// @Tags config
+// @Accept json
+// @Produce json
+// @Param config body ConfigRequest true "Configuration object"
+// @Success 200 {object} ConfigResponse
+// @Failure 400 {object} map[string]string
+// @Router /config [post]
+func setConfig(c *gin.Context) {
+	var req ConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	manager.mutex.Lock()
+	manager.callbackURL = req.CallbackURL
+	manager.mutex.Unlock()
+
+	// Save configuration to persistent storage
+	if err := manager.saveConfig(); err != nil {
+		fmt.Printf("Warning: Failed to save config: %v\n", err)
+		// Don't fail the request, just log the warning
+	}
+
+	c.JSON(http.StatusOK, ConfigResponse{
+		CallbackURL: req.CallbackURL,
+	})
+}
+
+// @Summary Get current configuration
+// @Description Gets the current callback URL configuration
+// @Tags config
+// @Accept json
+// @Produce json
+// @Success 200 {object} ConfigResponse
+// @Router /config [get]
+func getConfig(c *gin.Context) {
+	manager.mutex.RLock()
+	callbackURL := manager.callbackURL
+	manager.mutex.RUnlock()
+
+	c.JSON(http.StatusOK, ConfigResponse{
+		CallbackURL: callbackURL,
+	})
+}
+
+// @Summary Get client file
+// @Description Gets a media file for a specific client
+// @Tags files
+// @Accept json
+// @Produce application/octet-stream
+// @Param client_id path string true "Client ID"
+// @Param file_id path string true "File ID"
+// @Success 200 {file} file "Media file"
+// @Failure 404 {object} map[string]string
+// @Router /files/{client_id}/{file_id} [get]
+func getClientFile(c *gin.Context) {
+	clientID := c.Param("client_id")
+	fileID := c.Param("file_id")
+
+	// ClientID is now a UUID, no need to sanitize
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
+		return
+	}
+
+	waClient.mutex.RLock()
+	filePath, exists := waClient.images[fileID]
+	waClient.mutex.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+
+	// Serve the media file
+	c.File(filePath)
+}
+
+// @Summary Get client by ID
+// @Description Returns details of a specific WhatsApp client
+// @Tags clients
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Success 200 {object} ClientResponse
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id} [get]
+func getClient(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	waClient.mutex.RLock()
+	resp := ClientResponse{
+		ID:           clientID,
+		IsConnected:  waClient.isConnected,
+		QRCode:       waClient.qrCode,
+		ConnectedAt:  waClient.connectedAt,
+		MessageCount: len(waClient.messages),
+	}
+	// Add phone number if device is connected
+	if waClient.deviceStore != nil && waClient.deviceStore.ID != nil {
+		resp.Phone = waClient.deviceStore.ID.User
+	}
+	if resp.QRCode == "" {
+		resp.QRCode = "not_available"
+	}
+	waClient.mutex.RUnlock()
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// @Summary Get QR code for client (terminal format)
+// @Description Returns QR code in terminal format for client pairing
+// @Tags clients
+// @Accept json
+// @Produce plain
+// @Param id path string true "Client ID"
+// @Success 200 {string} string "QR code in terminal format"
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id}/qr [get]
+func getQRCode(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	waClient.mutex.RLock()
+	qrCode := waClient.qrCode
+	waClient.mutex.RUnlock()
+
+	if qrCode == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "QR code not available"})
+		return
+	}
+
+	// Generate terminal QR code
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	qrterminal.Generate(qrCode, qrterminal.L, c.Writer)
+}
+
+// @Summary Get QR code for client (HTML format)
+// @Description Returns QR code in HTML format for easy display in browser
+// @Tags clients
+// @Accept json
+// @Produce html
+// @Param client_id query string true "Client ID"
+// @Success 200 {string} string "HTML page with QR code"
+// @Failure 404 {object} map[string]string
+// @Router /qr [get]
+func getQRCodeHTML(c *gin.Context) {
+	clientID := c.Query("client_id")
+	if clientID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id parameter is required"})
+		return
+	}
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	waClient.mutex.RLock()
+	qrCode := waClient.qrCode
+	isConnected := waClient.isConnected
+	waClient.mutex.RUnlock()
+
+	htmlContent := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+    <title>WhatsApp QR Code - Client %s</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .qr-code { 
+            margin: 20px auto; 
+            padding: 20px; 
+            border: 2px solid #ddd; 
+            border-radius: 10px; 
+            background: white;
+            white-space: pre;
+            font-family: monospace;
+            line-height: 1;
+            font-size: 2px;
+        }
+        .info { 
+            margin: 20px 0; 
+            padding: 15px; 
+            background: #f0f8ff; 
+            border-radius: 5px; 
+        }
+        .refresh { 
+            margin: 10px 0; 
+        }
+        .refresh button {
+            padding: 10px 20px;
+            background: #25d366;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .refresh button:hover {
+            background: #128c7e;
+        }
+    </style>
+    <script>
+        function refreshQR() {
+            setTimeout(() => {
+                location.reload();
+            }, 5000);
+        }
+        
+        // Auto-refresh every 10 seconds if not connected
+        setInterval(() => {
+            fetch('/api/v1/clients/%s')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.isConnected) {
+                        location.reload();
+                    }
+                })
+                .catch(() => {});
+        }, 10000);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>WhatsApp QR Code</h1>
+        <div class="info">
+            <strong>Client ID:</strong> %s<br>
+            <strong>Status:</strong> %s
+        </div>`, strings.ReplaceAll(clientID, "<", "&lt;"), strings.ReplaceAll(clientID, "<", "&lt;"), strings.ReplaceAll(clientID, "<", "&lt;"), map[bool]string{true: "Connected", false: "Waiting for QR scan"}[isConnected])
+
+	if isConnected {
+		htmlContent += `
+        <div class="info" style="background: #d4edda; color: #155724;">
+            <h2>✅ Connected Successfully!</h2>
+            <p>Your WhatsApp client is now connected and ready to use.</p>
+        </div>`
+	} else if qrCode == "" {
+		htmlContent += `
+        <div class="info" style="background: #fff3cd; color: #856404;">
+            <h2>⏳ Waiting for QR Code...</h2>
+            <p>QR code is being generated. Please wait.</p>
+        </div>
+        <div class="refresh">
+            <button onclick="refreshQR()">Refresh</button>
+        </div>`
+	} else {
+		// Generate QR code as ASCII art using qrterminal
+		htmlContent += `
+        <div class="info">
+            <h2>📱 Scan this QR code with WhatsApp</h2>
+            <p>Open WhatsApp on your phone → Linked Devices → Link a device</p>
+        </div>
+        <div class="refresh">
+            <button onclick="refreshQR()">Refresh QR Code</button>
+        </div>
+        <div class="qr-code">`
+
+		// Capture qrterminal output
+		var qrBuilder strings.Builder
+		qrterminal.GenerateWithConfig(qrCode, qrterminal.Config{
+			Level:     qrterminal.L,
+			Writer:    &qrBuilder,
+			BlackChar: "██",
+			WhiteChar: "  ",
+		})
+
+		// Convert to HTML-safe format
+		qrHTML := strings.ReplaceAll(qrBuilder.String(), " ", "&nbsp;")
+		qrHTML = strings.ReplaceAll(qrHTML, "\n", "<br>")
+		htmlContent += qrHTML
+
+		htmlContent += `</div>`
+	}
+
+	htmlContent += `
+        <div class="info" style="margin-top: 30px; font-size: 14px;">
+            <p>This page will automatically refresh when the connection status changes.</p>
+            <p><a href="/api/v1/clients/%s">View API details</a></p>
+        </div>
+    </div>
+</body>
+</html>`
+
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, htmlContent)
+}
+
+// @Summary Get messages for client
+// @Description Returns recent messages for a specific WhatsApp client
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param limit query int false "Limit number of messages" default(50)
+// @Success 200 {object} MessageResponse
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id}/messages [get]
+func getMessages(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	waClient.mutex.RLock()
+	messages := waClient.messages
+	if len(messages) > limit {
+		messages = messages[len(messages)-limit:]
+	}
+	response := MessageResponse{Messages: make([]string, len(messages))}
+	copy(response.Messages, messages)
+	waClient.mutex.RUnlock()
+
+	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Disconnect and delete client
+// @Description Disconnects and removes a WhatsApp client
+// @Tags clients
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Success 200 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id} [delete]
+func deleteClient(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Disconnect if connected
+	if waClient.client.IsConnected() {
+		waClient.client.Disconnect()
+	}
+
+	// Remove from manager
+	manager.mutex.Lock()
+	delete(manager.clients, clientID)
+	manager.mutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"message": "client deleted successfully"})
+}
+
+// @Summary Send text message
+// @Description Sends a text message to a WhatsApp number
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param message body SendMessageRequest true "Message details"
+// @Success 200 {object} SendMessageResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /clients/{id}/send-message [post]
+func sendMessage(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req SendMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Format phone number (remove @s.whatsapp.net if present, add if missing)
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Stop typing indicator before sending message
+	manager.stopTyping(waClient, targetJIDParsed)
+
+	// Send message
+	msg := &waE2E.Message{
+		Conversation: &req.Message,
+	}
+
+	resp, err := waClient.client.SendMessage(context.Background(), targetJIDParsed, msg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to send message: %v", err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, SendMessageResponse{
+		Success:   true,
+		MessageID: resp.ID,
+	})
+}
+
+// @Summary Send single image
+// @Description Sends an image to a WhatsApp number
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param image body SendImageRequest true "Image details"
+// @Success 200 {object} SendMessageResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /clients/{id}/send-image [post]
+func sendImage(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req SendImageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Format phone number
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Download image from URL
+	resp, err := http.Get(req.ImageURL)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to download image: %v", err),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusBadRequest, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Image download failed with status: %d", resp.StatusCode),
+		})
+		return
+	}
+
+	// Read image data
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to read image data: %v", err),
+		})
+		return
+	}
+
+	// Upload image to WhatsApp
+	uploaded, err := waClient.client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to upload image to WhatsApp: %v", err),
+		})
+		return
+	}
+
+	// Create image message
+	imageMsg := &waE2E.Message{
+		ImageMessage: &waE2E.ImageMessage{
+			URL:           proto.String(uploaded.URL),
+			Mimetype:      proto.String(resp.Header.Get("Content-Type")),
+			Caption:       proto.String(req.Caption),
+			FileLength:    proto.Uint64(uint64(len(imageData))),
+			FileSHA256:    uploaded.FileSHA256,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			MediaKey:      uploaded.MediaKey,
+			DirectPath:    proto.String(uploaded.DirectPath),
+		},
+	}
+
+	// Stop typing indicator before sending image
+	manager.stopTyping(waClient, targetJIDParsed)
+
+	// Send the image message
+	sendResp, err := waClient.client.SendMessage(context.Background(), targetJIDParsed, imageMsg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to send image: %v", err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, SendMessageResponse{
+		Success:   true,
+		MessageID: sendResp.ID,
+	})
+}
+
+// @Summary Send multiple images
+// @Description Sends multiple images to a WhatsApp number
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param images body SendMultipleImagesRequest true "Multiple image details"
+// @Success 200 {object} SendMessageResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /clients/{id}/send-images [post]
+func sendMultipleImages(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req SendMultipleImagesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Format phone number
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Stop typing indicator before sending images
+	manager.stopTyping(waClient, targetJIDParsed)
+
+	var messageIDs []string
+	var errors []string
+
+	// Send each image
+	for i, imageItem := range req.Images {
+		// Download image from URL
+		resp, err := http.Get(imageItem.ImageURL)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Image %d: Failed to download - %v", i+1, err))
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			errors = append(errors, fmt.Sprintf("Image %d: Download failed with status %d", i+1, resp.StatusCode))
+			continue
+		}
+
+		// Read image data
+		imageData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Image %d: Failed to read data - %v", i+1, err))
+			continue
+		}
+
+		// Upload image to WhatsApp
+		uploaded, err := waClient.client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Image %d: Upload failed - %v", i+1, err))
+			continue
+		}
+
+		// Create image message
+		imageMsg := &waE2E.Message{
+			ImageMessage: &waE2E.ImageMessage{
+				URL:           proto.String(uploaded.URL),
+				Mimetype:      proto.String(resp.Header.Get("Content-Type")),
+				Caption:       proto.String(imageItem.Caption),
+				FileLength:    proto.Uint64(uint64(len(imageData))),
+				FileSHA256:    uploaded.FileSHA256,
+				FileEncSHA256: uploaded.FileEncSHA256,
+				MediaKey:      uploaded.MediaKey,
+				DirectPath:    proto.String(uploaded.DirectPath),
+			},
+		}
+
+		// Send the image message
+		sendResp, err := waClient.client.SendMessage(context.Background(), targetJIDParsed, imageMsg)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Image %d: Send failed - %v", i+1, err))
+			continue
+		}
+
+		messageIDs = append(messageIDs, sendResp.ID)
+	}
+
+	// Prepare response
+	response := SendMessageResponse{
+		Success: len(messageIDs) > 0,
+	}
+
+	if len(messageIDs) > 0 {
+		response.MessageID = fmt.Sprintf("Sent %d images successfully. IDs: %s", len(messageIDs), strings.Join(messageIDs, ", "))
+	}
+
+	if len(errors) > 0 {
+		if response.Success {
+			response.Error = fmt.Sprintf("Partial success. Errors: %s", strings.Join(errors, "; "))
+		} else {
+			response.Error = fmt.Sprintf("All images failed. Errors: %s", strings.Join(errors, "; "))
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Send a document to a WhatsApp number
+// @Description Sends a document (PDF, Word, Excel, etc.) from a URL to a WhatsApp number
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param message body SendDocumentRequest true "Document message details"
+// @Success 200 {object} SendMessageResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /clients/{id}/send-document [post]
+func sendDocument(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req SendDocumentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Format phone number
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Download document from URL
+	resp, err := http.Get(req.DocumentURL)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to download document: %v", err),
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusBadRequest, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Document download failed with status: %d", resp.StatusCode),
+		})
+		return
+	}
+
+	// Read document data
+	documentData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to read document data: %v", err),
+		})
+		return
+	}
+
+	// Get content type and filename
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	// Use provided filename or extract from URL
+	filename := req.Filename
+	if filename == "" {
+		// Try to extract filename from URL
+		urlPath := req.DocumentURL
+		if idx := strings.LastIndex(urlPath, "/"); idx != -1 {
+			filename = urlPath[idx+1:]
+		}
+		// Remove query params if any
+		if idx := strings.Index(filename, "?"); idx != -1 {
+			filename = filename[:idx]
+		}
+		if filename == "" {
+			filename = "document"
+		}
+	}
+
+	// Upload document to WhatsApp
+	uploaded, err := waClient.client.Upload(context.Background(), documentData, whatsmeow.MediaDocument)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to upload document to WhatsApp: %v", err),
+		})
+		return
+	}
+
+	// Create document message
+	documentMsg := &waE2E.Message{
+		DocumentMessage: &waE2E.DocumentMessage{
+			URL:           proto.String(uploaded.URL),
+			Mimetype:      proto.String(contentType),
+			FileName:      proto.String(filename),
+			Caption:       proto.String(req.Caption),
+			FileLength:    proto.Uint64(uint64(len(documentData))),
+			FileSHA256:    uploaded.FileSHA256,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			MediaKey:      uploaded.MediaKey,
+			DirectPath:    proto.String(uploaded.DirectPath),
+		},
+	}
+
+	// Stop typing indicator before sending document
+	manager.stopTyping(waClient, targetJIDParsed)
+
+	// Send the document message
+	sendResp, err := waClient.client.SendMessage(context.Background(), targetJIDParsed, documentMsg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to send document: %v", err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, SendMessageResponse{
+		Success:   true,
+		MessageID: sendResp.ID,
+	})
+}
+
+// @Summary Send a document via base64 encoded data
+// @Description Sends a document (PDF, Word, Excel, etc.) from base64 encoded data to a WhatsApp number
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param message body SendDocumentBase64Request true "Document message details with base64 data"
+// @Success 200 {object} SendMessageResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /clients/{id}/send-document-base64 [post]
+func sendDocumentBase64(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req SendDocumentBase64Request
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Decode base64 data
+	documentData, err := base64.StdEncoding.DecodeString(req.Base64Data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to decode base64 data: %v", err),
+		})
+		return
+	}
+
+	fmt.Printf("[Aimeow Base64] Decoded %d bytes from base64 input\n", len(documentData))
+
+	// Format phone number
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Get content type
+	contentType := req.MimeType
+	if contentType == "" {
+		contentType = "application/pdf"
+	}
+
+	// Upload document to WhatsApp
+	uploaded, err := waClient.client.Upload(context.Background(), documentData, whatsmeow.MediaDocument)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to upload document to WhatsApp: %v", err),
+		})
+		return
+	}
+
+	// Create document message
+	documentMsg := &waE2E.Message{
+		DocumentMessage: &waE2E.DocumentMessage{
+			URL:           proto.String(uploaded.URL),
+			Mimetype:      proto.String(contentType),
+			FileName:      proto.String(req.Filename),
+			Caption:       proto.String(req.Caption),
+			FileLength:    proto.Uint64(uint64(len(documentData))),
+			FileSHA256:    uploaded.FileSHA256,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			MediaKey:      uploaded.MediaKey,
+			DirectPath:    proto.String(uploaded.DirectPath),
+		},
+	}
+
+	// Stop typing indicator before sending document
+	manager.stopTyping(waClient, targetJIDParsed)
+
+	// Send the document message
+	sendResp, err := waClient.client.SendMessage(context.Background(), targetJIDParsed, documentMsg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to send document: %v", err),
+		})
+		return
+	}
+
+	fmt.Printf("[Aimeow Base64] ✅ Successfully sent document %s (%d bytes) to %s\n", req.Filename, len(documentData), req.Phone)
+
+	c.JSON(http.StatusOK, SendMessageResponse{
+		Success:   true,
+		MessageID: sendResp.ID,
+	})
+}
+
+// @Summary Delete a message
+// @Description Deletes/revokes a previously sent message from a WhatsApp chat
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param message body DeleteMessageRequest true "Delete message details"
+// @Success 200 {object} SendMessageResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /clients/{id}/delete-message [post]
+func deleteMessage(c *gin.Context) {
+	clientID := c.Param("id")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req DeleteMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Format phone number (remove @s.whatsapp.net if present, add if missing)
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Revoke/delete the message
+	// The RevokeMessage function will send a message revocation to the chat
+	resp, err := waClient.client.SendMessage(context.Background(), targetJIDParsed, waClient.client.BuildRevoke(targetJIDParsed, types.EmptyJID, req.MessageID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, SendMessageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to delete message: %v", err),
+		})
+		return
+	}
+
+	fmt.Printf("[Aimeow Delete] Message %s deleted from chat %s (revoke ID: %s)\n", req.MessageID, targetJID, resp.ID)
+
+	c.JSON(http.StatusOK, SendMessageResponse{
+		Success:   true,
+		MessageID: resp.ID,
+	})
+}
+
+// @Summary Get profile picture URL
+// @Description Gets the profile picture URL for a WhatsApp contact
+// @Tags contacts
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param phone path string true "Phone number (without @s.whatsapp.net)"
+// @Success 200 {object} ProfilePictureResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id}/profile-picture/{phone} [get]
+func getProfilePicture(c *gin.Context) {
+	clientID := c.Param("id")
+	phone := c.Param("phone")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, ProfilePictureResponse{
+			Phone:      phone,
+			HasPicture: false,
+			Error:      "client is not connected",
+		})
+		return
+	}
+
+	// Format phone number
+	targetJID := strings.TrimSuffix(phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ProfilePictureResponse{
+			Phone:      phone,
+			HasPicture: false,
+			Error:      fmt.Sprintf("Invalid phone number format: %v", err),
+		})
+		return
+	}
+
+	// Get profile picture info
+	// The second parameter is "preview" - false for full quality
+	pictureInfo, err := waClient.client.GetProfilePictureInfo(context.Background(), targetJIDParsed, &whatsmeow.GetProfilePictureParams{
+		Preview: false,
+	})
+
+	if err != nil {
+		// Check if it's a "not found" error (user has no profile picture or privacy settings)
+		errStr := err.Error()
+		if strings.Contains(errStr, "item-not-found") || strings.Contains(errStr, "401") || strings.Contains(errStr, "404") {
+			c.JSON(http.StatusOK, ProfilePictureResponse{
+				Phone:      phone,
+				HasPicture: false,
+			})
+			return
+		}
+		c.JSON(http.StatusOK, ProfilePictureResponse{
+			Phone:      phone,
+			HasPicture: false,
+			Error:      fmt.Sprintf("Failed to get profile picture: %v", err),
+		})
+		return
+	}
+
+	if pictureInfo == nil || pictureInfo.URL == "" {
+		c.JSON(http.StatusOK, ProfilePictureResponse{
+			Phone:      phone,
+			HasPicture: false,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, ProfilePictureResponse{
+		Phone:      phone,
+		PictureURL: pictureInfo.URL,
+		HasPicture: true,
+	})
+}
+
+// @Summary Check if phone number is registered on WhatsApp
+// @Description Checks if a phone number is registered on WhatsApp
+// @Tags contacts
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param phone path string true "Phone number (without @s.whatsapp.net)"
+// @Success 200 {object} CheckWhatsAppResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id}/check-whatsapp/{phone} [get]
+func checkWhatsApp(c *gin.Context) {
+	clientID := c.Param("id")
+	phone := c.Param("phone")
+
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, CheckWhatsAppResponse{
+			Phone:        phone,
+			IsRegistered: false,
+			Error:        "client is not connected",
+		})
+		return
+	}
+
+	// Clean phone number
+	cleanPhone := strings.TrimSuffix(phone, "@s.whatsapp.net")
+	cleanPhone = strings.ReplaceAll(cleanPhone, "+", "")
+	cleanPhone = strings.ReplaceAll(cleanPhone, "-", "")
+	cleanPhone = strings.ReplaceAll(cleanPhone, " ", "")
+
+	// Check if phone is on WhatsApp
+	result, err := waClient.client.IsOnWhatsApp(context.Background(), []string{"+" + cleanPhone})
+	if err != nil {
+		c.JSON(http.StatusOK, CheckWhatsAppResponse{
+			Phone:        phone,
+			IsRegistered: false,
+			Error:        fmt.Sprintf("Failed to check: %v", err),
+		})
+		return
+	}
+
+	if len(result) == 0 {
+		c.JSON(http.StatusOK, CheckWhatsAppResponse{
+			Phone:        phone,
+			IsRegistered: false,
+		})
+		return
+	}
+
+	// Get the first result
+	info := result[0]
+	c.JSON(http.StatusOK, CheckWhatsAppResponse{
+		Phone:        phone,
+		IsRegistered: info.IsIn,
+		JID:          info.JID.String(),
+	})
+}
+
+func (cm *ClientManager) sendWebhook(client *WhatsAppClient, message interface{}) {
+	if cm.callbackURL == "" {
+		return
+	}
+
+	// Extract message data from the message interface
+	webhookData := cm.extractMessageData(client, message)
+
+	jsonData, err := json.Marshal(webhookData)
+	if err != nil {
+		fmt.Printf("Failed to marshal webhook data: %v\n", err)
+		return
+	}
+
+	// Log the webhook payload for debugging
+	fmt.Printf("[Aimeow Webhook] Payload: %s\n", string(jsonData))
+
+	resp, err := http.Post(cm.callbackURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("Failed to send webhook: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		fmt.Printf("Webhook returned error status: %d\n", resp.StatusCode)
+	} else {
+		fmt.Printf("[Aimeow Webhook] Successfully sent to %s (status: %d)\n", cm.callbackURL, resp.StatusCode)
+	}
+}
+
+func (cm *ClientManager) downloadImage(client *WhatsAppClient, message interface{}) {
+	// Type assert to get the actual message struct
+	msg, ok := message.(*events.Message)
+	if !ok {
+		return
+	}
+
+	// Check if message contains media
+	if msg.Message.GetImageMessage() == nil && msg.Message.GetVideoMessage() == nil && msg.Message.GetAudioMessage() == nil && msg.Message.GetDocumentMessage() == nil {
+		fmt.Printf("No media in message, skipping download\n")
+		return
+	}
+
+	fmt.Printf("Media detected in message, proceeding with download\n")
+
+	// Get the UUID for this client
+	whatsappID := client.deviceStore.ID.String()
+	if whatsappID == "" {
+		return
+	}
+
+	cm.mutex.RLock()
+	clientID, exists := cm.clientIDMap[whatsappID]
+	cm.mutex.RUnlock()
+
+	// Fallback to WhatsApp ID if mapping doesn't exist
+	if !exists {
+		clientID = whatsappID
+		fmt.Printf("Warning: No UUID mapping found for client %s\n", whatsappID)
+	}
+
+	// Create client directory using UUID (no need to sanitize since UUIDs don't have special chars)
+	clientDir := filepath.Join("files", clientID)
+	err := os.MkdirAll(clientDir, 0755)
+	if err != nil {
+		fmt.Printf("Failed to create client directory: %v\n", err)
+		return
+	}
+
+	var fileExtension string
+	var mediaType string
+	var mediaData []byte
+
+	// Handle different media types using whatsmeow Download (handles decryption)
+	switch {
+	case msg.Message.GetImageMessage() != nil:
+		imageMsg := msg.Message.GetImageMessage()
+		mediaType = "image"
+		fileExtension = ".jpg"
+		if imageMsg.GetMimetype() == "image/png" {
+			fileExtension = ".png"
+		} else if imageMsg.GetMimetype() == "image/webp" {
+			fileExtension = ".webp"
+		} else if imageMsg.GetMimetype() == "image/gif" {
+			fileExtension = ".gif"
+		}
+		// Use whatsmeow Download to properly decrypt media
+		mediaData, err = client.client.Download(context.Background(), imageMsg)
+		if err != nil {
+			fmt.Printf("Failed to download image for client %s: %v\n", clientID, err)
+			return
+		}
+
+	case msg.Message.GetVideoMessage() != nil:
+		videoMsg := msg.Message.GetVideoMessage()
+		mediaType = "video"
+		fileExtension = ".mp4"
+		if videoMsg.GetMimetype() == "video/3gpp" {
+			fileExtension = ".3gp"
+		} else if videoMsg.GetMimetype() == "video/webm" {
+			fileExtension = ".webm"
+		}
+		mediaData, err = client.client.Download(context.Background(), videoMsg)
+		if err != nil {
+			fmt.Printf("Failed to download video for client %s: %v\n", clientID, err)
+			return
+		}
+
+	case msg.Message.GetAudioMessage() != nil:
+		audioMsg := msg.Message.GetAudioMessage()
+		mediaType = "audio"
+		fileExtension = ".ogg"
+		if audioMsg.GetMimetype() == "audio/mpeg" {
+			fileExtension = ".mp3"
+		} else if audioMsg.GetMimetype() == "audio/mp4" {
+			fileExtension = ".m4a"
+		}
+		mediaData, err = client.client.Download(context.Background(), audioMsg)
+		if err != nil {
+			fmt.Printf("Failed to download audio for client %s: %v\n", clientID, err)
+			return
+		}
+
+	case msg.Message.GetDocumentMessage() != nil:
+		docMsg := msg.Message.GetDocumentMessage()
+		mediaType = "document"
+		fileName := docMsg.GetFileName()
+		if ext := filepath.Ext(fileName); ext != "" {
+			fileExtension = ext
+		} else {
+			fileExtension = ".bin"
+		}
+		mediaData, err = client.client.Download(context.Background(), docMsg)
+		if err != nil {
+			fmt.Printf("Failed to download document for client %s: %v\n", clientID, err)
+			return
+		}
+
+	default:
+		return
+	}
+
+	mediaID := msg.Info.ID
+	mediaPath := filepath.Join(clientDir, mediaID+fileExtension)
+
+	// Save decrypted media to file
+	err = os.WriteFile(mediaPath, mediaData, 0644)
+	if err != nil {
+		fmt.Printf("Failed to save %s file for client %s: %v\n", mediaType, clientID, err)
+		return
+	}
+
+	// Store media path in client
+	client.mutex.Lock()
+	client.images[mediaID] = mediaPath
+	client.mutex.Unlock()
+
+	fmt.Printf("%s downloaded for client %s: %s -> %s (%d bytes)\n", strings.Title(mediaType), clientID, mediaID, mediaPath, len(mediaData))
+}
+
+func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message interface{}) map[string]interface{} {
+	// Get the UUID for this client by looking up the WhatsApp ID in our mapping
+	whatsappID := client.deviceStore.ID.String()
+	cm.mutex.RLock()
+	clientID, exists := cm.clientIDMap[whatsappID]
+	cm.mutex.RUnlock()
+
+	// Fallback to WhatsApp ID if mapping doesn't exist (shouldn't happen)
+	if !exists {
+		clientID = whatsappID
+		fmt.Printf("Warning: No UUID mapping found for client %s\n", whatsappID)
+	}
+
+	// Type assert to get actual message struct
+	msg, ok := message.(*events.Message)
+	if !ok {
+		return map[string]interface{}{
+			"clientId": clientID,
+			"message": map[string]interface{}{
+				"type": "unknown",
+			},
+			"timestamp": time.Now().Unix(),
+		}
+	}
+
+	// Extract sender - prioritize actual phone number for LID contacts
+	// For LID (Lidded Identity) contacts, SenderAlt contains the actual phone number
+	// while Chat.User and Sender.User contain the LID identifier
+	var fromUser string
+
+	// First try to get the actual phone number from SenderAlt
+	if msg.Info.SenderAlt.User != "" {
+		// SenderAlt contains the actual phone number for LID contacts
+		fromUser = msg.Info.SenderAlt.User
+	} else {
+		// SenderAlt is empty, try to lookup LID using whatsmeow's GetUserInfo
+		var potentialLIDs []types.JID
+
+		// Helper to check if a number looks like a LID (not a real phone)
+		isLIDNumber := func(num string) bool {
+			if len(num) < 14 {
+				return false
+			}
+			// Known LID patterns
+			if strings.HasPrefix(num, "100") || strings.HasPrefix(num, "101") || strings.HasPrefix(num, "102") {
+				return true
+			}
+			// Too long for any real phone number
+			if len(num) >= 16 {
+				return true
+			}
+			// Country-specific checks
+			if strings.HasPrefix(num, "1") && len(num) > 11 {
+				return true // US/Canada max 11 digits
+			}
+			if strings.HasPrefix(num, "62") && len(num) > 14 {
+				return true // Indonesia max 14 digits
+			}
+			return false
+		}
+
+		// Collect potential LID JIDs - check both @lid suffix AND suspicious number patterns
+		if strings.Contains(msg.Info.Chat.String(), "@lid") {
+			potentialLIDs = append(potentialLIDs, msg.Info.Chat)
+		} else if isLIDNumber(msg.Info.Chat.User) {
+			// Number looks like LID even without @lid suffix
+			potentialLIDs = append(potentialLIDs, msg.Info.Chat)
+			fmt.Printf("[LID Detection] Chat %s looks like LID based on number pattern\n", msg.Info.Chat.String())
+		}
+		if strings.Contains(msg.Info.Sender.String(), "@lid") && msg.Info.Sender.String() != msg.Info.Chat.String() {
+			potentialLIDs = append(potentialLIDs, msg.Info.Sender)
+		} else if isLIDNumber(msg.Info.Sender.User) && msg.Info.Sender.String() != msg.Info.Chat.String() {
+			potentialLIDs = append(potentialLIDs, msg.Info.Sender)
+			fmt.Printf("[LID Detection] Sender %s looks like LID based on number pattern\n", msg.Info.Sender.String())
+		}
+
+		// Try to resolve LID to phone number using device store
+		// The device store should have persistent LID to phone number mappings
+		if len(potentialLIDs) > 0 {
+			for _, lidJID := range potentialLIDs {
+				// Method 1: Check if device store has this LID mapped using GetAltJID
+				if altJID, err := client.deviceStore.GetAltJID(context.Background(), lidJID); err == nil && altJID.User != "" {
+					fromUser = altJID.User
+					fmt.Printf("[LID Lookup] Found phone via DeviceStore.GetAltJID: %s -> %s\n", lidJID.String(), altJID.String())
+					break
+				}
+
+				// Method 2: Try ResolveContactQRLink to get contact info
+				if contactInfo, err := client.client.ResolveContactQRLink(context.Background(), lidJID.User); err == nil && contactInfo.JID.User != "" {
+					// Check if resolved JID is a phone number (not LID)
+					if !strings.Contains(contactInfo.JID.String(), "@lid") {
+						fromUser = contactInfo.JID.User
+						fmt.Printf("[LID Lookup] Found phone via ResolveContactQRLink: %s -> %s\n", lidJID.String(), fromUser)
+						// Store the mapping for future use
+						client.client.StoreLIDPNMapping(context.Background(), lidJID, contactInfo.JID)
+						break
+					}
+				}
+
+				// Method 3: Try GetUserInfo as fallback
+				userInfoMap, err := client.client.GetUserInfo(context.Background(), []types.JID{lidJID})
+				if err == nil {
+					if userInfo, exists := userInfoMap[lidJID]; exists {
+						// Check if VerifiedName has phone info or try to get from other fields
+						fmt.Printf("[LID Lookup] GetUserInfo result for %s: LID=%s, VerifiedName=%+v\n",
+							lidJID.String(), userInfo.LID.String(), userInfo.VerifiedName)
+						if userInfo.LID.User != "" && userInfo.LID.User != lidJID.User && !strings.Contains(userInfo.LID.String(), "@lid") {
+							fromUser = userInfo.LID.User
+							fmt.Printf("[LID Lookup] Found phone via GetUserInfo.LID: %s -> %s\n", lidJID.String(), fromUser)
+							break
+						}
+					}
+				}
+			}
+		}
+
+		// If still no phone number, fall back to original logic
+		if fromUser == "" {
+			if msg.Info.Chat.Server == types.DefaultUserServer {
+				// Individual chat - use Chat.User (the actual phone number or LID)
+				fromUser = msg.Info.Chat.User
+			} else if msg.Info.Chat.Server == types.GroupServer {
+				// Group chat - use Sender.User to identify who sent the message
+				fromUser = msg.Info.Sender.User
+			} else {
+				// For other cases (e.g., status@broadcast) - use Sender.User
+				fromUser = msg.Info.Sender.User
+			}
+		}
+	}
+
+	// Check if fromUser looks like an LID (not a valid phone number)
+	// LIDs are typically 14+ digit numbers that don't match phone patterns
+	isUnresolvedLID := false
+	if len(fromUser) >= 14 {
+		// Check if it starts with known LID patterns or is too long for any country
+		if strings.HasPrefix(fromUser, "100") || strings.HasPrefix(fromUser, "101") ||
+			strings.HasPrefix(fromUser, "102") || len(fromUser) >= 16 {
+			isUnresolvedLID = true
+		}
+		// Also check country-specific max lengths
+		if strings.HasPrefix(fromUser, "1") && len(fromUser) > 11 { // US/Canada max 11
+			isUnresolvedLID = true
+		}
+		if strings.HasPrefix(fromUser, "62") && len(fromUser) > 14 { // Indonesia max 14
+			isUnresolvedLID = true
+		}
+	}
+
+	// Debug logging to help diagnose issues
+	fmt.Printf("[Webhook Debug] Message from Chat=%s Sender=%s SenderAlt=%s Using=%s IsLID=%v\n",
+		msg.Info.Chat.String(), msg.Info.Sender.String(), msg.Info.SenderAlt.String(), fromUser, isUnresolvedLID)
+
+	messageData := map[string]interface{}{
+		"id":        msg.Info.ID,
+		"from":      fromUser,
+		"timestamp": msg.Info.Timestamp,
+		"pushName":  msg.Info.PushName,
+	}
+
+	// Include additional sender info for LID resolution on the receiving end
+	if isUnresolvedLID {
+		messageData["isLID"] = true
+		messageData["rawChat"] = msg.Info.Chat.String()
+		messageData["rawSender"] = msg.Info.Sender.String()
+		messageData["rawSenderAlt"] = msg.Info.SenderAlt.String()
+		fmt.Printf("[Webhook Warning] ⚠️ Unresolved LID detected: %s - SenderAlt was: %s\n", fromUser, msg.Info.SenderAlt.String())
+	}
+
+	// Determine message type and extract content
+	switch {
+	case msg.Message.GetConversation() != "":
+		// Text message
+		messageData["type"] = "text"
+		messageData["text"] = msg.Message.GetConversation()
+
+	case msg.Message.GetImageMessage() != nil:
+		// Image message
+		imgMsg := msg.Message.GetImageMessage()
+		messageData["type"] = "image"
+		messageData["caption"] = imgMsg.GetCaption()
+		messageData["mimeType"] = imgMsg.GetMimetype()
+		messageData["width"] = imgMsg.GetWidth()
+		messageData["height"] = imgMsg.GetHeight()
+		if imgMsg.GetFileLength() > 0 {
+			messageData["fileSize"] = imgMsg.GetFileLength()
+		}
+
+	case msg.Message.GetLiveLocationMessage() != nil:
+		// Live location message
+		locMsg := msg.Message.GetLiveLocationMessage()
+		messageData["type"] = "live_location"
+		messageData["latitude"] = locMsg.GetDegreesLatitude()
+		messageData["longitude"] = locMsg.GetDegreesLongitude()
+		messageData["accuracy"] = locMsg.GetAccuracyInMeters()
+		messageData["speed"] = locMsg.GetSpeedInMps()
+		messageData["bearing"] = locMsg.GetDegreesClockwiseFromMagneticNorth()
+		messageData["caption"] = locMsg.GetCaption()
+		fmt.Printf("[Location] Live location received: lat=%.6f, lng=%.6f, accuracy=%dm\n",
+			locMsg.GetDegreesLatitude(), locMsg.GetDegreesLongitude(), locMsg.GetAccuracyInMeters())
+
+	case msg.Message.GetLocationMessage() != nil:
+		// Static location message
+		locMsg := msg.Message.GetLocationMessage()
+		messageData["type"] = "location"
+		messageData["latitude"] = locMsg.GetDegreesLatitude()
+		messageData["longitude"] = locMsg.GetDegreesLongitude()
+		messageData["name"] = locMsg.GetName()
+		messageData["address"] = locMsg.GetAddress()
+		if locMsg.GetURL() != "" {
+			messageData["url"] = locMsg.GetURL()
+		}
+		fmt.Printf("[Location] Static location received: lat=%.6f, lng=%.6f, name=%s\n",
+			locMsg.GetDegreesLatitude(), locMsg.GetDegreesLongitude(), locMsg.GetName())
+
+	default:
+		// Other message types
+		messageData["type"] = "other"
+	}
+
+	// Add file access URL if media file was downloaded
+	if messageData["type"] != "text" {
+		client.mutex.RLock()
+		if _, exists := client.images[msg.Info.ID]; exists {
+			// Use clientID directly (it's already a UUID, no need to sanitize)
+			messageData["fileUrl"] = fmt.Sprintf("%s/files/%s/%s", baseURL, clientID, msg.Info.ID)
+		}
+		client.mutex.RUnlock()
+	}
+
+	return map[string]interface{}{
+		"clientId":  clientID,
+		"message":   messageData,
+		"timestamp": time.Now().Unix(),
+	}
+}
+
+func loadExistingClients(container *sqlstore.Container) error {
+	ctx := context.Background()
+	devices, err := container.GetAllDevices(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get existing devices: %w", err)
+	}
+
+	fmt.Printf("Found %d existing device(s) in database\n", len(devices))
+
+	for i, deviceStore := range devices {
+		fmt.Printf("Loading device %d/%d: ID=%v\n", i+1, len(devices), deviceStore.ID)
+		clientLog := waLog.Stdout("Client", "DEBUG", true)
+		client := whatsmeow.NewClient(deviceStore, clientLog)
+
+		waClient := &WhatsAppClient{
+			client:       client,
+			deviceStore:  deviceStore,
+			isConnected:  false,
+			messages:     make([]string, 0),
+			images:       make(map[string]string),
+			osName:       "", // Empty for existing clients
+			typingTimers: make(map[string]*time.Timer),
+			typingActive: make(map[string]bool),
+		}
+
+		client.AddEventHandler(manager.eventHandler(waClient))
+
+		// Use UUID from mapping if available, otherwise generate deterministic UUID from WhatsApp ID
+		whatsappID := deviceStore.ID.String()
+		manager.mutex.Lock()
+		clientID, exists := manager.clientIDMap[whatsappID]
+		if !exists {
+			// Generate a new UUID for existing clients that don't have a mapping yet
+			clientUUID := uuid.New()
+			clientID = clientUUID.String()
+			manager.clientIDMap[whatsappID] = clientID
+			fmt.Printf("Generated new UUID for existing client %s: %s\n", whatsappID, clientID)
+			// Save the new mapping
+			manager.mutex.Unlock()
+			if err := manager.saveClientMappings(); err != nil {
+				fmt.Printf("Warning: Failed to save client mappings: %v\n", err)
+			}
+			manager.mutex.Lock()
+		} else {
+			fmt.Printf("Using existing UUID for client %s: %s\n", whatsappID, clientID)
+		}
+		manager.clients[clientID] = waClient
+		manager.mutex.Unlock()
+
+		// Auto-connect if device has existing session
+		if client.Store.ID != nil {
+			fmt.Printf("Attempting to auto-reconnect client %s (Device ID: %s)\n", clientID, client.Store.ID.String())
+			localClientID := clientID // Capture for closure
+			go func() {
+				err := client.Connect()
+				if err != nil {
+					fmt.Printf("Failed to reconnect client %s: %v\n", localClientID, err)
+				} else {
+					fmt.Printf("Successfully reconnected client %s\n", localClientID)
+				}
+			}()
+		} else {
+			fmt.Printf("Skipping auto-connect for client %s (no device ID)\n", clientID)
+		}
+	}
+
+	fmt.Printf("Finished loading %d existing client(s)\n", len(devices))
+	return nil
+}
+
+func main() {
+	fmt.Println("Starting Aimeow WhatsApp API Server...")
+
+	// Initialize base URL from environment variable
+	baseURL = os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:7030"
+	}
+	fmt.Printf("Base URL: %s\n", baseURL)
+
+	// Initialize database
+	dbLog := waLog.Stdout("Database", "DEBUG", true)
+	ctx := context.Background()
+
+	// Create files directory if it does not exist
+	filesDir := "/app/files"
+	if err := os.MkdirAll(filesDir, 0755); err != nil {
+		fmt.Printf("Warning: Failed to create files directory: %v\n", err)
+		// Try alternative directory
+		filesDir = "/tmp/files"
+		if err := os.MkdirAll(filesDir, 0755); err != nil {
+			panic(fmt.Errorf("failed to create alternative files directory: %w", err))
+		}
+		fmt.Printf("Using alternative files directory: %s\n", filesDir)
+	}
+
+	// Create database path
+	dbPath := filepath.Join(filesDir, "aimeow.db")
+	fmt.Printf("Database path: %s\n", dbPath)
+
+	// Check if database file exists
+	if _, err := os.Stat(dbPath); err == nil {
+		fmt.Printf("Database file already exists: %s\n", dbPath)
+	} else {
+		// Database doesn't exist, test if we can create it
+		dbFile, err := os.Create(dbPath)
+		if err != nil {
+			fmt.Printf("Warning: Cannot create database file: %v\n", err)
+			// Try alternative location in /tmp
+			dbPath = "/tmp/aimeow.db"
+			fmt.Printf("Using fallback database path: %s\n", dbPath)
+		} else {
+			dbFile.Close()
+			os.Remove(dbPath) // Remove empty test file, let sqlstore create it properly
+			fmt.Printf("Database file creation test successful\n")
+		}
+	}
+
+	fmt.Printf("Initializing database container at: %s\n", dbPath)
+	container, err := sqlstore.New(ctx, "sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", dbPath), dbLog)
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize database container: %w", err))
+	}
+	fmt.Printf("Database container initialized successfully\n")
+
+	// Initialize client manager with config path
+	configPath := filepath.Join(filesDir, "config.json")
+	fmt.Printf("Configuration file path: %s\n", configPath)
+	manager = NewClientManager(container, configPath)
+
+	// Load existing clients
+	fmt.Printf("Loading existing clients...\n")
+	err = loadExistingClients(container)
+	if err != nil {
+		fmt.Printf("Failed to load existing clients: %v\n", err)
+	} else {
+		fmt.Printf("Existing clients loaded successfully\n")
+	}
+
+	// Setup Gin router
+	fmt.Printf("Setting up Gin router...\n")
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.Default()
+
+	// Configure CORS to allow all origins
+	config := cors.DefaultConfig()
+	config.AllowAllOrigins = true
+	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
+	r.Use(cors.New(config))
+	fmt.Printf("CORS configured\n")
+
+	// API routes
+	v1 := r.Group("/api/v1")
+	{
+		clients := v1.Group("/clients")
+		{
+			clients.POST("/new", createClient)
+			clients.GET("", getAllClients)
+			clients.GET("/:id", getClient)
+			clients.GET("/:id/qr", getQRCode)
+			clients.GET("/:id/messages", getMessages)
+			clients.DELETE("/:id", deleteClient)
+
+			// Send message endpoints
+			clients.POST("/:id/send-message", sendMessage)
+			clients.POST("/:id/send-image", sendImage)
+			clients.POST("/:id/send-images", sendMultipleImages)
+			clients.POST("/:id/send-document", sendDocument)
+			clients.POST("/:id/send-document-base64", sendDocumentBase64)
+			clients.POST("/:id/delete-message", deleteMessage)
+
+			// Contact info endpoints
+			clients.GET("/:id/profile-picture/:phone", getProfilePicture)
+			clients.GET("/:id/check-whatsapp/:phone", checkWhatsApp)
+		}
+
+		// Config endpoints
+		v1.POST("/config", setConfig)
+		v1.GET("/config", getConfig)
+
+		// QR code HTML endpoint
+		r.GET("/qr", getQRCodeHTML)
+
+		// Serve client files
+		r.GET("/files/:client_id/:file_id", getClientFile)
+	}
+
+	// Health check
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	fmt.Printf("Health check endpoint configured\n")
+
+	// Fallback health check at root
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Aimeow WhatsApp API is running"})
+	})
+	fmt.Printf("Root health check endpoint configured\n")
+
+	// Swagger documentation
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	fmt.Printf("Swagger documentation configured\n")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "7030"
+	}
+	fmt.Printf("Aimeow WhatsApp API Server starting on :%s\n", port)
+	fmt.Printf("Swagger UI: %s/swagger/index.html\n", baseURL)
+	fmt.Printf("API Health: %s/health\n", baseURL)
+	fmt.Printf("Files: %s/files\n", baseURL)
+
+	fmt.Printf("Starting HTTP server on port %s...\n", port)
+	r.Run(":" + port)
+}

@@ -47,6 +47,13 @@ import {
   handleDeleteProject,
 } from "./projects-handler";
 import {
+  handleGetWhatsAppClient,
+  handleCreateWhatsAppClient,
+  handleDeleteWhatsAppClient,
+  handleGetWhatsAppQRCode,
+  handleWhatsAppWebhook,
+} from "./whatsapp-handler";
+import {
   handleGetExtensions,
   handleGetExtension,
   handleCreateExtension,
@@ -460,6 +467,27 @@ export class WebSocketServer {
           const projectId = extensionToggleMatch[1];
           const extensionId = extensionToggleMatch[2];
           return handleToggleExtension(req, projectId, extensionId);
+        }
+
+        // WhatsApp API endpoints
+        if (pathname === "/api/whatsapp/client" && req.method === "GET") {
+          return handleGetWhatsAppClient(req);
+        }
+
+        if (pathname === "/api/whatsapp/client" && req.method === "POST") {
+          return handleCreateWhatsAppClient(req);
+        }
+
+        if (pathname === "/api/whatsapp/client" && req.method === "DELETE") {
+          return handleDeleteWhatsAppClient(req);
+        }
+
+        if (pathname === "/api/whatsapp/qr" && req.method === "GET") {
+          return handleGetWhatsAppQRCode(req);
+        }
+
+        if (pathname === "/api/whatsapp/webhook" && req.method === "POST") {
+          return handleWhatsAppWebhook(req);
         }
 
         // Embed Authentication endpoint
