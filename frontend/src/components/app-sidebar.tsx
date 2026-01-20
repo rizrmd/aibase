@@ -32,6 +32,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const currentUser = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const isAdmin = currentUser?.role === "admin"
+  const appName = import.meta.env.APP_NAME || "AI Base"
 
   // Generate the URL for the current project
   const getUrl = (path: string) => {
@@ -100,7 +101,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Command className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">AI Base</span>
+                  <span className="truncate font-medium">{appName}</span>
                   <span className="truncate text-xs">{currentProject?.name || "Select Project"}</span>
                 </div>
               </a>

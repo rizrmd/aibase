@@ -29,6 +29,7 @@ interface AppRouterProps {
 
 export function AppRouter({ wsUrl }: AppRouterProps) {
   const location = useLocation();
+  const appName = import.meta.env.APP_NAME || "AI Base";
 
   const { currentProject } = useProjectStore();
   const { loadConversations } = useConversationStore();
@@ -77,7 +78,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
         {shouldShowSidebar && (
           <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
             <SidebarTrigger />
-            <span className="font-semibold">{currentProject?.name || "AI Base"}</span>
+            <span className="font-semibold">{currentProject?.name || appName}</span>
           </header>
         )}
 
