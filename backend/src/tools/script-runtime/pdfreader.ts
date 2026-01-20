@@ -157,36 +157,29 @@ export function createPDFReaderFunction(cwd?: string) {
         dataBuffer = options.buffer!;
       }
 
-      // Dynamically import pdf-parse to avoid loading pdfjs-dist at startup
-      const { PDFParse } = await import("pdf-parse");
+      // Use unpdf to extract text from PDF
+      const { extractText, getDocumentProxy } = await import("unpdf");
 
-      // Create PDFParse instance with the buffer data
-      const pdfParser = new PDFParse({
-        data: dataBuffer,
-        password: password,
-      });
+      // Convert Buffer to Uint8Array
+      const uint8Array = new Uint8Array(dataBuffer);
 
-      // Parse options for text extraction
-      const parseParams: any = {};
+      // Load PDF
+      const pdf = await getDocumentProxy(uint8Array);
 
-      if (options.maxPages && options.maxPages > 0) {
-        parseParams.first = options.maxPages;
-      }
+      // Extract text (merge all pages)
+      const { text, totalPages } = await extractText(pdf, { mergePages: true });
 
-      // Extract text from the PDF
-      const textResult = await pdfParser.getText(parseParams);
-
-      // Get document info
-      const infoResult = await pdfParser.getInfo();
-
-      // Clean up
-      await pdfParser.destroy();
+      // Clean up whitespace
+      const cleanedText = text
+        .replace(/\s+/g, ' ')
+        .replace(/\n\s*\n/g, '\n\n')
+        .trim();
 
       return {
-        text: textResult.text,
-        totalPages: textResult.total,
-        info: infoResult.info,
-        version: undefined, // pdf-parse v2 doesn't expose version in the same way
+        text: cleanedText,
+        totalPages: totalPages,
+        info: undefined,
+        version: undefined,
       };
     } catch (error: any) {
       throw new Error(`PDF reading failed: ${error.message}`);

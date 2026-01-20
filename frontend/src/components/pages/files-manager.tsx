@@ -9,6 +9,14 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/time-utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { useConversationStore } from "@/stores/conversation-store";
 import { FileIcon, Trash2, Download, MessageSquare, AlertCircle } from "lucide-react";
@@ -74,6 +82,7 @@ export function FilesManagerPage() {
   const { clearMessages } = useChatStore();
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingFile, setDeletingFile] = useState<FileInfo | null>(null);
 
   useEffect(() => {
     // Load conversations and files when component mounts
@@ -128,30 +137,24 @@ export function FilesManagerPage() {
     }
   };
 
-  const handleDeleteFile = async (
-    e: React.MouseEvent,
-    file: FileInfo
-  ) => {
+  const handleDeleteFile = (e: React.MouseEvent, file: FileInfo) => {
     e.stopPropagation(); // Prevent card click
+    setDeletingFile(file);
+  };
 
-    if (
-      !confirm(
-        `Are you sure you want to delete "${file.name}"? This action cannot be undone.`
-      )
-    ) {
-      return;
-    }
-
-    if (!projectId) return;
+  const confirmDelete = async () => {
+    if (!deletingFile || !projectId) return;
 
     try {
-      await deleteFile(projectId, file.convId, file.name);
+      await deleteFile(projectId, deletingFile.convId, deletingFile.name);
       toast.success("File deleted successfully");
       // Reload files
       loadFiles(projectId);
     } catch (error) {
       console.error("Error deleting file:", error);
       toast.error("Failed to delete file");
+    } finally {
+      setDeletingFile(null);
     }
   };
 
@@ -275,6 +278,26 @@ export function FilesManagerPage() {
             </div>
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={!!deletingFile} onOpenChange={(open) => !open && setDeletingFile(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete File</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete "{deletingFile?.name}"? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeletingFile(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </FilesErrorBoundary>
   );

@@ -26,8 +26,7 @@ All file paths are relative to the conversation's files directory.
 **Supported File Types:**
 - Plain text files (.txt, .md, .json, .csv, etc.)
 - Word documents (.docx) - text is automatically extracted
-- PDF documents (.pdf) - NOT SUPPORTED (Bun runtime limitation)
-  Please convert PDFs to .txt or .docx format
+- PDF documents (.pdf) - text is automatically extracted using unpdf
 - Other binary formats may not be readable
 
 ### Examples:

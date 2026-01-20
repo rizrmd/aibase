@@ -705,8 +705,13 @@ export function useWebSocketHandlers({
               role: "user",
               content: msg.content || "",
               createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+              // Convert _attachments from backend to attachments for frontend
+              ...((msg as any)._attachments && { attachments: (msg as any)._attachments }),
+              // Preserve attachments if present (for backward compatibility)
+              ...(msg.attachments && { attachments: msg.attachments }),
+              ...(msg.experimental_attachments && { experimental_attachments: msg.experimental_attachments }),
             });
-            console.log(`[History] Added user message at index ${i}`);
+            console.log(`[History] Added user message at index ${i} with ${(msg as any)._attachments?.length || msg.attachments?.length || 0} attachments`);
             i++;
             continue;
           }

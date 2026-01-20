@@ -5,6 +5,7 @@
 
 import * as fs from 'fs/promises';
 import mammoth from 'mammoth';
+import { extractText, getDocumentProxy } from 'unpdf';
 
 /**
  * Extract text from a .docx file
@@ -23,19 +24,35 @@ export async function extractTextFromDocx(filePath: string): Promise<string> {
 
 /**
  * Extract text from a .pdf file
- * NOTE: PDF reading is not currently supported in Bun runtime.
- * PDF libraries like pdf-parse and pdfjs-dist require Node.js or browser APIs
- * that are not available in Bun. Users should convert PDFs to .txt or .docx format.
+ * Uses unpdf (Bun-compatible PDF.js wrapper) for text extraction
  *
  * @param filePath - Path to the .pdf file
- * @returns Error message indicating PDF is not supported
+ * @returns Extracted text content
  */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  throw new Error(
-    'PDF files are not currently supported. Please convert the PDF to a .txt or .docx file, ' +
-    'or copy-paste the text content directly. This is a known limitation due to PDF processing libraries ' +
-    'requiring Node.js/browser APIs that are incompatible with the Bun runtime.'
-  );
+  try {
+    // Read the PDF file as buffer
+    const buffer = await fs.readFile(filePath);
+
+    // Convert buffer to Uint8Array
+    const uint8Array = new Uint8Array(buffer);
+
+    // Load PDF using unpdf
+    const pdf = await getDocumentProxy(uint8Array);
+
+    // Extract text from all pages, merged into single string
+    const { text } = await extractText(pdf, { mergePages: true });
+
+    // Clean up excessive whitespace
+    const cleanedText = text
+      .replace(/\s+/g, ' ')  // Multiple spaces to single space
+      .replace(/\n\s*\n/g, '\n\n')  // Multiple newlines to double newline
+      .trim();
+
+    return cleanedText;
+  } catch (error: any) {
+    throw new Error(`Failed to extract text from PDF file: ${error.message}`);
+  }
 }
 
 /**

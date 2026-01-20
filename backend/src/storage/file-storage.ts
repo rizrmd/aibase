@@ -243,8 +243,10 @@ ${frontmatter}
    * Get a specific file
    */
   async getFile(convId: string, fileName: string, projectId: string): Promise<Buffer> {
+    // Sanitize filename and decode URL-encoded characters (e.g., %20 -> space)
     const sanitizedFileName = path.basename(fileName);
-    const filePath = path.join(this.getConvDir(convId, projectId), sanitizedFileName);
+    const decodedFileName = decodeURIComponent(sanitizedFileName);
+    const filePath = path.join(this.getConvDir(convId, projectId), decodedFileName);
 
     return await fs.readFile(filePath);
   }
@@ -253,13 +255,15 @@ ${frontmatter}
    * Delete a file
    */
   async deleteFile(convId: string, fileName: string, projectId: string): Promise<void> {
+    // Sanitize filename and decode URL-encoded characters (e.g., %20 -> space)
     const sanitizedFileName = path.basename(fileName);
-    const filePath = path.join(this.getConvDir(convId, projectId), sanitizedFileName);
+    const decodedFileName = decodeURIComponent(sanitizedFileName);
+    const filePath = path.join(this.getConvDir(convId, projectId), decodedFileName);
 
     await fs.unlink(filePath);
 
     // Also delete metadata file if it exists
-    const metaPath = this.getMetaFilePath(convId, sanitizedFileName, projectId);
+    const metaPath = this.getMetaFilePath(convId, decodedFileName, projectId);
     try {
       await fs.unlink(metaPath);
     } catch (error: any) {
