@@ -6,8 +6,12 @@
 import * as fs from 'fs/promises';
 import mammoth from 'mammoth';
 import { extractText, getDocumentProxy } from 'unpdf';
-import * as XLSX from 'xlsx';
-import * as pptxParser from 'node-pptx-parser';
+import { createRequire } from 'module';
+
+// Use createRequire to load CommonJS modules in ESM
+const require = createRequire(import.meta.url);
+const XLSX = require('xlsx');
+const pptxParser = require('node-pptx-parser');
 
 /**
  * Extract text from a .docx file
