@@ -73,6 +73,7 @@ func (o *Orchestrator) startProcess(proc *Process) error {
 
 	// Set environment variables
 	if len(proc.Env) > 0 {
+		fmt.Printf("  Setting %d env vars for %s: %v\n", len(proc.Env), proc.Name, proc.Env)
 		cmd.Env = append(os.Environ(), proc.Env...)
 	}
 

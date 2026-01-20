@@ -17,9 +17,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { useConversationStore } from "@/stores/conversation-store";
-import { FileIcon, Trash2, Download, MessageSquare, AlertCircle, Edit3, CheckSquare, Square, Search, ExternalLink } from "lucide-react";
+import { FileIcon, Trash2, Download, MessageSquare, AlertCircle, Edit3, CheckSquare, Square, Search, ExternalLink, MoreVertical } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -310,7 +316,7 @@ export function FilesManagerPage() {
 
   return (
     <FilesErrorBoundary>
-      <div className="flex h-screen flex-col gap-4 px-4 pt-[60px] md:px-6 pb-4">
+      <div className="flex h-screen flex-col gap-4 px-4 md:px-6 pb-4">
 
         {/* Bulk Actions Header */}
         {files.length > 0 && (
@@ -399,75 +405,76 @@ export function FilesManagerPage() {
                   return (
                     <Card
                       key={`${file.convId}-${file.name}-${index}`}
-                      className="cursor-pointer transition-all hover:shadow-lg group p-4 flex flex-col gap-3"
+                      className="cursor-pointer transition-all hover:shadow-lg group relative p-4 flex flex-col gap-3"
                       onClick={() => handleFileClick(file)}
                     >
+                      {/* Selection checkbox - appears on hover */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => toggleFileSelection(e, file)}
+                        className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur"
+                        title="Select file"
+                      >
+                        {selectedFiles.has(`${file.convId}-${file.name}`) ? (
+                          <CheckSquare className="size-4 text-primary" />
+                        ) : (
+                          <Square className="size-4" />
+                        )}
+                      </Button>
+
+                      {/* Actions dropdown */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownloadFile(e, file); }}>
+                            <Download className="size-4 mr-2" />
+                            Download
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleRenameFile(e, file); }}>
+                            <Edit3 className="size-4 mr-2" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleGoToConversation(e, file); }}>
+                            <ExternalLink className="size-4 mr-2" />
+                            Go to Conversation
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteFile(e, file); }} className="text-destructive">
+                            <Trash2 className="size-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
                       <CardHeader className="min-h-0 h-auto p-0 flex-1">
-                        <div className="flex flex-col gap-3">
-                          <div className="flex items-start gap-2 w-full">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => toggleFileSelection(e, file)}
-                              className="flex-shrink-0"
-                              title="Select file"
-                            >
-                              {selectedFiles.has(`${file.convId}-${file.name}`) ? (
-                                <CheckSquare className="size-4" />
-                              ) : (
-                                <Square className="size-4" />
-                              )}
-                            </Button>
-                            <div className="text-4xl flex-1 flex items-center justify-center min-h-24 bg-muted rounded-lg">
-                              {getFileIcon(file.name)}
-                            </div>
-                            <div className="flex-1 min-w-0 w-full">
-                              <CardTitle className="text-sm line-clamp-2 break-all">
-                                {file.name}
-                              </CardTitle>
-                              <CardDescription className="flex flex-col gap-1 mt-1 text-xs">
-                                <span>{formatFileSize(file.size)}</span>
-                                <span>{formatRelativeTime(file.uploadedAt)}</span>
-                                <span className="flex items-center gap-1">
-                                  <MessageSquare className="size-3" />
-                                  {getConversationTitle(file.convId)}
-                                </span>
-                              </CardDescription>
-                            </div>
+                        <div className="flex flex-col gap-3 items-center">
+                          {/* Preview icon */}
+                          <div className="text-5xl flex items-center justify-center min-h-32 w-full bg-muted rounded-lg">
+                            {getFileIcon(file.name)}
                           </div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => handleDownloadFile(e, file)}
-                              title="Download file"
-                            >
-                              <Download className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => handleRenameFile(e, file)}
-                              title="Rename file"
-                            >
-                              <Edit3 className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => handleGoToConversation(e, file)}
-                              title="Go to conversation"
-                            >
-                              <ExternalLink className="size-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => handleDeleteFile(e, file)}
-                              title="Delete file"
-                            >
-                              <Trash2 className="size-4 text-destructive" />
-                            </Button>
+
+                          {/* File name */}
+                          <div className="w-full text-center">
+                            <CardTitle className="text-sm line-clamp-2 break-all">
+                              {file.name}
+                            </CardTitle>
+                            <CardDescription className="flex flex-col gap-1 mt-1 text-xs">
+                              <span>{formatFileSize(file.size)}</span>
+                              <span>{formatRelativeTime(file.uploadedAt)}</span>
+                              <span className="flex items-center gap-1 justify-center">
+                                <MessageSquare className="size-3" />
+                                {getConversationTitle(file.convId)}
+                              </span>
+                            </CardDescription>
                           </div>
                         </div>
                       </CardHeader>
