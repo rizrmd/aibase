@@ -1,14 +1,12 @@
 "use client";
 
-import React from "react";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { formatRelativeTime } from "@/lib/time-utils";
 import {
   Dialog,
   DialogContent,
@@ -23,24 +21,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import React from "react";
 
+import { FilePreviewDialog } from "@/components/ui/file-preview-dialog";
+import { Input } from "@/components/ui/input";
+import { useConvId } from "@/lib/conv-id";
+import {
+  deleteFile,
+  fetchProjectFiles,
+  formatFileSize,
+  getFileIcon,
+  renameFile,
+  type FileInfo,
+} from "@/lib/files-api";
+import { useChatStore } from "@/stores/chat-store";
 import { useConversationStore } from "@/stores/conversation-store";
-import { FileIcon, Trash2, Download, MessageSquare, AlertCircle, Edit3, CheckSquare, Square, Search, ExternalLink, MoreVertical } from "lucide-react";
+import { AlertCircle, CheckSquare, Download, Edit3, ExternalLink, FileIcon, MoreVertical, Search, Square, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  fetchProjectFiles,
-  deleteFile,
-  renameFile,
-  formatFileSize,
-  getFileIcon,
-  type FileInfo,
-} from "@/lib/files-api";
-import { useConvId } from "@/lib/conv-id";
-import { useChatStore } from "@/stores/chat-store";
-import { Input } from "@/components/ui/input";
-import { FilePreviewDialog } from "@/components/ui/file-preview-dialog";
 
 // Error Boundary component to catch rendering errors
 class FilesErrorBoundary extends React.Component<
@@ -457,23 +456,27 @@ export function FilesManagerPage() {
 
                       <CardHeader className="min-h-0 h-auto p-0 flex-1">
                         <div className="flex flex-col gap-3 items-center">
-                          {/* Preview icon */}
-                          <div className="text-5xl flex items-center justify-center min-h-32 w-full bg-muted rounded-lg">
-                            {getFileIcon(file.name)}
-                          </div>
+                          {/* Preview - actual image thumbnail or emoji icon */}
+                          {file.thumbnailUrl ? (
+                            <img
+                              src={file.thumbnailUrl}
+                              alt={file.name}
+                              className="w-full h-32 object-cover rounded-lg bg-muted"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="text-5xl flex items-center justify-center min-h-32 w-full bg-muted rounded-lg">
+                              {getFileIcon(file.name)}
+                            </div>
+                          )}
 
-                          {/* File name */}
+                          {/* File name and size only */}
                           <div className="w-full text-center">
                             <CardTitle className="text-sm line-clamp-2 break-all">
                               {file.name}
                             </CardTitle>
-                            <CardDescription className="flex flex-col gap-1 mt-1 text-xs">
-                              <span>{formatFileSize(file.size)}</span>
-                              <span>{formatRelativeTime(file.uploadedAt)}</span>
-                              <span className="flex items-center gap-1 justify-center">
-                                <MessageSquare className="size-3" />
-                                {getConversationTitle(file.convId)}
-                              </span>
+                            <CardDescription className="text-xs">
+                              {formatFileSize(file.size)}
                             </CardDescription>
                           </div>
                         </div>

@@ -177,6 +177,7 @@ func main() {
 		"CALLBACK_URL=http://localhost:" + backendPort + "/api/whatsapp/webhook",
 		"DATA_DIR=.", // Use current working directory (data/whatsapp) for data storage
 	}
+	fmt.Printf("[DEBUG] Adding whatsapp process with %d env vars: %v\n", len(whatsappEnv), whatsappEnv)
 	orch.AddProcess("whatsapp", whatsappDataDir, aimeowBinary, []string{}, whatsappEnv, whatsappLogsPath)
 
 	// Start all processes

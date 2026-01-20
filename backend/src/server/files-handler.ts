@@ -21,6 +21,7 @@ export interface FileWithConversation {
   convId: string;
   conversationTitle?: string;
   url: string;
+  thumbnailUrl?: string;
   scope: FileScope;
 }
 
@@ -74,6 +75,7 @@ export async function handleGetProjectFiles(req: Request): Promise<Response> {
         uploadedAt: file.uploadedAt,
         convId: convId,
         url: `/api/files/${projectId}/${convId}/${file.name}`,
+        thumbnailUrl: file.thumbnailUrl,
         scope: file.scope,
       }));
     });
@@ -131,6 +133,7 @@ export async function handleGetConversationFiles(
       uploadedAt: file.uploadedAt,
       convId,
       url: `/api/files/${projectId}/${convId}/${file.name}`,
+      thumbnailUrl: file.thumbnailUrl,
       scope: file.scope,
     }));
 

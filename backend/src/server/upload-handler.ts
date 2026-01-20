@@ -5,6 +5,8 @@
 
 import { FileStorage, FileScope } from '../storage/file-storage';
 import { createLogger } from '../utils/logger';
+import * as sharp from 'sharp';
+import * as path from 'path';
 
 const logger = createLogger('Upload');
 
@@ -14,11 +16,72 @@ export interface UploadedFileInfo {
   size: number;
   type: string;
   url: string;
+  thumbnailUrl?: string;
   uploadedAt: number;
   scope: FileScope;
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const THUMBNAIL_SIZE = 300; // pixels for the longest side
+
+/**
+ * Check if a file is an image based on its MIME type or extension
+ */
+function isImageFile(fileName: string, mimeType: string): boolean {
+  const imageMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp', 'image/tiff'];
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 'tif'];
+
+  if (imageMimeTypes.includes(mimeType)) return true;
+
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (ext && imageExtensions.includes(ext)) return true;
+
+  return false;
+}
+
+/**
+ * Generate a thumbnail for an image
+ */
+async function generateThumbnail(
+  imageBuffer: Buffer,
+  fileName: string,
+  convId: string,
+  projectId: string
+): Promise<string | null> {
+  try {
+    // Create sharp instance from buffer
+    const image = sharp(imageBuffer);
+
+    // Get image metadata
+    const metadata = await image.metadata();
+
+    // Don't generate thumbnail if image is already smaller than thumbnail size
+    if (metadata.width && metadata.width <= THUMBNAIL_SIZE && metadata.height && metadata.height <= THUMBNAIL_SIZE) {
+      return null;
+    }
+
+    // Generate thumbnail filename
+    const ext = path.extname(fileName);
+    const baseName = path.basename(fileName, ext);
+    const thumbnailFileName = `${baseName}.thumb${ext}`;
+    const thumbnailPath = path.join(process.cwd(), 'data', projectId, convId, 'files', thumbnailFileName);
+
+    // Resize and save thumbnail
+    await image
+      .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .toFile(thumbnailPath);
+
+    logger.info({ thumbnailPath }, 'Thumbnail generated');
+
+    return `/api/files/${projectId}/${convId}/${thumbnailFileName}`;
+  } catch (error) {
+    logger.error({ error, fileName }, 'Failed to generate thumbnail');
+    return null;
+  }
+}
 
 /**
  * Handle file upload via HTTP POST
@@ -89,14 +152,21 @@ export async function handleFileUpload(req: Request): Promise<Response> {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
-      // Save file with scope
+      // Generate thumbnail for images BEFORE saving file (so we have the URL)
+      let thumbnailUrl: string | undefined;
+      if (isImageFile(file.name, file.type)) {
+        thumbnailUrl = await generateThumbnail(buffer, file.name, convId, projectId) || undefined;
+      }
+
+      // Save file with scope and thumbnail URL
       const storedFile = await fileStorage.saveFile(
         convId,
         file.name,
         buffer,
         file.type,
         projectId,
-        scope
+        scope,
+        thumbnailUrl
       );
 
       // Generate unique ID for the file reference
@@ -108,6 +178,7 @@ export async function handleFileUpload(req: Request): Promise<Response> {
         size: storedFile.size,
         type: storedFile.type,
         url: `/api/files/${projectId}/${convId}/${storedFile.name}`,
+        thumbnailUrl: storedFile.thumbnailUrl,
         uploadedAt: storedFile.uploadedAt,
         scope: storedFile.scope,
       });

@@ -15,6 +15,7 @@ export interface StoredFile {
   path: string;
   uploadedAt: number;
   scope: FileScope;
+  thumbnailUrl?: string;
 }
 
 export class FileStorage {
@@ -63,12 +64,13 @@ export class FileStorage {
     convId: string,
     fileName: string,
     projectId: string,
-    meta: { scope: FileScope; uploadedAt?: number; size?: number; type?: string }
+    meta: { scope: FileScope; uploadedAt?: number; size?: number; type?: string; thumbnailUrl?: string }
   ): Promise<void> {
     const metaPath = this.getMetaFilePath(convId, fileName, projectId);
 
     // Build frontmatter content
     const frontmatter = Object.entries(meta)
+      .filter(([key, value]) => value !== undefined) // Only include defined values
       .map(([key, value]) => `${key}: ${typeof value === 'string' ? `"${value}"` : value}`)
       .join('\n');
 
@@ -87,7 +89,7 @@ ${frontmatter}
     convId: string,
     fileName: string,
     projectId: string
-  ): Promise<{ scope: FileScope; uploadedAt?: number; size?: number; type?: string }> {
+  ): Promise<{ scope: FileScope; uploadedAt?: number; size?: number; type?: string; thumbnailUrl?: string }> {
     const metaPath = this.getMetaFilePath(convId, fileName, projectId);
 
     try {
@@ -144,7 +146,8 @@ ${frontmatter}
     fileBuffer: Buffer,
     fileType: string,
     projectId: string,
-    scope: FileScope = 'user'
+    scope: FileScope = 'user',
+    thumbnailUrl?: string
   ): Promise<StoredFile> {
     await this.ensureConvDir(convId, projectId);
 
@@ -177,7 +180,8 @@ ${frontmatter}
       scope,
       uploadedAt,
       size: stats.size,
-      type: fileType
+      type: fileType,
+      thumbnailUrl
     });
 
     return {
@@ -187,6 +191,7 @@ ${frontmatter}
       path: filePath,
       uploadedAt,
       scope,
+      thumbnailUrl
     };
   }
 
@@ -225,6 +230,7 @@ ${frontmatter}
             path: filePath,
             uploadedAt: stats.mtimeMs,
             scope: meta.scope,
+            thumbnailUrl: meta.thumbnailUrl,
           });
         }
       }

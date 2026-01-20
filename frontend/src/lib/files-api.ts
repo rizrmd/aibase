@@ -16,6 +16,7 @@ export interface FileInfo {
   convId: string;
   conversationTitle?: string;
   url: string;
+  thumbnailUrl?: string;
 }
 
 /**
