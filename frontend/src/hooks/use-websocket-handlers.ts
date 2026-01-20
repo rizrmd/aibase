@@ -522,12 +522,42 @@ export function useWebSocketHandlers({
 
             const mergedToolInvocations = Array.from(toolInvocationsMap.values());
 
+            // Update parts array: replace text part with fullText from backend
+            // This ensures the message displays the complete text instead of streaming chunks
+            let updatedParts = existingMessage.parts;
+            if (existingMessage.parts && existingMessage.parts.length > 0) {
+              // Check if there's a text part (should be the last one or first one)
+              const textPartIndex = existingMessage.parts.findIndex(p => p.type === "text");
+              if (textPartIndex !== -1) {
+                // Update the text part with fullText from backend
+                updatedParts = [...existingMessage.parts];
+                const textPart = existingMessage.parts[textPartIndex];
+                if (textPart.type === "text") {
+                  updatedParts[textPartIndex] = {
+                    ...textPart,
+                    text: fullText,
+                  };
+                  console.log(
+                    `[Complete] Updated text part at index ${textPartIndex} from ${textPart.text.length} chars to ${fullText.length} chars`
+                  );
+                }
+              } else {
+                // No text part found, add one at the beginning
+                updatedParts = [
+                  { type: "text", text: fullText },
+                  ...existingMessage.parts,
+                ];
+                console.log(`[Complete] Added new text part with ${fullText.length} chars`);
+              }
+            }
+
             // Update message AND remove thinking indicator in one atomic render
             return prevMessages.map((msg, idx) => {
               if (idx === messageIndex) {
                 return {
                   ...msg,
                   content: fullText,
+                  ...(updatedParts && { parts: updatedParts }),
                   completionTime: completionTimeSeconds,
                   ...(data.thinkingDuration !== undefined && { thinkingDuration: data.thinkingDuration }),
                   ...(data.tokenUsage && { tokenUsage: data.tokenUsage }),
@@ -551,10 +581,25 @@ export function useWebSocketHandlers({
             currentToolInvocationsRef.current.size > 0
               ? Array.from(currentToolInvocationsRef.current.values())
               : undefined;
+
+          // Create parts array for new message
+          // Start with text part, then add tool invocations if any
+          let parts: any[] | undefined = [{ type: "text", text: fullText }];
+          if (toolInvocations && toolInvocations.length > 0) {
+            parts = [
+              { type: "text", text: fullText },
+              ...toolInvocations.map(inv => ({
+                type: "tool-invocation",
+                toolInvocation: inv,
+              })),
+            ];
+          }
+
           const newMessage: Message = {
             id: data.messageId,
             role: "assistant",
             content: fullText,
+            ...(parts && { parts }),
             createdAt: new Date(),
             completionTime: completionTimeSeconds,
             ...(data.thinkingDuration !== undefined && { thinkingDuration: data.thinkingDuration }),
