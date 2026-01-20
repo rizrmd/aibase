@@ -1,7 +1,7 @@
 import { Tool } from "../../llm/conversation";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { extractTextFromFile, isDocxFile, isPdfFile } from "../../utils/document-extractor";
+import { extractTextFromFile, isDocxFile, isPdfFile, isExcelFile, isPowerPointFile } from "../../utils/document-extractor";
 
 type FileScope = 'user' | 'public';
 
@@ -655,10 +655,10 @@ ${frontmatter}
     // Maximum characters to return (approximately 2000 tokens, assuming ~4 chars per token)
     const MAX_CHARS = 8000;
 
-    // Read file content - use document extractor for .docx and .pdf files
+    // Read file content - use document extractor for .docx, .pdf, .xlsx, and .pptx files
     let content: string;
-    if (isDocxFile(fileName) || isPdfFile(fileName)) {
-      // Extract text from .docx or .pdf file
+    if (isDocxFile(fileName) || isPdfFile(fileName) || isExcelFile(fileName) || isPowerPointFile(fileName)) {
+      // Extract text from document files
       content = await extractTextFromFile(resolvedPath, fileName);
     } else {
       // Read as plain text
@@ -704,10 +704,10 @@ ${frontmatter}
     const startOffset = offset ?? 0;
     const maxChars = limit ?? 1000;
 
-    // Read file content - use document extractor for .docx and .pdf files
+    // Read file content - use document extractor for .docx, .pdf, .xlsx, and .pptx files
     let content: string;
-    if (isDocxFile(fileName) || isPdfFile(fileName)) {
-      // Extract text from .docx or .pdf file
+    if (isDocxFile(fileName) || isPdfFile(fileName) || isExcelFile(fileName) || isPowerPointFile(fileName)) {
+      // Extract text from document files
       content = await extractTextFromFile(resolvedPath, fileName);
     } else {
       // Read as plain text
