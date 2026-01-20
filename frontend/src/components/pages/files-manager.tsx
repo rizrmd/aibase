@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { useConversationStore } from "@/stores/conversation-store";
-import { FileIcon, Trash2, Download, MessageSquare, AlertCircle, Edit3, CheckSquare, Square, LayoutGrid, List, Search, ExternalLink } from "lucide-react";
+import { FileIcon, Trash2, Download, MessageSquare, AlertCircle, Edit3, CheckSquare, Square, Search, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -89,7 +89,6 @@ export function FilesManagerPage() {
   const [renamingFile, setRenamingFile] = useState<FileInfo | null>(null);
   const [newFileName, setNewFileName] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'audio' | 'document' | 'code'>('all');
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -339,24 +338,6 @@ export function FilesManagerPage() {
                 <option value="document">Documents</option>
                 <option value="code">Code</option>
               </select>
-              <div className="flex items-center border rounded-md p-0.5">
-                <Button
-                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('list')}
-                  className="h-7 px-2"
-                >
-                  <List className="size-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('grid')}
-                  className="h-7 px-2"
-                >
-                  <LayoutGrid className="size-4" />
-                </Button>
-              </div>
             </div>
 
             {/* Bulk Actions Bar */}
@@ -406,10 +387,7 @@ export function FilesManagerPage() {
         {/* Files List */}
         {files.length > 0 ? (
           <div className="overflow-auto relative flex-1">
-            <div className={viewMode === 'grid'
-              ? "p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 absolute inset-0 overflow-y-auto"
-              : "p-4 space-y-3 absolute inset-0"
-            }>
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 absolute inset-0 overflow-y-auto">
               {filteredFiles.length > 0 ? (
                 filteredFiles.map((file, index) => {
                   // Additional safety check before rendering
@@ -421,21 +399,12 @@ export function FilesManagerPage() {
                   return (
                     <Card
                       key={`${file.convId}-${file.name}-${index}`}
-                      className={viewMode === 'grid'
-                        ? "cursor-pointer transition-all hover:shadow-lg group p-4 flex flex-col gap-3"
-                        : "cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] group pt-3 pb-1"
-                      }
+                      className="cursor-pointer transition-all hover:shadow-lg group p-4 flex flex-col gap-3"
                       onClick={() => handleFileClick(file)}
                     >
-                      <CardHeader className={viewMode === 'grid' ? "min-h-0 h-auto p-0 flex-1" : "min-h-0 h-auto"}>
-                        <div className={viewMode === 'grid'
-                          ? "flex flex-col gap-3"
-                          : "flex items-start justify-between gap-4"
-                        }>
-                          <div className={viewMode === 'grid'
-                            ? "flex items-start gap-2 w-full"
-                            : "flex items-start gap-3 flex-1 min-w-0"
-                          }>
+                      <CardHeader className="min-h-0 h-auto p-0 flex-1">
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-start gap-2 w-full">
                             <Button
                               variant="ghost"
                               size="icon"
@@ -449,55 +418,24 @@ export function FilesManagerPage() {
                                 <Square className="size-4" />
                               )}
                             </Button>
-                            {viewMode === 'grid' ? (
-                              <>
-                                <div className="text-4xl flex-1 flex items-center justify-center min-h-24 bg-muted rounded-lg">
-                                  {getFileIcon(file.name)}
-                                </div>
-                                <div className="flex-1 min-w-0 w-full">
-                                  <CardTitle className="text-sm line-clamp-2 break-all">
-                                    {file.name}
-                                  </CardTitle>
-                                  <CardDescription className="flex flex-col gap-1 mt-1 text-xs">
-                                    <span>{formatFileSize(file.size)}</span>
-                                    <span>{formatRelativeTime(file.uploadedAt)}</span>
-                                    <span className="flex items-center gap-1">
-                                      <MessageSquare className="size-3" />
-                                      {getConversationTitle(file.convId)}
-                                    </span>
-                                  </CardDescription>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1 text-2xl">
-                                  {getFileIcon(file.name)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <CardTitle className="text-base line-clamp-1 break-all">
-                                    {file.name}
-                                  </CardTitle>
-                                  <CardDescription className="flex flex-col gap-1 mt-1">
-                                    <span className="flex items-center gap-2">
-                                      <span>{formatFileSize(file.size)}</span>
-                                      <span>•</span>
-                                      <span>
-                                        {formatRelativeTime(file.uploadedAt)}
-                                      </span>
-                                    </span>
-                                    <span className="flex items-center gap-1 text-xs">
-                                      <MessageSquare className="size-3" />
-                                      {getConversationTitle(file.convId)}
-                                    </span>
-                                  </CardDescription>
-                                </div>
-                              </>
-                            )}
+                            <div className="text-4xl flex-1 flex items-center justify-center min-h-24 bg-muted rounded-lg">
+                              {getFileIcon(file.name)}
+                            </div>
+                            <div className="flex-1 min-w-0 w-full">
+                              <CardTitle className="text-sm line-clamp-2 break-all">
+                                {file.name}
+                              </CardTitle>
+                              <CardDescription className="flex flex-col gap-1 mt-1 text-xs">
+                                <span>{formatFileSize(file.size)}</span>
+                                <span>{formatRelativeTime(file.uploadedAt)}</span>
+                                <span className="flex items-center gap-1">
+                                  <MessageSquare className="size-3" />
+                                  {getConversationTitle(file.convId)}
+                                </span>
+                              </CardDescription>
+                            </div>
                           </div>
-                          <div className={viewMode === 'grid'
-                            ? "flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            : "flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                          }>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
                               variant="ghost"
                               size="icon"
