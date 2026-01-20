@@ -27,6 +27,8 @@ All file paths are relative to the conversation's files directory.
 - Plain text files (.txt, .md, .json, .csv, etc.)
 - Word documents (.docx) - text is automatically extracted
 - PDF documents (.pdf) - text is automatically extracted using unpdf
+- Excel spreadsheets (.xlsx, .xls) - text is automatically extracted from all sheets
+- PowerPoint presentations (.pptx, .ppt) - text is automatically extracted from all slides
 - Other binary formats may not be readable
 
 ### Examples:
