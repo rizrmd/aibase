@@ -225,10 +225,15 @@ func (cm *ClientManager) saveClientMappings() error {
 	return nil
 }
 
-func (cm *ClientManager) createClient(osName string) (*WhatsAppClient, string, error) {
-	// Generate a UUID-based client ID that we'll use consistently
-	clientUUID := uuid.New()
-	clientID := clientUUID.String()
+func (cm *ClientManager) createClient(osName string, customID string) (*WhatsAppClient, string, error) {
+	// Use custom ID if provided, otherwise generate a UUID
+	var clientID string
+	if customID != "" {
+		clientID = customID
+	} else {
+		clientUUID := uuid.New()
+		clientID = clientUUID.String()
+	}
 
 	// Create a device store with proper initialization but don't save to database yet
 	deviceStore := cm.container.NewDevice()
@@ -466,6 +471,7 @@ type CreateClientResponse struct {
 }
 
 type CreateClientRequest struct {
+	ID     string `json:"id,omitempty"`     // Optional custom client ID
 	OSName string `json:"osName,omitempty"`
 }
 
@@ -561,7 +567,7 @@ func createClient(c *gin.Context) {
 		req = CreateClientRequest{}
 	}
 
-	waClient, clientID, err := manager.createClient(req.OSName)
+	waClient, clientID, err := manager.createClient(req.OSName, req.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

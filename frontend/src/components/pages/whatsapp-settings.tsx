@@ -11,6 +11,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { MessageCircle, QrCode, Smartphone, Trash2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import QRCodeLib from "qrcode";
 
 const API_BASE_URL = buildApiUrl("");
 
@@ -78,9 +79,26 @@ export function WhatsAppSettings() {
       }
 
       const data = await response.json();
-      setQrCodeImage(data.qrCodeDataUrl);
+
+      if (!data.success || !data.qrCode) {
+        setQrCodeImage(null);
+        return;
+      }
+
+      // Generate QR code image from the text
+      const qrDataUrl = await QRCodeLib.toDataURL(data.qrCode, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: "#000000",
+          light: "#FFFFFF",
+        },
+      });
+
+      setQrCodeImage(qrDataUrl);
     } catch (err) {
       console.error("Failed to fetch QR code:", err);
+      setQrCodeImage(null);
     }
   }, []);
 

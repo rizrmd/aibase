@@ -194,18 +194,29 @@ export async function handleGetWhatsAppQRCode(req: Request): Promise<Response> {
       );
     }
 
-    // Get QR code from aimeow API
-    const response = await fetch(`${WHATSAPP_API_URL}/clients/${clientId}/qr/png`);
+    // Get client info from aimeow API
+    const response = await fetch(`${WHATSAPP_API_URL}/clients/${clientId}`);
 
     if (!response.ok) {
-      throw new Error("Failed to fetch QR code");
+      throw new Error("Failed to fetch client info");
     }
 
     const data = await response.json();
 
+    // The QRCode field contains the raw QR code string
+    // We need to generate a data URL from it
+    if (!data.qrCode || data.qrCode === "not_available") {
+      return Response.json({
+        success: false,
+        error: "QR code not available yet",
+      });
+    }
+
+    // Generate QR code data URL using a simple QR code generator
+    // For now, return the QR code text and let the frontend generate the image
     return Response.json({
       success: true,
-      qrCodeDataUrl: data.qr_code_png || data.qr_code_data_url,
+      qrCode: data.qrCode,
     });
   } catch (error) {
     console.error("[WhatsApp] Error getting QR code:", error);
