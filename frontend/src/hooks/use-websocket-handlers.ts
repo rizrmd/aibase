@@ -555,15 +555,22 @@ export function useWebSocketHandlers({
             // Update message AND remove thinking indicator in one atomic render
             return prevMessages.map((msg, idx) => {
               if (idx === messageIndex) {
-                const updatedMsg = {
+                // CRITICAL FIX: Explicitly set parts to undefined when removing it
+                // Using conditional spread (...) won't remove the field from the object
+                const updatedMsg: any = {
                   ...msg,
                   content: fullText,
-                  ...(finalParts !== undefined && { parts: finalParts }),
                   completionTime: completionTimeSeconds,
                   ...(data.thinkingDuration !== undefined && { thinkingDuration: data.thinkingDuration }),
                   ...(data.tokenUsage && { tokenUsage: data.tokenUsage }),
                   ...(mergedToolInvocations.length > 0 && { toolInvocations: mergedToolInvocations }),
                 };
+                // Explicitly handle parts
+                if (finalParts !== undefined) {
+                  updatedMsg.parts = finalParts;
+                } else {
+                  delete updatedMsg.parts; // Remove parts field entirely
+                }
                 console.log(`[Complete] Updated message: content=${fullText.length} chars, parts=${finalParts?.length || 'removed'}, tools=${mergedToolInvocations.length}`);
                 return updatedMsg;
               }
