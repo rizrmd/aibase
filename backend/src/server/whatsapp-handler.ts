@@ -554,11 +554,39 @@ export async function handleWhatsAppConnectionStatus(req: Request): Promise<Resp
     switch (event) {
       case "connected":
         // Client successfully connected to WhatsApp
-        notifyWhatsAppStatus(projectId, {
-          connected: true,
-          connectedAt: new Date().toISOString(),
-          deviceName: data?.osName || "WhatsApp Device",
-        });
+        // Fetch phone number from aimeow API
+        try {
+          const WHATSAPP_API_URL = "http://localhost:7031/api/v1";
+          const response = await fetch(`${WHATSAPP_API_URL}/clients`);
+
+          if (response.ok) {
+            const clientsData = await response.json();
+            const clientsArray = Array.isArray(clientsData) ? clientsData : clientsData.clients;
+            const client = clientsArray?.find((c: any) => c.id === projectId);
+
+            notifyWhatsAppStatus(projectId, {
+              connected: true,
+              connectedAt: new Date().toISOString(),
+              deviceName: client?.osName || "WhatsApp Device",
+              phone: client?.phone || null,
+            });
+          } else {
+            notifyWhatsAppStatus(projectId, {
+              connected: true,
+              connectedAt: new Date().toISOString(),
+              deviceName: data?.osName || "WhatsApp Device",
+              phone: data?.phone || null,
+            });
+          }
+        } catch (err) {
+          console.error("[WhatsApp] Error fetching phone number:", err);
+          notifyWhatsAppStatus(projectId, {
+            connected: true,
+            connectedAt: new Date().toISOString(),
+            deviceName: data?.osName || "WhatsApp Device",
+            phone: data?.phone || null,
+          });
+        }
         console.log("[WhatsApp] Client connected:", projectId);
         break;
 
