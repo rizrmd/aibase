@@ -11,10 +11,10 @@ COPY frontend/ ./
 RUN bun run build
 
 # Stage 2: Build aimeow with CGO for SQLite
-FROM golang:1.25-alpine AS aimeow-build
+FROM golang:1.25-bookworm AS aimeow-build
 
-# Install build dependencies
-RUN apk add --no-cache git gcc musl-dev
+# Install build dependencies (gcc already included in bookworm)
+RUN apt-get update && apt-get install -y git swag && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/bins/aimeow
 
@@ -24,8 +24,7 @@ RUN go mod download
 
 COPY bins/aimeow/ ./
 
-# Install swag and generate docs
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+# Generate swagger docs
 RUN swag init
 
 # Build aimeow for Linux with CGO (required for mattn/go-sqlite3)
