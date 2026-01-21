@@ -1,0 +1,69 @@
+name: Docker Build Test
+
+on:
+  push:
+    branches: [main, fix/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker-build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build -t aibase:test .
+
+      - name: Start container
+        run: |
+          docker run -d \
+            --name aibase-test \
+            -p 5040:5040 \
+            -e OPENAI_API_KEY=test-key-for-ci \
+            -e OPENAI_BASE_URL=https://api.openai.com/v1 \
+            -e OPENAI_MODEL=gpt-4 \
+            -e WHATSAPP_API_URL=http://localhost:7031/api/v1 \
+            aibase:test
+
+      - name: Wait for server to start
+        run: sleep 10
+
+      - name: Check container logs
+        run: |
+          echo "=== Container Logs ==="
+          docker logs aibase-test
+
+      - name: Check container status
+        run: |
+          docker ps | grep aibase-test
+          docker inspect aibase-test | jq '.[0].State.Status'
+
+      - name: Test HTTP endpoint
+        run: |
+          curl -f http://localhost:5040/ || exit 1
+          echo "✅ Frontend accessible"
+
+          curl -f http://localhost:5040/api/health || echo "⚠️  Health endpoint not implemented"
+
+      - name: Check for errors in logs
+        run: |
+          if docker logs aibase-test 2>&1 | grep -i "error\|fatal\|cannot start"; then
+            echo "❌ Found errors in logs"
+            docker logs aibase-test 2>&1 | grep -i "error\|fatal\|cannot start"
+            exit 1
+          else
+            echo "✅ No errors found in logs"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop aibase-test || true
+          docker rm aibase-test || true
