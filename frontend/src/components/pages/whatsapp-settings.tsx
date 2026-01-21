@@ -520,24 +520,31 @@ export function WhatsAppSettings() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {client.connected ? (
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Smartphone className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">WhatsApp Device</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatPhoneNumber(client.phone)}
-                        </p>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Smartphone className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">WhatsApp Device</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatPhoneNumber(client.phone)}
+                          </p>
+                        </div>
                       </div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={deleteClient}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Disconnect
+                      </Button>
                     </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={deleteClient}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Disconnect
-                    </Button>
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <p className="text-xs text-blue-800">
+                        <strong>Note:</strong> To fully disconnect, also remove this device from Linked Devices in WhatsApp on your phone.
+                      </p>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -568,6 +575,14 @@ export function WhatsAppSettings() {
                           Point your phone at this screen to scan the QR code
                         </li>
                       </ol>
+
+                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <p className="text-xs text-yellow-800 font-medium mb-1">⚠️ Important:</p>
+                        <ul className="text-xs text-yellow-700 space-y-1 ml-2">
+                          <li>• If you previously connected a device, make sure to remove it from Linked Devices on your phone first</li>
+                          <li>• This ensures a clean connection and prevents conflicts</li>
+                        </ul>
+                      </div>
                     </div>
                     <Button
                       variant="outline"
