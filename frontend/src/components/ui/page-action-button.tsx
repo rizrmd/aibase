@@ -145,16 +145,41 @@ PageActionButton.displayName = "PageActionButton";
  *   <PageActionButton icon={Save} label="Save" onClick={...} />
  *   <PageActionButton icon={Cancel} label="Cancel" variant="outline" onClick={...} />
  * </PageActionGroup>
+ *
+ * For mobile-fixed positioning (like chat "+ New" button):
+ * <PageActionGroup isFixedOnMobile={true}>
+ *   <PageActionButton icon={Plus} label="New" onClick={...} />
+ * </PageActionGroup>
  */
 export const PageActionGroup = ({
   children,
   className = "",
+  isFixedOnMobile = false,
 }: {
   children: React.ReactNode;
   className?: string;
+  /** If true, use fixed positioning on mobile, absolute on desktop */
+  isFixedOnMobile?: boolean;
 }) => {
+  // When isFixedOnMobile is true, use fixed positioning to break out of relative parent
+  if (isFixedOnMobile) {
+    return (
+      <>
+        {/* Mobile: Fixed positioned at top-right (viewport-relative, below navbar) */}
+        <div className={`fixed top-3 right-3 flex gap-2 z-50 md:hidden ${className}`}>
+          {children}
+        </div>
+        {/* Desktop: Absolute positioned (parent-relative) */}
+        <div className={`hidden md:flex absolute top-4 right-3 sm:right-4 flex gap-2 z-10 ${className}`}>
+          {children}
+        </div>
+      </>
+    );
+  }
+
+  // Default behavior: absolute positioned
   return (
-    <div className={`fixed top-[60px] right-3 sm:right-4 flex gap-2 z-50 md:absolute md:top-4 md:z-10 ${className}`}>
+    <div className={`absolute md:top-4 top-15 right-3 sm:right-4 flex gap-2 z-10 ${className}`}>
       {children}
     </div>
   );

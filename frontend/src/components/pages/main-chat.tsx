@@ -275,7 +275,7 @@ export function MainChat({
     <div className={`flex h-screen-mobile ${className} relative`}>
       {/* New Conversation Button - Absolute positioned top right (hidden in embed mode) */}
       {!isEmbedMode && messages.length > 0 && (
-        <PageActionGroup>
+        <PageActionGroup isFixedOnMobile={true}>
           <PageActionButton
             icon={Plus}
             label="New"
