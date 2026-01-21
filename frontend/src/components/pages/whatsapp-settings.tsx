@@ -23,6 +23,7 @@ const API_BASE_URL = buildApiUrl("");
 
 interface WhatsAppClient {
   id: string;
+  phone?: string | null;
   connected: boolean;
   connectedAt?: string;
   qrCode?: string;
@@ -34,6 +35,7 @@ interface WhatsAppWSMessage {
   projectId?: string;
   data?: {
     projectId: string;
+    phone?: string;
     connected?: boolean;
     connectedAt?: string;
     qrCode?: string;
@@ -50,6 +52,27 @@ export function WhatsAppSettings() {
   const [error, setError] = useState<string | null>(null);
   const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const wsConnectedRef = useRef<boolean>(false as boolean); // Track latest connection status from WebSocket
+
+  // Format phone number for display
+  const formatPhoneNumber = (phone: string | null | undefined): string => {
+    if (!phone) return "Unknown Device";
+
+    // Remove any non-digit characters
+    const digits = phone.replace(/\D/g, '');
+
+    // Format: +62 823 5063 4214
+    if (digits.startsWith('0')) {
+      // Local format: 0823 → 0823 5063 4214
+      return digits.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3');
+    } else if (digits.startsWith('62')) {
+      // Indonesia format: 62823 → +62 823 5063 4214
+      return '+62 ' + digits.substring(2).replace(/(\d{3})(\d{4})(\d{4})/, '$1 $2 $3');
+    } else {
+      // International format
+      return '+' + digits;
+    }
+  };
 
   // Load WhatsApp client for current project
   const loadClient = useCallback(async () => {
@@ -74,9 +97,16 @@ export function WhatsAppSettings() {
       const data = await response.json();
       setClient(data.client);
 
-      // If client exists but not connected, fetch QR code
-      if (data.client && !data.client.connected) {
+      // Only fetch QR code if:
+      // 1. Client exists
+      // 2. Client is not connected (from API response)
+      // 3. WebSocket hasn't told us we're connected yet
+      if (data.client && !data.client.connected && wsConnectedRef.current !== true) {
         fetchQRCode(data.client.id);
+      } else if (data.client && data.client.connected) {
+        // API says connected, update our WebSocket ref
+        wsConnectedRef.current = true;
+        setQrCodeImage(null);
       }
     } catch (err) {
       const errorMessage =
@@ -101,7 +131,19 @@ export function WhatsAppSettings() {
 
       const data = await response.json();
 
+      // Abort if device became connected while fetching
+      if (wsConnectedRef.current) {
+        setQrCodeImage(null);
+        return;
+      }
+
       if (!data.success || !data.qrCode) {
+        setQrCodeImage(null);
+        return;
+      }
+
+      // Abort if device became connected while processing
+      if (wsConnectedRef.current) {
         setQrCodeImage(null);
         return;
       }
@@ -116,7 +158,10 @@ export function WhatsAppSettings() {
         },
       });
 
-      setQrCodeImage(qrDataUrl);
+      // Final check before setting QR code
+      if (!wsConnectedRef.current) {
+        setQrCodeImage(qrDataUrl);
+      }
     } catch (err) {
       console.error("Failed to fetch QR code:", err);
       setQrCodeImage(null);
@@ -167,6 +212,8 @@ export function WhatsAppSettings() {
   const deleteClient = useCallback(async () => {
     if (!currentProject || !client) return;
 
+    console.log('[WhatsApp Settings] Deleting client:', client.id);
+
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/whatsapp/client?clientId=${client.id}`,
@@ -179,15 +226,27 @@ export function WhatsAppSettings() {
         throw new Error("Failed to delete WhatsApp client");
       }
 
+      console.log('[WhatsApp Settings] Delete successful, clearing state');
+
+      // Reset all state
       setClient(null);
       setQrCodeImage(null);
+      wsConnectedRef.current = false;
+
       toast.success("WhatsApp client deleted successfully");
+
+      // Reload client after a short delay to verify deletion
+      setTimeout(() => {
+        console.log('[WhatsApp Settings] Reloading client to verify deletion');
+        loadClient();
+      }, 500);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to delete WhatsApp client";
+      console.error('[WhatsApp Settings] Delete failed:', errorMessage);
       toast.error(errorMessage);
     }
-  }, [currentProject, client]);
+  }, [currentProject, client, loadClient]);
 
   // WebSocket connection for real-time updates
   useEffect(() => {
@@ -224,17 +283,28 @@ export function WhatsAppSettings() {
           case 'connected':
           case 'disconnected':
             if (message.data) {
+              const isConnected = message.data.connected || false;
+
+              // Track latest connection status from WebSocket
+              wsConnectedRef.current = isConnected;
+
               setClient({
                 id: message.data.projectId,
-                connected: message.data.connected || false,
+                phone: message.data.phone,
+                connected: isConnected,
                 connectedAt: message.data.connectedAt,
                 deviceName: message.data.deviceName,
               });
 
+              // Clear QR code if device is connected
+              if (isConnected) {
+                setQrCodeImage(null);
+                setIsLoading(false);
+              }
+
               // Show notification on status change
               if (message.type === 'connected') {
                 toast.success('WhatsApp connected successfully!');
-                setQrCodeImage(null);
               } else if (message.type === 'disconnected') {
                 toast.error('WhatsApp disconnected');
               }
@@ -375,26 +445,31 @@ export function WhatsAppSettings() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {client.connected ? (
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Smartphone className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">
-                          {client.deviceName || "WhatsApp Device"}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Client ID: {client.id}
-                        </p>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Smartphone className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">WhatsApp Device</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatPhoneNumber(client.phone)}
+                          </p>
+                        </div>
                       </div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={deleteClient}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Disconnect
+                      </Button>
                     </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={deleteClient}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Disconnect
-                    </Button>
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <p className="text-xs text-blue-800">
+                        <strong>Note:</strong> To fully disconnect, also remove this device from Linked Devices in WhatsApp on your phone.
+                      </p>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -425,6 +500,14 @@ export function WhatsAppSettings() {
                           Point your phone at this screen to scan the QR code
                         </li>
                       </ol>
+
+                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <p className="text-xs text-yellow-800 font-medium mb-1">⚠️ Important:</p>
+                        <ul className="text-xs text-yellow-700 space-y-1 ml-2">
+                          <li>• If you previously connected a device, make sure to remove it from Linked Devices on your phone first</li>
+                          <li>• This ensures a clean connection and prevents conflicts</li>
+                        </ul>
+                      </div>
                     </div>
                     <Button
                       variant="outline"

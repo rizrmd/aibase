@@ -533,10 +533,14 @@ func (cm *ClientManager) eventHandler(client *WhatsAppClient) func(interface{}) 
 
 			// Send QR code webhook
 			cm.mutex.RLock()
-			whatsappID := client.deviceStore.ID.String()
-			clientID, exists := cm.clientIDMap[whatsappID]
-			if !exists {
-				// Try to find the UUID by searching
+			var clientID string
+			// Only try to get whatsappID if deviceStore.ID is not nil
+			if client.deviceStore.ID != nil {
+				whatsappID := client.deviceStore.ID.String()
+				clientID, _ = cm.clientIDMap[whatsappID]
+			}
+			// If not found in map, try to find the UUID by searching
+			if clientID == "" {
 				for uuid, c := range cm.clients {
 					if c == client {
 						clientID = uuid

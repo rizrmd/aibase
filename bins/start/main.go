@@ -451,7 +451,13 @@ func envToSlice(envMap map[string]string) []string {
 // buildAimeow builds the aimeow WhatsApp service binary
 func buildAimeow(projectRoot string) (string, error) {
 	aimeowDir := filepath.Join(projectRoot, "bins", "aimeow")
-	aimeowBinary := filepath.Join(aimeowDir, "aimeow")
+
+	// On Windows, Go automatically adds .exe extension, so we need to account for that
+	binaryName := "aimeow"
+	if runtime.GOOS == "windows" {
+		binaryName = "aimeow.exe"
+	}
+	aimeowBinary := filepath.Join(aimeowDir, binaryName)
 
 	// Check if binary exists and is newer than source
 	binaryInfo, err := os.Stat(aimeowBinary)
@@ -464,9 +470,12 @@ func buildAimeow(projectRoot string) (string, error) {
 		}
 	}
 
-	// Build the binary
-	cmd := exec.Command("go", "build", "-o", "aimeow", "main.go")
+	// Build the binary (Go will add .exe on Windows automatically)
+	// We use the base name without extension for the -o flag
+	cmd := exec.Command("go", "build", "-ldflags=-s -w", "-o", binaryName, "main.go")
 	cmd.Dir = aimeowDir
+	// Set CGO_ENABLED=1 for Windows to ensure proper binary
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("aimeow build failed: %w\n%s", err, string(output))

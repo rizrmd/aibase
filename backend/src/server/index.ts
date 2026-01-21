@@ -486,7 +486,19 @@ export class WebSocketServer {
           const wsModule = await import("./whatsapp-ws");
           // Initialize notification functions so whatsapp-handler can use them
           initWhatsAppNotifications(wsModule.notifyWhatsAppStatus, wsModule.notifyWhatsAppQRCode);
-          return wsModule.handleWhatsAppWebSocket(req);
+
+          // Register WhatsApp handlers with the WebSocket server
+          this.wsServer.registerWhatsAppHandlers(wsModule.getWhatsAppWebSocketHandlers());
+
+          // Upgrade to WebSocket with WhatsApp flag
+          const upgraded = server.upgrade(req, {
+            data: { isWhatsAppWS: true }
+          });
+
+          if (upgraded) {
+            return undefined; // WebSocket connection established
+          }
+          return new Response("WhatsApp WebSocket upgrade failed", { status: 400 });
         }
 
         // WhatsApp API endpoints
@@ -508,6 +520,10 @@ export class WebSocketServer {
 
         if (pathname === "/api/whatsapp/webhook" && req.method === "POST") {
           return handleWhatsAppWebhook(req);
+        }
+
+        if (pathname === "/api/whatsapp/webhook/status" && req.method === "POST") {
+          return handleWhatsAppConnectionStatus(req);
         }
 
         if (pathname === "/api/whatsapp/status" && req.method === "POST") {

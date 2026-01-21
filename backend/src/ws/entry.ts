@@ -128,6 +128,7 @@ export class WSServer extends WSEventEmitter {
   private messagePersistence: MessagePersistence;
   private streamingManager: StreamingManager;
   private processingConversations = new Set<string>(); // Track processing per conversation (not per connection)
+  private whatsappHandlers: { open: any; message: any; close: any } | null = null;
 
   constructor(options: WSServerOptions = {}) {
     super();
@@ -151,6 +152,14 @@ export class WSServer extends WSEventEmitter {
       message: this.handleMessage.bind(this),
       close: this.handleConnectionClose.bind(this),
     };
+  }
+
+  /**
+   * Register WhatsApp WebSocket handlers
+   */
+  registerWhatsAppHandlers(handlers: { open: any; message: any; close: any }) {
+    this.whatsappHandlers = handlers;
+    console.log('[WSServer] WhatsApp handlers registered');
   }
 
   /**
@@ -366,6 +375,15 @@ export class WSServer extends WSEventEmitter {
   }
 
   private async handleConnectionOpen(ws: ServerWebSocket): Promise<void> {
+    // Check if this is a WhatsApp WebSocket connection
+    if (ws.data?.isWhatsAppWS) {
+      console.log('[WSServer] WhatsApp WebSocket connection detected, delegating to WhatsApp handler');
+      if (this.whatsappHandlers?.open) {
+        await this.whatsappHandlers.open(ws);
+      }
+      return;
+    }
+
     // Extract client ID and project ID from URL parameters if provided
     let urlClientId: string | null = null;
     let urlProjectId: string | null = null;
@@ -540,6 +558,14 @@ export class WSServer extends WSEventEmitter {
     ws: ServerWebSocket,
     message: string | Buffer
   ): Promise<void> {
+    // Check if this is a WhatsApp WebSocket connection
+    if (ws.data?.isWhatsAppWS) {
+      if (this.whatsappHandlers?.message) {
+        await this.whatsappHandlers.message(ws, message);
+      }
+      return;
+    }
+
     const connectionInfo = this.connections.get(ws);
     if (!connectionInfo) return;
 
@@ -1262,6 +1288,15 @@ export class WSServer extends WSEventEmitter {
     code: number,
     reason: string
   ): void {
+    // Check if this is a WhatsApp WebSocket connection
+    if (ws.data?.isWhatsAppWS) {
+      console.log('[WSServer] WhatsApp WebSocket connection closed');
+      if (this.whatsappHandlers?.close) {
+        this.whatsappHandlers.close(ws);
+      }
+      return;
+    }
+
     const connectionInfo = this.connections.get(ws);
     if (connectionInfo) {
       // Stop heartbeat
