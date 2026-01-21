@@ -232,8 +232,19 @@ func installDependencies(projectRoot, bunExecutable string) error {
 		return fmt.Errorf("backend install failed: %w\n%s", err, string(output))
 	}
 
-	// Install frontend dependencies
+	// Install frontend dependencies (skip if in Docker/production where dist is pre-built)
+	if os.Getenv("SKIP_FRONTEND_INSTALL") == "1" {
+		fmt.Println("  Skipping frontend dependency installation (SKIP_FRONTEND_INSTALL=1)")
+		return nil
+	}
+
 	frontendDir := filepath.Join(projectRoot, "frontend")
+
+	// Check if frontend directory exists
+	if _, err := os.Stat(frontendDir); os.IsNotExist(err) {
+		fmt.Println("  Skipping frontend dependency installation (frontend directory not found)")
+		return nil
+	}
 
 	cmd = exec.Command(bunExecutable, "install")
 	cmd.Dir = frontendDir
