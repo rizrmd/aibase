@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -83,9 +84,16 @@ func ensureBun(bunBinPath string) (string, error) {
 		execName = "bun.exe"
 	}
 
+	// First, check if bun is available in system PATH (e.g., in Docker)
+	systemBun, err := exec.LookPath(execName)
+	if err == nil {
+		// Found in PATH, use system bun
+		return systemBun, nil
+	}
+
 	bunExecutable := filepath.Join(bunBinPath, execName)
 
-	// Check if already exists
+	// Check if already exists in local path
 	if _, err := os.Stat(bunExecutable); err == nil {
 		return bunExecutable, nil
 	}
