@@ -34,3 +34,4 @@ docker-compose.yml
 
 # Data directory (all runtime data and downloaded binaries)
 data/
+.beads/export-state/
