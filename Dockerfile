@@ -6,9 +6,9 @@ FROM node:20-bookworm-slim AS frontend-build
 
 # Install Bun
 RUN apt-get update && apt-get install -y curl unzip && rm -rf /var/lib/apt/lists/* && \
-    curl -fsSL https://bun.sh/install.sh | bash && \
-    export BUN_INSTALL=$HOME/.bun && \
-    export PATH="$BUN_INSTALL/bin:$PATH"
+    curl -fsSL https://bun.sh/install.sh | bash
+ENV BUN_INSTALL=/root/.bun
+ENV PATH="/root/.bun/bin:${PATH}"
 
 # Build frontend
 WORKDIR /app/frontend
@@ -51,9 +51,9 @@ RUN apt-get update && \
     rm -rf /tmp/duckdb.zip /var/lib/apt/lists/*
 
 # Install Bun
-RUN curl -fsSL https://bun.sh/install.sh | bash && \
-    export BUN_INSTALL=$HOME/.bun && \
-    export PATH="$BUN_INSTALL/bin:$PATH"
+RUN curl -fsSL https://bun.sh/install.sh | bash
+ENV BUN_INSTALL=/root/.bun
+ENV PATH="/root/.bun/bin:${PATH}"
 
 WORKDIR /app
 
