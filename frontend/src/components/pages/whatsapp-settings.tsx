@@ -373,7 +373,7 @@ export function WhatsAppSettings() {
 
     // Only start refresh if client exists and not connected
     if (client && !client.connected && !wsConnectedRef.current) {
-      console.log('[WhatsApp QR] Starting auto-refresh every 20 seconds');
+      console.log('[WhatsApp QR] Starting auto-refresh every 1 minute');
 
       const refreshQRCode = async () => {
         try {
@@ -421,10 +421,10 @@ export function WhatsAppSettings() {
       // Initial fetch
       refreshQRCode();
 
-      // Set interval to refresh every 20 seconds
+      // Set interval to refresh every 1 minute
       qrRefreshIntervalRef.current = setInterval(() => {
         refreshQRCode();
-      }, 20000); // 20 seconds
+      }, 60000); // 1 minute
     }
 
     // Cleanup function
