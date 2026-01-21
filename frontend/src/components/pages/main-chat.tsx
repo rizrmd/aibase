@@ -264,7 +264,7 @@ export function MainChat({
   // }, [convId, currentProject?.id, messages.length, setMessages]);
 
   return (
-    <div className={`flex h-screen-mobile ${className} relative overflow-hidden`}>
+    <div className={`flex h-screen-mobile ${className} relative`}>
       {/* New Conversation Button - Absolute positioned top right (hidden in embed mode) */}
       {!isEmbedMode && messages.length > 0 && (
         <PageActionGroup isFixedOnMobile={true}>
@@ -296,7 +296,7 @@ export function MainChat({
       )}
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Error Alert */}
         {error && (
           <Alert className="mt-[60px] mx-auto mb-2 w-[650px] border-red-200 bg-red-50">
