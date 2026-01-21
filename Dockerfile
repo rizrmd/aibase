@@ -14,7 +14,7 @@ RUN bun run build
 FROM golang:1.25-bookworm AS aimeow-build
 
 # Install build dependencies (gcc already included in bookworm)
-RUN apt-get update && apt-get install -y git swag && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/bins/aimeow
 
@@ -24,8 +24,9 @@ RUN go mod download
 
 COPY bins/aimeow/ ./
 
-# Generate swagger docs
-RUN swag init
+# Install swag and generate swagger docs
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN /root/go/bin/swag init
 
 # Build aimeow for Linux with CGO (required for mattn/go-sqlite3)
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o aimeow.linux .
