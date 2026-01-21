@@ -263,6 +263,14 @@ export function MainChat({
   //   loadConversationMessages();
   // }, [convId, currentProject?.id, messages.length, setMessages]);
 
+  // Auto-scroll to chat input on mobile when starting new conversation
+  useEffect(() => {
+    if (messages.length === 0 && window.innerWidth < 768) {
+      // Scroll to bottom so user can see chat input
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages.length]);
+
   return (
     <div className={`flex h-screen-mobile ${className} relative`}>
       {/* New Conversation Button - Absolute positioned top right (hidden in embed mode) */}

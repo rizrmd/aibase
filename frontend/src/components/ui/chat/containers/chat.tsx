@@ -200,7 +200,7 @@ export function Chat({
       <GlobalToolDialogs toolInvocations={allToolInvocations} />
 
       {isEmpty ? (
-        <div className="flex items-center justify-center min-h-0 md:flex-1">
+        <div className="flex flex-1 items-center justify-center">
           {isHistoryLoading ? (
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
