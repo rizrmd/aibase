@@ -43,7 +43,7 @@ FROM node:20-bookworm-slim
 
 # Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y curl pandoc sqlite3 && \
+    apt-get install -y curl pandoc sqlite3 unzip && \
     curl -L https://github.com/duckdb/duckdb/releases/download/v1.1.3/duckdb_cli-linux-amd64.zip -o /tmp/duckdb.zip && \
     unzip /tmp/duckdb.zip -d /tmp/ && \
     mv /tmp/duckdb /usr/local/bin/ && \
