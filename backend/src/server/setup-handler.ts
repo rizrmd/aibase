@@ -654,7 +654,18 @@ export async function handleGetTenants(req: Request): Promise<Response> {
 export async function handleCreateTenant(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { licenseKey, name, domain } = body;
+    let { licenseKey, name, domain } = body;
+
+    // If license key not in body, try cookie
+    if (!licenseKey) {
+      const cookieKey = extractLicenseKey(req);
+      if (cookieKey) {
+        const envApiKey = process.env.OPENAI_API_KEY;
+        if (cookieKey === envApiKey) {
+          licenseKey = cookieKey;
+        }
+      }
+    }
 
     if (!licenseKey || licenseKey !== process.env.OPENAI_API_KEY) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
@@ -688,7 +699,18 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
 export async function handleUpdateTenant(req: Request, tenantId: string): Promise<Response> {
   try {
     const body = await req.json();
-    const { licenseKey, name, domain } = body;
+    let { licenseKey, name, domain } = body;
+
+    // If license key not in body, try cookie
+    if (!licenseKey) {
+      const cookieKey = extractLicenseKey(req);
+      if (cookieKey) {
+        const envApiKey = process.env.OPENAI_API_KEY;
+        if (cookieKey === envApiKey) {
+          licenseKey = cookieKey;
+        }
+      }
+    }
 
     if (!licenseKey || licenseKey !== process.env.OPENAI_API_KEY) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });

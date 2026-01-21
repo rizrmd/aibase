@@ -124,6 +124,10 @@ import {
   handleCreateUser,
   handleUpdateUser,
   handleDeleteUser,
+  handleGetTenants as handleGetTenantsAdmin,
+  handleCreateTenant as handleCreateTenantAdmin,
+  handleUpdateTenant as handleUpdateTenantAdmin,
+  handleDeleteTenant as handleDeleteTenantAdmin,
 } from "./setup-handler";
 import { embedRateLimiter, embedWsRateLimiter, getClientIp } from "../middleware/rate-limiter";
 import { ProjectStorage } from "../storage/project-storage";
@@ -762,11 +766,11 @@ export class WebSocketServer {
 
         // Admin Setup Tenant Management endpoints
         if (pathname === "/api/admin/setup/tenants" && req.method === "GET") {
-          return handleGetTenants(req);
+          return handleGetTenantsAdmin(req);
         }
 
         if (pathname === "/api/admin/setup/tenants" && req.method === "POST") {
-          return handleCreateTenant(req);
+          return handleCreateTenantAdmin(req);
         }
 
         // Match /api/admin/setup/tenants/:tenantId endpoints
@@ -774,9 +778,9 @@ export class WebSocketServer {
         if (setupTenantIdMatch) {
           const tenantId = setupTenantIdMatch[1];
           if (req.method === "PUT") {
-            return handleUpdateTenant(req, tenantId);
+            return handleUpdateTenantAdmin(req, tenantId);
           } else if (req.method === "DELETE") {
-            return handleDeleteTenant(req, tenantId);
+            return handleDeleteTenantAdmin(req, tenantId);
           }
         }
 
