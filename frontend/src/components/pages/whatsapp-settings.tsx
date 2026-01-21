@@ -53,6 +53,7 @@ export function WhatsAppSettings() {
   const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const wsConnectedRef = useRef<boolean>(false as boolean); // Track latest connection status from WebSocket
+  const qrRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null); // Track QR code refresh interval
 
   // Format phone number for display
   const formatPhoneNumber = (phone: string | null | undefined): string => {
@@ -347,6 +348,80 @@ export function WhatsAppSettings() {
   useEffect(() => {
     loadClient();
   }, [loadClient]);
+
+  // Auto-refresh QR code every 20 seconds if client is waiting for connection
+  useEffect(() => {
+    // Clear any existing interval
+    if (qrRefreshIntervalRef.current) {
+      clearInterval(qrRefreshIntervalRef.current);
+      qrRefreshIntervalRef.current = null;
+    }
+
+    // Only start refresh if client exists and not connected
+    if (client && !client.connected && !wsConnectedRef.current) {
+      console.log('[WhatsApp QR] Starting auto-refresh every 20 seconds');
+
+      const refreshQRCode = async () => {
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/api/whatsapp/qr?clientId=${client.id}`,
+          );
+
+          if (!response.ok) {
+            throw new Error("Failed to refresh QR code");
+          }
+
+          const data = await response.json();
+
+          // Abort if device became connected while fetching
+          if (wsConnectedRef.current) {
+            setQrCodeImage(null);
+            return;
+          }
+
+          if (data.success && data.qrCode) {
+            // Generate QR code image from the text
+            const qrDataUrl = await QRCodeLib.toDataURL(data.qrCode, {
+              width: 256,
+              margin: 2,
+              color: {
+                dark: "#000000",
+                light: "#FFFFFF",
+              },
+            });
+
+            // Only update if still not connected
+            if (!wsConnectedRef.current) {
+              setQrCodeImage(qrDataUrl);
+              console.log('[WhatsApp QR] QR code refreshed');
+            }
+          } else {
+            // QR code not available yet
+            setQrCodeImage(null);
+          }
+        } catch (err) {
+          console.error('[WhatsApp QR] Error refreshing QR code:', err);
+        }
+      };
+
+      // Initial fetch
+      refreshQRCode();
+
+      // Set interval to refresh every 20 seconds
+      qrRefreshIntervalRef.current = setInterval(() => {
+        refreshQRCode();
+      }, 20000); // 20 seconds
+    }
+
+    // Cleanup function
+    return () => {
+      if (qrRefreshIntervalRef.current) {
+        clearInterval(qrRefreshIntervalRef.current);
+        qrRefreshIntervalRef.current = null;
+        console.log('[WhatsApp QR] Stopped auto-refresh');
+      }
+    };
+  }, [client, wsConnectedRef.current]); // Re-run when client or connection status changes
 
   if (isLoading) {
     return (
