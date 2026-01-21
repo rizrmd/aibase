@@ -165,8 +165,8 @@ export const PageActionGroup = ({
   if (isFixedOnMobile) {
     return (
       <>
-        {/* Mobile: Fixed positioned at top-right (viewport-relative, aligned with ProjectNavigation m-3) */}
-        <div className={`fixed top-0 right-0 m-3 flex gap-2 z-50 md:hidden ${className}`}>
+        {/* Mobile: Fixed positioned at top-right, with equal top/bottom spacing */}
+        <div className={`fixed top-0 right-0 mx-3 my-4 flex gap-2 z-50 md:hidden ${className}`}>
           {children}
         </div>
         {/* Desktop: Absolute positioned (parent-relative) */}
