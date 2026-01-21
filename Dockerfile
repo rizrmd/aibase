@@ -32,9 +32,10 @@ COPY backend/ ./
 WORKDIR /app
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
-# Copy .env file if it exists (optional)
-# This allows configuration without passing all env vars
-COPY .env* ./ 2>/dev/null || true
+# Copy .env file if it exists (for production configuration)
+# Note: This is optional. You can also use --env-file or -e flags at runtime.
+# Uncomment the next line if you want to bake .env into the image (NOT recommended for secrets)
+# COPY .env ./
 
 # Expose only backend port (serves both API and frontend)
 EXPOSE 5040
