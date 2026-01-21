@@ -24,12 +24,16 @@ export interface AuthStore {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  needsSetup: boolean;
+  setupChecked: boolean;
 
   // Actions
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
   setError: (error: string | null) => void;
   setIsLoading: (isLoading: boolean) => void;
+  setNeedsSetup: (needsSetup: boolean) => void;
+  setSetupChecked: (checked: boolean) => void;
 
   // Async actions
   register: (email: string, username: string, password: string) => Promise<boolean>;
@@ -37,6 +41,7 @@ export interface AuthStore {
   logout: () => Promise<void>;
   fetchCurrentUser: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  checkSetup: () => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -48,6 +53,8 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      needsSetup: false,
+      setupChecked: false,
 
       // Synchronous actions
       setUser: (user) => {
@@ -64,6 +71,14 @@ export const useAuthStore = create<AuthStore>()(
 
       setIsLoading: (isLoading) => {
         set({ isLoading });
+      },
+
+      setNeedsSetup: (needsSetup) => {
+        set({ needsSetup });
+      },
+
+      setSetupChecked: (checked) => {
+        set({ setupChecked: checked });
       },
 
       // Async actions
@@ -245,6 +260,43 @@ export const useAuthStore = create<AuthStore>()(
             error: error.message || "Failed to change password",
             isLoading: false,
           });
+          return false;
+        }
+      },
+
+      checkSetup: async () => {
+        // Skip if already checked
+        if (get().setupChecked) {
+          return get().needsSetup;
+        }
+
+        set({ isLoading: true, error: null });
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/setup/check`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+          });
+
+          if (!response.ok) {
+            // If endpoint doesn't exist (old version), assume setup is done
+            set({ needsSetup: false, setupChecked: true, isLoading: false });
+            return false;
+          }
+
+          const data = await response.json();
+          const needsSetup = data.needsSetup || false;
+
+          set({ needsSetup, setupChecked: true, isLoading: false });
+          console.log("[Auth] Setup check result:", needsSetup ? "Setup required" : "Setup complete");
+          return needsSetup;
+        } catch (error) {
+          console.error("[Auth] Setup check error:", error);
+          // On error, assume no setup needed to avoid blocking
+          set({ needsSetup: false, setupChecked: true, isLoading: false });
           return false;
         }
       },

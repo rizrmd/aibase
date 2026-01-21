@@ -260,36 +260,6 @@ export class WebSocketServer {
         const pathname = stripBasePath(url.pathname);
         const hasBasePath = basePath === "" || url.pathname.startsWith(basePath);
 
-        // Apply tenant setup check
-        // Check if application has been set up (has tenants)
-        const tenantCheckPassed = await (async () => {
-          const tenantStorage = TenantStorage.getInstance();
-          await tenantStorage.initialize();
-          const tenants = tenantStorage.getAll();
-          return tenants.length > 0;
-        })();
-
-        // If no tenants exist, block access and redirect to setup (except for allowed paths)
-        if (!tenantCheckPassed) {
-          const allowedPaths = ["/admin-setup", "/api/admin/setup", "/api/setup", "/api/health", "/favicon.ico"];
-          const isAllowed = allowedPaths.some(path =>
-            pathname === path || pathname.startsWith(path + "/") ||
-            pathname.endsWith(".html") || pathname.endsWith(".css") ||
-            pathname.endsWith(".js") || pathname.endsWith(".json") ||
-            pathname.endsWith(".png") || pathname.endsWith(".jpg") ||
-            pathname.endsWith(".svg") || pathname.endsWith(".ico")
-          );
-
-          if (!isAllowed) {
-            return Response.json({
-              success: false,
-              needsSetup: true,
-              redirect: "/admin-setup",
-              error: "Application setup required. Please create at least one tenant."
-            }, { status: 403 });
-          }
-        }
-
         // Handle public embed WebSocket upgrade requests
         if (pathname.startsWith("/api/embed/ws")) {
           // Rate limit embed WebSocket connections

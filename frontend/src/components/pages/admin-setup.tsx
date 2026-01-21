@@ -15,8 +15,13 @@ import {
   X,
   ArrowLeft,
   Users,
+  Sparkles,
+  ArrowRight,
+  Check,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface SetupData {
   appName: string;
@@ -44,6 +49,7 @@ interface Tenant {
 
 type Tab = "setup" | "tenants";
 type TenantView = "list" | "detail";
+type WizardStep = "license" | "tenant" | "admin" | "complete";
 
 const LICENSE_COOKIE_NAME = "admin_license_key";
 
@@ -129,6 +135,16 @@ export function AdminSetupPage() {
   const [tenantForm, setTenantForm] = useState({
     name: "",
     domain: "",
+  });
+
+  // Wizard state
+  const { needsSetup } = useAuthStore();
+  const [wizardStep, setWizardStep] = useState<WizardStep>("license");
+  const [createdTenantId, setCreatedTenantId] = useState<number | null>(null);
+  const [wizardAdminUser, setWizardAdminUser] = useState({
+    username: "",
+    email: "",
+    password: "",
   });
 
   // Helper to get users for a specific tenant
@@ -227,6 +243,10 @@ export function AdminSetupPage() {
       if (data.success) {
         setIsVerified(true);
         setLicenseCookie(key);
+        // Advance wizard if in first-time setup mode
+        if (needsSetup) {
+          handleWizardNext("tenant");
+        }
         return true;
       }
       return false;
@@ -585,6 +605,83 @@ export function AdminSetupPage() {
     setTenantForm({ name: "", domain: "" });
   };
 
+  // Wizard handlers
+  const handleWizardNext = async (step: WizardStep) => {
+    setWizardStep(step);
+  };
+
+  const handleWizardTenantCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const response = await fetch("/api/admin/setup/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          licenseKey,
+          ...tenantForm,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCreatedTenantId(data.tenant.id);
+        toast.success("Tenant created successfully!");
+        setTenantForm({ name: "", domain: "" });
+        handleWizardNext("admin");
+      } else {
+        toast.error(data.error || "Failed to create tenant");
+      }
+    } catch (err) {
+      toast.error("Failed to create tenant");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleWizardAdminCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createdTenantId) return;
+
+    setSaving(true);
+
+    try {
+      const response = await fetch("/api/admin/setup/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          licenseKey,
+          username: wizardAdminUser.username,
+          email: wizardAdminUser.email,
+          password: wizardAdminUser.password,
+          role: "admin",
+          tenant_id: createdTenantId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("Admin user created successfully!");
+        setWizardAdminUser({ username: "", email: "", password: "" });
+        handleWizardNext("complete");
+      } else {
+        toast.error(data.error || "Failed to create admin user");
+      }
+    } catch (err) {
+      toast.error("Failed to create admin user");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleWizardComplete = () => {
+    // Refresh the app to update the setup check
+    window.location.href = "/";
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -645,6 +742,221 @@ export function AdminSetupPage() {
                 {verifying ? "Verifying..." : "Verify License Key"}
               </Button>
             </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // First-time setup wizard
+  if (needsSetup && isVerified) {
+    const steps = [
+      { id: "license", label: "License", icon: CheckCircle2 },
+      { id: "tenant", label: "Create Tenant", icon: Users },
+      { id: "admin", label: "Create Admin", icon: Shield },
+      { id: "complete", label: "Complete", icon: Sparkles },
+    ] as const;
+
+    const currentStepIndex = steps.findIndex(s => s.id === wizardStep);
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <div className="w-full max-w-2xl space-y-8">
+          {/* Progress Steps */}
+          <div className="flex items-center justify-center">
+            {steps.map((step, index) => {
+              const isCompleted = index < currentStepIndex;
+              const isCurrent = index === currentStepIndex;
+              const Icon = step.icon;
+              const ShieldIcon = Shield;
+
+              return (
+                <div key={step.id} className="flex items-center">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors ${
+                        isCompleted
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : isCurrent
+                          ? "border-primary text-primary"
+                          : "border-muted-foreground/30 text-muted-foreground"
+                      }`}
+                    >
+                      {step.id === "admin" ? (
+                        <ShieldIcon className="h-5 w-5" />
+                      ) : (
+                        <Icon className="h-5 w-5" />
+                      )}
+                    </div>
+                    <span className={`mt-2 text-xs font-medium ${
+                      isCurrent ? "text-primary" : "text-muted-foreground"
+                    }`}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div
+                      className={`h-0.5 w-16 mx-2 transition-colors ${
+                        index < currentStepIndex ? "bg-primary" : "bg-muted-foreground/30"
+                      }`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Step Content */}
+          <div className="border rounded-lg p-8">
+            {wizardStep === "tenant" && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                    <Users className="h-6 w-6 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-bold">Create Your First Tenant</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    A tenant represents your organization or workspace
+                  </p>
+                </div>
+
+                <form onSubmit={handleWizardTenantCreate} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="wizardTenantName">Organization Name</Label>
+                    <Input
+                      id="wizardTenantName"
+                      type="text"
+                      placeholder="My Organization"
+                      value={tenantForm.name}
+                      onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wizardTenantDomain">Domain (Optional)</Label>
+                    <Input
+                      id="wizardTenantDomain"
+                      type="text"
+                      placeholder="https://example.com"
+                      value={tenantForm.domain}
+                      onChange={(e) => setTenantForm({ ...tenantForm, domain: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Custom domain for this tenant (leave empty for default)
+                    </p>
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={saving}>
+                    {saving ? "Creating..." : (
+                      <>
+                        Continue
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </div>
+            )}
+
+            {wizardStep === "admin" && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                    <Shield className="h-6 w-6 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-bold">Create Your Admin Account</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    This account will have full administrative access
+                  </p>
+                </div>
+
+                <form onSubmit={handleWizardAdminCreate} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="wizardUsername">Username</Label>
+                    <Input
+                      id="wizardUsername"
+                      type="text"
+                      placeholder="admin"
+                      value={wizardAdminUser.username}
+                      onChange={(e) => setWizardAdminUser({ ...wizardAdminUser, username: e.target.value })}
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wizardEmail">Email</Label>
+                    <Input
+                      id="wizardEmail"
+                      type="email"
+                      placeholder="admin@example.com"
+                      value={wizardAdminUser.email}
+                      onChange={(e) => setWizardAdminUser({ ...wizardAdminUser, email: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wizardPassword">Password</Label>
+                    <Input
+                      id="wizardPassword"
+                      type="password"
+                      placeholder="••••••••"
+                      value={wizardAdminUser.password}
+                      onChange={(e) => setWizardAdminUser({ ...wizardAdminUser, password: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={saving}>
+                    {saving ? "Creating..." : (
+                      <>
+                        Complete Setup
+                        <Check className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </form>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => handleWizardNext("tenant")}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+              </div>
+            )}
+
+            {wizardStep === "complete" && (
+              <div className="space-y-6 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                  <Sparkles className="h-8 w-8 text-primary" />
+                </div>
+                <h2 className="text-2xl font-bold">Setup Complete!</h2>
+                <p className="text-muted-foreground">
+                  Your workspace is ready. You can now start using AIBase.
+                </p>
+
+                <div className="space-y-3 rounded-lg bg-muted/50 p-4 text-sm">
+                  <p className="font-medium">What's next?</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
+                    <li>Log in with your admin account</li>
+                    <li>Create projects for your conversations</li>
+                    <li>Invite team members to collaborate</li>
+                  </ul>
+                </div>
+
+                <Button onClick={handleWizardComplete} className="w-full" size="lg">
+                  Go to Dashboard
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>

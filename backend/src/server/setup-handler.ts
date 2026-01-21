@@ -791,3 +791,33 @@ export async function handleDeleteTenant(req: Request, tenantId: string): Promis
   }
 }
 
+/**
+ * GET /api/setup/check - Check if application setup is required
+ * Returns whether the application needs initial setup (no tenants exist)
+ */
+export async function handleCheckSetup(req: Request): Promise<Response> {
+  try {
+    await tenantStorage.initialize();
+
+    // Get tenant count
+    const tenants = tenantStorage.getAll();
+    const tenantCount = tenants.length;
+
+    // Check if setup is required
+    const needsSetup = tenantCount === 0;
+
+    return Response.json({
+      success: true,
+      needsSetup,
+      tenantCount,
+      redirect: needsSetup ? "/admin-setup" : null
+    });
+  } catch (error: any) {
+    logger.error({ error }, "Error checking setup status");
+    return Response.json(
+      { success: false, error: error.message || "Failed to check setup status" },
+      { status: 500 }
+    );
+  }
+}
+
