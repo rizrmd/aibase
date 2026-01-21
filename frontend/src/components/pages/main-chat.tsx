@@ -283,7 +283,7 @@ export function MainChat({
             variant="outline"
             size="sm"
             title="Start a new conversation"
-            className="mb-2"
+            className="mb-2 py-1"
           />
         </PageActionGroup>
       )}
