@@ -483,21 +483,10 @@ export class WebSocketServer {
 
         // WhatsApp WebSocket endpoint for real-time status updates
         if (pathname === "/api/whatsapp/ws") {
-          try {
-            const wsModule = await import("./whatsapp-ws");
-            // Initialize notification functions so whatsapp-handler can use them
-            initWhatsAppNotifications(wsModule.notifyWhatsAppStatus, wsModule.notifyWhatsAppQRCode);
-            return wsModule.handleWhatsAppWebSocket(req);
-          } catch (err) {
-            console.error('[WhatsApp WS] Failed to load or handle WebSocket:', err);
-            return new Response(JSON.stringify({
-              error: "Failed to initialize WhatsApp WebSocket",
-              details: err instanceof Error ? err.message : String(err)
-            }), {
-              status: 500,
-              headers: { "Content-Type": "application/json" }
-            });
-          }
+          const wsModule = await import("./whatsapp-ws");
+          // Initialize notification functions so whatsapp-handler can use them
+          initWhatsAppNotifications(wsModule.notifyWhatsAppStatus, wsModule.notifyWhatsAppQRCode);
+          return wsModule.handleWhatsAppWebSocket(req);
         }
 
         // WhatsApp API endpoints
