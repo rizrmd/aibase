@@ -34,7 +34,6 @@ import type { Extension } from "@/types/extension";
 import type { Category } from "@/types/category";
 import {
   Trash2,
-  Plus,
   PowerIcon,
   RefreshCw,
   Code,
@@ -58,7 +57,6 @@ export function ExtensionsSettings() {
   const navigate = useNavigate();
 
   const [extensions, setExtensions] = useState<Extension[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -84,7 +82,6 @@ export function ExtensionsSettings() {
         getCategories(currentProject.id),
       ]);
       setExtensions(extData);
-      setCategories(catData);
 
       // Group extensions by category
       const groups: CategoryGroup[] = catData.map((cat) => ({

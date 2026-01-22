@@ -4,7 +4,6 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -17,22 +16,20 @@ import {
 } from "@/components/ui/dialog";
 import { useProjectStore } from "@/stores/project-store";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { createExtension } from "@/lib/api/extensions";
 import {
-  Wand2,
   ArrowLeft,
   Loader2,
   Code,
   Check,
-  X,
   RefreshCw,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
-import type { Extension } from "@/types/extension";
 
 interface GeneratedExtension {
   metadata: {
@@ -53,7 +50,6 @@ interface GeneratedExtension {
 export function ExtensionAICreator() {
   const { currentProject } = useProjectStore();
   const navigate = useNavigate();
-  const { projectId } = useParams<{ projectId: string }>();
 
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -118,7 +114,7 @@ export function ExtensionAICreator() {
 
       toast.success("Extension created successfully!");
       navigate(`/projects/${currentProject.id}/extensions`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save extension:", error);
       toast.error(
         error instanceof Error ? error.message : "Failed to save extension"
