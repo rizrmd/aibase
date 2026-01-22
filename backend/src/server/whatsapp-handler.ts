@@ -417,6 +417,46 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
 }
 
 /**
+ * Clean response before sending to WhatsApp
+ * Removes tool call JSON and other unwanted content
+ */
+function cleanWhatsAppResponse(response: string): string {
+  let cleaned = response;
+
+  // Remove structured tool call JSON with tool_call_id
+  cleaned = cleaned.replace(/\{[^}]*"tool_call_id"\s*:\s*"[^"]*"[^}]*\}/g, '');
+
+  // Remove tool call JSON patterns (e.g., {"name": "tool_name", "arguments": {...}})
+  cleaned = cleaned.replace(/\{[^}]*"name"\s*:\s*"[^"]*"[^}]*"arguments"\s*:\s*\{[^}]*\}[^}]*\}/g, '');
+
+  // Remove tool_calls array patterns
+  cleaned = cleaned.replace(/"tool_calls"\s*:\s*\[[^\]]*\]/g, '');
+
+  // Remove function call patterns
+  cleaned = cleaned.replace(/\[Function Call: [^\]]*\]/gi, '');
+
+  // Remove tool result patterns
+  cleaned = cleaned.replace(/\[Tool Result: [^\]]*\]/gi, '');
+
+  // Remove "Calling tool" messages
+  cleaned = cleaned.replace(/Calling tool:?\s*\[?[^\n\]]*\]?/gi, '');
+
+  // Remove tool execution messages
+  cleaned = cleaned.replace(/Executing\s+\w+\s+tool/gi, '');
+
+  // Remove JSON objects that look like tool results
+  cleaned = cleaned.replace(/\{[^}]*"error"[^}]*\}/g, '');
+
+  // Remove multiple newlines (compress to max 2)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // Remove leading/trailing whitespace
+  cleaned = cleaned.trim();
+
+  return cleaned;
+}
+
+/**
  * Process WhatsApp message with AI
  */
 async function processWhatsAppMessageWithAI(
@@ -471,9 +511,10 @@ async function processWhatsAppMessageWithAI(
 
     // Send response back to WhatsApp
     if (fullResponse.trim()) {
-      console.log("[WhatsApp] Sending response back to WhatsApp:", fullResponse.substring(0, 100) + "...");
+      const cleanedResponse = cleanWhatsAppResponse(fullResponse);
+      console.log("[WhatsApp] Sending response back to WhatsApp:", cleanedResponse.substring(0, 100) + "...");
       await sendWhatsAppMessage(projectId, whatsappNumber, {
-        text: fullResponse,
+        text: cleanedResponse,
       });
       console.log("[WhatsApp] Response sent successfully");
     }
