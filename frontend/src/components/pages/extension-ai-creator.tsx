@@ -5,15 +5,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useProjectStore } from "@/stores/project-store";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -151,13 +142,13 @@ export function ExtensionAICreator() {
       <div className="space-y-4">
         <div>
           <Label htmlFor="prompt">Describe your extension</Label>
-          <Textarea
+          <textarea
             id="prompt"
             placeholder="e.g., I want an extension that can query GitHub API to get repository information, list commits, and show file details..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             rows={5}
-            className="mt-1.5 resize-none"
+            className="mt-1.5 w-full px-3 py-2 border rounded-md resize-none bg-background"
             disabled={isGenerating || !!generatedExtension}
           />
           <p className="text-xs text-muted-foreground mt-1">

@@ -283,11 +283,8 @@ export function ExtensionsSettings() {
             description: categoryForm.description,
           }
         );
-        setCategories((prev) =>
-          prev.map((cat) => (cat.id === updated.id ? updated : cat))
-        );
-        setCategoryGroups((prev) =>
-          prev.map((group) =>
+        setCategoryGroups((prev: CategoryGroup[]) =>
+          prev.map((group: CategoryGroup) =>
             group.category.id === updated.id
               ? { ...group, category: updated }
               : group
@@ -301,8 +298,7 @@ export function ExtensionsSettings() {
           name: categoryForm.name,
           description: categoryForm.description,
         });
-        setCategories((prev) => [...prev, created]);
-        setCategoryGroups((prev) => [
+        setCategoryGroups((prev: CategoryGroup[]) => [
           ...prev,
           { category: created, extensions: [], expanded: true },
         ]);
