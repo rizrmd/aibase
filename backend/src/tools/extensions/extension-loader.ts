@@ -67,6 +67,7 @@ export class ExtensionLoader {
             description: metadata.description,
             author: metadata.author,
             version: metadata.version,
+            category: metadata.category,
             code,
             enabled: metadata.enabled,
             isDefault: true,
