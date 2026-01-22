@@ -11,6 +11,7 @@ issue-prefix: "aibase"
 # Use no-db mode: load from JSONL, no SQLite, write back after each command
 # When true, bd will use .beads/issues.jsonl as the source of truth
 # instead of SQLite database
+# Changed from no-db: true to false for SQLite backend
 no-db: false
 
 # Disable daemon for RPC communication (forces direct database access)
