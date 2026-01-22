@@ -1,4 +1,5 @@
-import { LogOut } from "lucide-react"
+import { LogOut, UserMinus } from "lucide-react"
+import { useAuthStore } from "@/stores/auth-store"
 
 import {
   Avatar,
@@ -46,6 +47,8 @@ export function UserAccountMenu({
   showInline?: boolean
 }) {
   const initials = getInitials(user.username)
+  const adminToken = useAuthStore((state) => state.adminToken);
+  const stopImpersonating = useAuthStore((state) => state.stopImpersonating);
 
   // Inline variant for sidebar footer - shows avatar + text with dropdown menu
   if (showInline) {
@@ -85,6 +88,12 @@ export function UserAccountMenu({
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {adminToken && (
+            <DropdownMenuItem onClick={stopImpersonating}>
+              <UserMinus className="mr-2 h-4 w-4" />
+              Stop Impersonating
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={onLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Log out
@@ -98,7 +107,7 @@ export function UserAccountMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+        <Button variant="ghost" className="relative cursor-pointer h-9 w-9 rounded-full">
           <Avatar className="h-9 w-9">
             <AvatarImage src="" alt={user.username} />
             <AvatarFallback className="bg-primary text-primary-foreground">
@@ -127,6 +136,12 @@ export function UserAccountMenu({
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {adminToken && (
+          <DropdownMenuItem onClick={stopImpersonating}>
+            <UserMinus className="mr-2 h-4 w-4" />
+            Stop Impersonating
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={onLogout}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out

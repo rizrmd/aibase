@@ -92,6 +92,7 @@ import {
   handleAdminCreateUser,
   handleAdminGetUsers,
   handleAdminDeleteUser,
+  handleAdminImpersonateUser,
 } from "./auth-handler";
 import {
   handleGetTenants,
@@ -681,6 +682,13 @@ export class WebSocketServer {
         if (adminUserIdMatch && req.method === "DELETE") {
           const userId = adminUserIdMatch[1];
           return handleAdminDeleteUser(req, userId);
+        }
+
+        // Match /api/admin/users/:userId/impersonate endpoints
+        const impersonateMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)\/impersonate$/);
+        if (impersonateMatch && req.method === "POST") {
+          const userId = impersonateMatch[1];
+          return handleAdminImpersonateUser(req, userId);
         }
 
         // Tenant API endpoints

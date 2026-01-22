@@ -13,6 +13,7 @@ import {
   Users,
   MessageCircle,
 } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { NavSection } from "@/components/nav-section"
 import {
@@ -23,6 +24,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { useProjectStore } from "@/stores/project-store"
 import { useAuthStore } from "@/stores/auth-store"
@@ -35,6 +37,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isAdmin = currentUser?.role === "admin"
   const appName = import.meta.env.APP_NAME || "AI Base"
   const aimeowEnabled = import.meta.env.VITE_AIMEOW === "true"
+
+  const { isMobile, setOpenMobile } = useSidebar()
+
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
 
   // Generate the URL for the current project
   const getUrl = (path: string) => {
@@ -91,7 +101,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: Puzzle,
     },
     ...(isAdmin ? [{
-      title: "Admin",
+      title: "Users",
       url: "/admin/users",
       icon: Users,
     }] : []),
@@ -103,7 +113,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="/">
+              <Link to="/" onClick={handleLinkClick}>
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Command className="size-4" />
                 </div>
@@ -111,7 +121,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <span className="truncate font-medium">{appName}</span>
                   <span className="truncate text-xs">{currentProject?.name || "Select Project"}</span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -57,10 +57,9 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
   const isEmbedRoute = location.pathname === "/embed";
   const isRootRoute = location.pathname === "/";
   const isAdminSetupRoute = location.pathname === "/admin-setup";
-  const isAdminRoute = location.pathname === "/admin/users";
 
-  // Show sidebar only when inside a project
-  const shouldShowSidebar = !isLoginRoute && !isEmbedRoute && !isRootRoute && !isAdminSetupRoute && !isAdminRoute;
+  // Show sidebar only when inside a project or on admin pages
+  const shouldShowSidebar = !isLoginRoute && !isEmbedRoute && !isRootRoute && !isAdminSetupRoute;
 
   // Show top header account menu only when NOT inside a project (root/home or admin pages)
   const shouldShowTopAccountMenu = !isLoginRoute && user && !shouldShowSidebar;
@@ -77,7 +76,7 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
       <div className="flex flex-1 flex-col bg-background min-h-screen">
         {/* Top header bar with user account - Show only when NOT inside a project */}
         {shouldShowTopAccountMenu && (
-          <header className="flex items-center justify-end border-b px-4 py-2 bg-background">
+          <div className="absolute cursor-pointer top-5 right-5">
             <UserAccountMenu
               user={{
                 username: user.username,
@@ -85,11 +84,11 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
               }}
               onLogout={logout}
             />
-          </header>
+          </div>
         )}
         {/* Sidebar Trigger for mobile - Show only when sidebar is visible */}
         {shouldShowSidebar && (
-          <header className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
+          <header className="flex z-1 bg-white absolute top-0 left-0 right-0 items-center gap-2 border-b px-4 py-2 md:hidden">
             <SidebarTrigger />
             <span className="font-semibold">{currentProject?.name || appName}</span>
           </header>
@@ -101,126 +100,126 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
             <SetupRequired />
           ) : (
             <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/admin-setup" element={<AdminSetupPage />} />
-          <Route path="/embed" element={<EmbedChatPage />} />
+              {/* Public routes */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/admin-setup" element={<AdminSetupPage />} />
+              <Route path="/embed" element={<EmbedChatPage />} />
 
-          {/* Protected routes */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <ProjectSelectorPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute>
-                <UserManagementPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/chat"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <MainChat
-                    wsUrl={wsUrl}
-                    isTodoPanelVisible={true}
-                  />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/history"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ConversationHistoryPage />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/memory"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <MemoryEditor />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/context"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ContextEditor />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/files"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <FilesManagerPage />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          {aimeowEnabled && (
-            <Route
-              path="/projects/:projectId/whatsapp"
-              element={
-                <ProtectedRoute>
-                  <ProjectRouteHandler>
-                    <WhatsAppSettings />
-                  </ProjectRouteHandler>
-                </ProtectedRoute>
-              }
-            />
-          )}
-          <Route
-            path="/projects/:projectId/embed"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <EmbedSettings />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/extensions"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ExtensionsSettings />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/extensions/:extensionId"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ExtensionEditor />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          {/* Catch-all route - redirect to root */}
-          <Route path="*" element={<ProtectedRoute><ProjectSelectorPage /></ProtectedRoute>} />
-          </Routes>
+              {/* Protected routes */}
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <ProjectSelectorPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <ProtectedRoute>
+                    <UserManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/chat"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <MainChat
+                        wsUrl={wsUrl}
+                        isTodoPanelVisible={true}
+                      />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/history"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <ConversationHistoryPage />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/memory"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <MemoryEditor />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/context"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <ContextEditor />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/files"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <FilesManagerPage />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              {aimeowEnabled && (
+                <Route
+                  path="/projects/:projectId/whatsapp"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <WhatsAppSettings />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+              )}
+              <Route
+                path="/projects/:projectId/embed"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <EmbedSettings />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/extensions"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <ExtensionsSettings />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId/extensions/:extensionId"
+                element={
+                  <ProtectedRoute>
+                    <ProjectRouteHandler>
+                      <ExtensionEditor />
+                    </ProjectRouteHandler>
+                  </ProtectedRoute>
+                }
+              />
+              {/* Catch-all route - redirect to root */}
+              <Route path="*" element={<ProtectedRoute><ProjectSelectorPage /></ProtectedRoute>} />
+            </Routes>
           )}
         </main>
 

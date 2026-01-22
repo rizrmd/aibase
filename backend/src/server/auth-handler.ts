@@ -365,6 +365,64 @@ export async function handleAdminDeleteUser(req: Request, userId: string): Promi
 }
 
 /**
+ * POST /api/admin/users/:userId/impersonate
+ * Impersonate a user (admin/root only)
+ */
+export async function handleAdminImpersonateUser(req: Request, userId: string): Promise<Response> {
+  try {
+    const token = extractToken(req);
+    if (!token) {
+      return Response.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const currentUser = await authService.getUserByToken(token);
+    if (!currentUser) {
+      return Response.json({ error: "Invalid session" }, { status: 401 });
+    }
+
+    // Check if user is admin or root
+    if (!authService.hasRole(currentUser.id, 'admin')) {
+      return Response.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    const userIdNum = parseInt(userId, 10);
+    if (isNaN(userIdNum)) {
+      return Response.json({ error: "Invalid user ID" }, { status: 400 });
+    }
+
+    // Create a new session for the target user
+    const session = await authService.createSessionForUser(userIdNum);
+    const targetUser = await authService.getUserByToken(session.token);
+
+    if (!targetUser) {
+      return Response.json({ error: "Target user not found" }, { status: 404 });
+    }
+
+    // Set session token in cookie
+    const headers = new Headers();
+    headers.set("Content-Type", "application/json");
+    headers.set(
+      "Set-Cookie",
+      `session_token=${session.token}; HttpOnly; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Strict`
+    );
+
+    return new Response(
+      JSON.stringify({
+        user: targetUser,
+        token: session.token,
+      }),
+      { status: 200, headers }
+    );
+  } catch (error: any) {
+    logger.error({ error }, "Impersonation error");
+    return Response.json(
+      { error: error.message || "Impersonation failed" },
+      { status: 400 }
+    );
+  }
+}
+
+/**
  * Middleware to protect routes that require authentication
  * Returns the authenticated user or null
  */

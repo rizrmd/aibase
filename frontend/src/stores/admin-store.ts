@@ -25,6 +25,7 @@ interface AdminStore {
     role: "admin" | "user"
   ) => Promise<boolean>;
   deleteUser: (token: string, userId: number) => Promise<boolean>;
+  impersonateUser: (token: string, userId: number) => Promise<{ user: User; token: string } | null>;
 
   // Tenant-specific user operations
   fetchTenantUsers: (token: string, tenantId: number) => Promise<void>;
@@ -168,6 +169,41 @@ export const useAdminStore = create<AdminStore>((set, _get) => ({
         isLoading: false,
       });
       return false;
+    }
+  },
+
+  impersonateUser: async (token: string, userId: number) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/users/${userId}/impersonate`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to impersonate user");
+      }
+
+      const data = await response.json();
+      set({ isLoading: false, error: null });
+
+      console.log("[Admin] Impersonation successful:", data.user.username);
+      return data;
+    } catch (error: any) {
+      console.error("[Admin] Impersonate user error:", error);
+      set({
+        error: error.message || "Failed to impersonate user",
+        isLoading: false,
+      });
+      return null;
     }
   },
 

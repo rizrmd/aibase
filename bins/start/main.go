@@ -70,7 +70,7 @@ func main() {
 	// Calculate total steps based on enabled features
 	// Base steps: Bun, Dependencies, Frontend = 3
 	// Optional: AIMEOW (+1), Qdrant (+1), Start processes (+1)
-	totalSteps := 4 // Base + start processes
+	totalSteps := 5 // Base + start processes
 	if enableAimeow {
 		totalSteps++
 	}

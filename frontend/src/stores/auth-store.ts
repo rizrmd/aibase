@@ -26,6 +26,8 @@ export interface AuthStore {
   error: string | null;
   needsSetup: boolean;
   setupChecked: boolean;
+  adminUser: User | null;
+  adminToken: string | null;
 
   // Actions
   setUser: (user: User | null) => void;
@@ -42,6 +44,7 @@ export interface AuthStore {
   fetchCurrentUser: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   checkSetup: () => Promise<boolean>;
+  stopImpersonating: () => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -55,6 +58,8 @@ export const useAuthStore = create<AuthStore>()(
       error: null,
       needsSetup: false,
       setupChecked: false,
+      adminUser: null,
+      adminToken: null,
 
       // Synchronous actions
       setUser: (user) => {
@@ -300,6 +305,20 @@ export const useAuthStore = create<AuthStore>()(
           return false;
         }
       },
+
+      stopImpersonating: () => {
+        const { adminUser, adminToken } = get();
+        if (adminUser && adminToken) {
+          set({
+            user: adminUser,
+            token: adminToken,
+            adminUser: null,
+            adminToken: null,
+            isAuthenticated: true,
+          });
+          console.log("[Auth] Stopped impersonating, restored admin session");
+        }
+      },
     }),
     {
       name: "auth-storage",
@@ -307,6 +326,8 @@ export const useAuthStore = create<AuthStore>()(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        adminUser: state.adminUser,
+        adminToken: state.adminToken,
       }),
     }
   )
