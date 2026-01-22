@@ -332,6 +332,8 @@ export function ExtensionsSettings() {
       await deleteCategoryApi(currentProject.id, deleteCategoryDialog.categoryId);
       await loadData();
       toast.success("Category deleted");
+      // Close edit category dialog after successful deletion
+      setCategoryDialogOpen(false);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete category"
