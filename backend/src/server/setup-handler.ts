@@ -517,19 +517,10 @@ export async function handleUpdateUser(req: Request, userId: string): Promise<Re
 
     await authService.initialize();
     await userStorage.initialize();
-    const adminUser = await getAdminUser();
 
     const userIdNum = parseInt(userId, 10);
     if (isNaN(userIdNum)) {
       return Response.json({ success: false, error: "Invalid user ID" }, { status: 400 });
-    }
-
-    // Prevent modifying yourself (if admin user exists)
-    if (adminUser && adminUser.id === userIdNum) {
-      return Response.json(
-        { success: false, error: "Cannot modify your own account via admin-setup" },
-        { status: 400 }
-      );
     }
 
     // Build update object
@@ -577,19 +568,10 @@ export async function handleDeleteUser(req: Request, userId: string): Promise<Re
     }
 
     await authService.initialize();
-    const adminUser = await getAdminUser();
 
     const userIdNum = parseInt(userId, 10);
     if (isNaN(userIdNum)) {
       return Response.json({ success: false, error: "Invalid user ID" }, { status: 400 });
-    }
-
-    // Prevent deleting yourself (if admin user exists)
-    if (adminUser && adminUser.id === userIdNum) {
-      return Response.json(
-        { success: false, error: "Cannot delete your own account via admin-setup" },
-        { status: 400 }
-      );
     }
 
     const successDeleted = await authService.deleteUserById(userIdNum);
