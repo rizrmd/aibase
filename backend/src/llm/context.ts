@@ -191,7 +191,7 @@ async function loadContextTemplate(projectId: string): Promise<string> {
 /**
  * Load tool examples from tool definition files
  */
-async function loadToolExamples(): Promise<string> {
+async function loadToolExamples(projectId?: string): Promise<string> {
   try {
     // Import context functions from tool definition files
     const scriptTool = await import("../tools/definition/script-tool");
@@ -222,6 +222,15 @@ async function loadToolExamples(): Promise<string> {
       examples.push(await memoryTool.context());
     }
 
+    // Extension contexts (project-specific)
+    if (projectId) {
+      const { generateExtensionsContext } = await import("../tools/extensions/extension-context");
+      const extensionsContext = await generateExtensionsContext(projectId);
+      if (extensionsContext) {
+        examples.push(extensionsContext);
+      }
+    }
+
     // Join all examples with newlines
     return examples.join("\n\n");
   } catch (error) {
@@ -237,7 +246,8 @@ async function injectDynamicContent(
   template: string,
   memory: MemoryStore | null,
   todoList: TodoList | null,
-  urlParams: Record<string, string> | null = null
+  urlParams: Record<string, string> | null = null,
+  projectId?: string
 ): Promise<string> {
   let context = template;
 
@@ -259,8 +269,8 @@ async function injectDynamicContent(
     console.log(`[Context] No URL parameters provided`);
   }
 
-  // Replace tool context placeholder
-  const toolContext = await loadToolExamples();
+  // Replace tool context placeholder (now includes extensions if projectId provided)
+  const toolContext = await loadToolExamples(projectId);
   context = context.replace("{{TOOL_CONTEXT}}", toolContext);
 
   // Append memory if it exists
@@ -300,8 +310,8 @@ export const defaultContext = async (
   // const todoList = await loadTodos(convId, projectId);
   const todoList = null;
 
-  // Inject dynamic content into template (URL params, tool context, memory, todos)
-  const context = await injectDynamicContent(template, memory, todoList, urlParams || null);
+  // Inject dynamic content into template (URL params, tool context, memory, todos, extensions)
+  const context = await injectDynamicContent(template, memory, todoList, urlParams || null, projectId);
 
   return context;
 };
