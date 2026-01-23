@@ -45,6 +45,10 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.PUBLIC_BASE_PATH": JSON.stringify(normalizedBasePath),
       "import.meta.env.APP_NAME": JSON.stringify(appName),
     },
+    esbuild: {
+      pure: mode === "production" ? ["console.log", "console.info", "console.debug", "console.trace"] : [],
+      drop: mode === "production" ? ["debugger"] : [],
+    },
     server: {
       port: 5050,
       proxy: {
