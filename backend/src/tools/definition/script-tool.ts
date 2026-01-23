@@ -1,15 +1,5 @@
 import { Tool } from "../../llm/conversation";
 import { ScriptRuntime, context as scriptRuntimeContext } from "../script-runtime/script-runtime";
-import { context as duckdbContext } from "../script-runtime/duckdb";
-import { context as postgresqlContext } from "../script-runtime/postgresql";
-import { context as clickhouseContext } from "../script-runtime/clickhouse";
-import { context as trinoContext } from "../script-runtime/trino";
-import { context as pdfreaderContext } from "../script-runtime/pdfreader";
-import { context as webSearchContext } from "../script-runtime/web-search";
-import { context as showChartContext } from "../script-runtime/show-chart";
-import { context as showTableContext } from "../script-runtime/show-table";
-import { context as showMermaidContext } from "../script-runtime/show-mermaid";
-import { context as convertDocumentContext } from "../script-runtime/convert-document";
 import { storeOutput } from "../script-runtime/output-storage";
 import { ExtensionLoader } from "../extensions/extension-loader";
 
