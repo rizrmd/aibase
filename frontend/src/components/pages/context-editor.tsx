@@ -235,9 +235,10 @@ export function ContextEditor() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto rounded-lg border">
+        <div className="flex-1 overflow-auto rounded-lg border min-h-0">
           <CodeMirror
             value={content}
+            height="100%"
             extensions={[markdown()]}
             onChange={(value) => setContent(value)}
             theme="light"
@@ -247,7 +248,7 @@ export function ContextEditor() {
               highlightActiveLineGutter: true,
               highlightActiveLine: true,
             }}
-            style={{ height: "100%", fontSize: "14px" }}
+            style={{ fontSize: "14px" }}
           />
         </div>
       )}
