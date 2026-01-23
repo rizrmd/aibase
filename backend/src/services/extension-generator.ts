@@ -161,24 +161,68 @@ Generate the complete extension code following the structure specified above.`;
   }
 
   console.log('[ExtensionGenerator] Received response from OpenAI');
+  console.log('[ExtensionGenerator] Response preview:', content.substring(0, 500));
 
-  // Try to extract JSON from response
+  // Try to extract JSON from response - multiple strategies
+  let jsonStr: string | null = null;
+  let parsed: any = null;
+
+  // Strategy 1: Try to extract JSON from markdown code blocks with json tag
   let jsonMatch = content.match(/```json\\s*([\\s\\S]*?)\\s*```/);
-  if (!jsonMatch) {
-    // Try without markdown
+  if (jsonMatch && jsonMatch[1]) {
+    jsonStr = jsonMatch[1];
+    console.log('[ExtensionGenerator] Found JSON in ```json block');
+  }
+
+  // Strategy 2: Try to extract JSON from markdown code blocks without json tag
+  if (!jsonStr) {
+    jsonMatch = content.match(/```\\s*([\\s\\S]*?)\\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      jsonStr = jsonMatch[1];
+      console.log('[ExtensionGenerator] Found JSON in ``` block');
+    }
+  }
+
+  // Strategy 3: Try to find JSON object directly (starts with {, ends with })
+  if (!jsonStr) {
     jsonMatch = content.match(/\\{[\\s\\S]*\\}/);
+    if (jsonMatch && jsonMatch[0]) {
+      jsonStr = jsonMatch[0];
+      console.log('[ExtensionGenerator] Found JSON object directly');
+    }
   }
 
-  if (!jsonMatch) {
-    throw new Error('Failed to extract JSON from AI response');
+  // Strategy 4: Try to parse the entire content as JSON
+  if (!jsonStr) {
+    try {
+      parsed = JSON.parse(content);
+      jsonStr = content;
+      console.log('[ExtensionGenerator] Parsed entire content as JSON');
+    } catch {
+      // Not valid JSON, continue to error
+    }
   }
 
-  const jsonStr = jsonMatch[1] || jsonMatch[0];
-  const parsed = JSON.parse(jsonStr);
+  if (!jsonStr) {
+    console.error('[ExtensionGenerator] Failed to extract JSON. Full response:', content);
+    throw new Error('Failed to extract JSON from AI response. AI did not return valid JSON format.');
+  }
+
+  // Try to parse the JSON string
+  try {
+    if (!parsed) {
+      parsed = JSON.parse(jsonStr);
+    }
+  } catch (error: any) {
+    console.error('[ExtensionGenerator] JSON parse error:', error.message);
+    console.error('[ExtensionGenerator] JSON string that failed:', jsonStr.substring(0, 500));
+    throw new Error(`Failed to parse AI response as JSON: ${error.message}`);
+  }
 
   // Validate response structure
   if (!parsed.id || !parsed.name || !parsed.description || !parsed.code) {
-    throw new Error('Invalid AI response: missing required fields');
+    console.error('[ExtensionGenerator] Invalid AI response structure:', parsed);
+    throw new Error('Invalid AI response: missing required fields (id, name, description, or code)');
   }
 
   // Construct extension
