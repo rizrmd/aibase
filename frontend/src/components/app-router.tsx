@@ -24,7 +24,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { AppSidebar } from "./app-sidebar";
 import { UserAccountMenu } from "./user-account-menu";
 import { SidebarProvider, SidebarTrigger } from "./ui/sidebar";
-import { getAppName } from "@/lib/setup";
+import { getAppName, isWhatsAppEnabled } from "@/lib/setup";
 import * as React from "react";
 
 interface AppRouterProps {
@@ -34,23 +34,27 @@ interface AppRouterProps {
 export function AppRouter({ wsUrl }: AppRouterProps) {
   const location = useLocation();
   const [appName, setAppName] = React.useState<string>("AI Base");
-  const aimeowEnabled = import.meta.env.VITE_AIMEOW === "true";
+  const [aimeowEnabled, setAimeowEnabled] = React.useState<boolean>(false);
 
   const { currentProject } = useProjectStore();
   const { loadConversations } = useConversationStore();
   const { user, logout, needsSetup, checkSetup, setupChecked } = useAuthStore();
 
-  // Check setup status and load app name on mount
+  // Check setup status, load app name and settings on mount
   useEffect(() => {
     if (!setupChecked) {
       checkSetup();
     }
 
-    const loadAppName = async () => {
-      const name = await getAppName();
+    const loadConfig = async () => {
+      const [name, whatsappEnabled] = await Promise.all([
+        getAppName(),
+        isWhatsAppEnabled()
+      ]);
       setAppName(name);
+      setAimeowEnabled(whatsappEnabled);
     };
-    loadAppName();
+    loadConfig();
   }, [checkSetup, setupChecked]);
 
   // Load conversations when project changes

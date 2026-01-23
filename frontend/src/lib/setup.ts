@@ -2,10 +2,12 @@
  * Setup configuration utilities
  */
 
+
 interface SetupConfig {
   appName: string | null;
   hasLogo: boolean;
   hasFavicon: boolean;
+  aimeowEnabled?: boolean;
 }
 
 let setupCache: SetupConfig | null = null;
@@ -87,9 +89,18 @@ export async function getFaviconUrl(): Promise<string | null> {
 }
 
 /**
+ * Check if WhatsApp features are enabled
+ */
+export async function isWhatsAppEnabled(): Promise<boolean> {
+  const setup = await fetchSetupConfig();
+  return !!setup?.aimeowEnabled;
+}
+
+/**
  * Clear setup cache (useful for testing or after updates)
  */
 export function clearSetupCache(): void {
   setupCache = null;
   setupPromise = null;
 }
+

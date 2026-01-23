@@ -11,7 +11,6 @@ export default defineConfig(({ mode }) => {
   // Also check process.env (set by the Go build script) as fallback
   const basePath = env.PUBLIC_BASE_PATH || process.env.PUBLIC_BASE_PATH || "";
   const appName = env.APP_NAME || process.env.APP_NAME || "AI-BASE";
-  const aimeowEnabled = env.AIMEOW === "true" || process.env.AIMEOW === "true";
 
   // Normalize base path - ensure it starts with / and doesn't end with /
   const normalizedBasePath = basePath
@@ -45,7 +44,6 @@ export default defineConfig(({ mode }) => {
     define: {
       "import.meta.env.PUBLIC_BASE_PATH": JSON.stringify(normalizedBasePath),
       "import.meta.env.APP_NAME": JSON.stringify(appName),
-      "import.meta.env.VITE_AIMEOW": JSON.stringify(aimeowEnabled),
     },
     server: {
       port: 5050,
