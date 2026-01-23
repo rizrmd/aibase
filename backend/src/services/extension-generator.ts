@@ -64,7 +64,7 @@ Each extension MUST have:
 - name: Display name (e.g., 'My Extension')
 - description: Clear description of what it does
 - version: Semantic version (e.g., '1.0.0')
-- category: Category for grouping (e.g., 'Data Tools', 'Database Tools', 'Web Tools', 'Utility Tools')
+- category: Category for grouping (e.g., 'Data Tools', 'Database Tools', 'Web Tools', 'Utility Tools', or empty string '' for uncategorized)
 
 ## Important Rules
 

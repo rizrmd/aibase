@@ -32,7 +32,7 @@ export async function handleExtensionGeneratorRequest(req: Request, projectId: s
     // Generate extension using AI
     const extension = await generateExtension(prompt, {
       projectId,
-      category: category || 'Uncategorized',
+      category: category || '',
     });
 
     // Save extension to project
@@ -104,7 +104,7 @@ export async function handleExtensionPreviewRequest(req: Request): Promise<Respo
     // Generate extension preview
     const extension = await generateExtension(prompt, {
       projectId: 'preview',
-      category: category || 'Uncategorized',
+      category: category || '',
     });
 
     // Add timestamp fields that frontend expects
