@@ -9,7 +9,7 @@ interface WhatsAppWSMessage {
 }
 
 interface WhatsAppWSResponse {
-  type: 'status' | 'qr_code' | 'connected' | 'disconnected' | 'error' | 'subscribed';
+  type: 'status' | 'qr_code' | 'qr_timeout' | 'connected' | 'disconnected' | 'error' | 'subscribed';
   data: {
     projectId: string;
     connected?: boolean;
@@ -78,6 +78,22 @@ export function notifyWhatsAppQRCode(projectId: string, qrCode: string) {
   broadcastQRCode(projectId, qrCode);
 }
 
+export function notifyWhatsAppQRTimeout(projectId: string) {
+  const connections = projectConnections.get(projectId);
+  if (!connections) return;
+
+  const message: WhatsAppWSResponse = {
+    type: 'qr_timeout',
+    data: { projectId },
+  };
+
+  connections.forEach((ws) => {
+    if (ws.readyState === 1) { // WebSocket.OPEN = 1
+      ws.send(JSON.stringify(message));
+    }
+  });
+}
+
 /**
  * Handle WebSocket connection open
  */
@@ -122,7 +138,7 @@ async function handleMessage(ws: any, message: string | Buffer) {
             const response = await fetch(`${WHATSAPP_API_URL}/clients`);
 
             if (response.ok) {
-              const clientsData = await response.json();
+              const clientsData = await response.json() as any;
               const clientsArray = Array.isArray(clientsData) ? clientsData : clientsData.clients;
               const client = clientsArray?.find((c: any) => c.id === data.projectId);
 

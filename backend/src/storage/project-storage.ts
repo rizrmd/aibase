@@ -56,9 +56,11 @@ export class ProjectStorage {
   private static instance: ProjectStorage;
   private db: Database;
   private dbPath: string;
+  private baseDir: string;
 
   private constructor() {
     this.dbPath = PATHS.PROJECTS_DB;
+    this.baseDir = PATHS.PROJECTS_DIR;
   }
 
   static getInstance(): ProjectStorage {

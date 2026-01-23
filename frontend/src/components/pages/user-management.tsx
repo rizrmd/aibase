@@ -4,7 +4,7 @@ import { UsersList } from "@/components/ui/users-list";
 import { useAuth } from "@/hooks/use-auth";
 import { useAdminStore } from "@/stores/admin-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { ArrowLeft, UserPlus, Users } from "lucide-react";
+import { Users, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -15,13 +15,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  PageActionButton,
+  PageActionGroup,
+} from "@/components/ui/page-action-button";
 import type { User } from "@/stores/auth-store";
 
 export function UserManagementPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const token = useAuthStore((state) => state.token);
-  const { deleteUser } = useAdminStore();
+  const { deleteUser, impersonateUser } = useAdminStore();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -45,6 +49,32 @@ export function UserManagementPage() {
     if (success) {
       setDeleteDialogOpen(false);
       setUserToDelete(null);
+    }
+  };
+
+  const handleImpersonateUser = async (user: User) => {
+    if (!token) return;
+
+    const result = await impersonateUser(token, user.id);
+    if (result) {
+      const { user: impersonatedUser, token: newToken } = result;
+      // Save original admin session before switching
+      const authStore = useAuthStore.getState();
+      const currentAdminUser = authStore.user;
+      const currentAdminToken = authStore.token;
+
+      authStore.setToken(newToken);
+      authStore.setUser(impersonatedUser);
+
+      // Update store with admin session if not already impersonating
+      if (!authStore.adminToken) {
+        useAuthStore.setState({
+          adminUser: currentAdminUser,
+          adminToken: currentAdminToken
+        });
+      }
+
+      navigate("/");
     }
   };
 
@@ -75,38 +105,38 @@ export function UserManagementPage() {
   }
 
   return (
-    <div className="h-screen overflow-auto bg-background">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="flex flex-col h-screen items-center px-4 pt-[60px] md:px-6 pb-4">
+      {/* Action Buttons - Absolute positioned top right */}
+      <PageActionGroup isFixedOnMobile={true}>
+        <PageActionButton
+          icon={UserPlus}
+          label="Create User"
+          onClick={() => setCreateDialogOpen(true)}
+          variant="default"
+          size="sm"
+          title="Create a new user"
+        />
+      </PageActionGroup>
+
+      <div className="w-full select-none max-w-3xl space-y-6 h-full flex flex-col">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mr-4 "
-              onClick={() => navigate("/")}
-              title="Back to Projects"
-            >
-              <ArrowLeft />
-            </Button>
-
-            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-              <Users className="size-8" />
-              User Management
-            </h1>
-
-            <Button className="ml-10" onClick={() => setCreateDialogOpen(true)}>
-              <UserPlus />
-              Create User
-            </Button>
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Users className="size-5 text-primary" />
           </div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            User Management
+          </h1>
         </div>
 
         {/* Users List */}
-        <div className="bg-card rounded-lg border shadow-sm">
+        <div className="flex-1 overflow-auto bg-card rounded-lg border shadow-sm">
           <div className="p-6">
             <h2 className="text-lg font-semibold mb-4">All Users</h2>
-            <UsersList onDeleteUser={handleDeleteUser} />
+            <UsersList
+              onDeleteUser={handleDeleteUser}
+              onImpersonateUser={handleImpersonateUser}
+            />
           </div>
         </div>
 

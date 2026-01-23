@@ -35,3 +35,9 @@ docker-compose.yml
 # Data directory (all runtime data and downloaded binaries)
 data/
 .beads/export-state/
+
+# Compiled binaries in bins/
+bins/aimeow/aimeow*
+bins/aimeow/*.exe
+bins/aimeow/*.linux
+bins/aimeow/*.macos

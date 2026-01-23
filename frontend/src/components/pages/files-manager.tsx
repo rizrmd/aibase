@@ -315,7 +315,7 @@ export function FilesManagerPage() {
 
   return (
     <FilesErrorBoundary>
-      <div className="flex h-screen flex-col gap-4 px-4 mt-4 md:px-6 pb-4">
+      <>
 
         {/* Bulk Actions Header */}
         {files.length > 0 && (
@@ -511,7 +511,7 @@ export function FilesManagerPage() {
             </div>
           </div>
         ) : (
-          <div className="text-center h-full flex flex-col items-center justify-center py-12 space-y-4 border rounded-lg bg-background/50 backdrop-blur">
+          <div className="text-center h-full flex flex-col items-center justify-center py-12 space-y-4 ">
             <div className="size-16 rounded-full bg-muted flex items-center justify-center mx-auto">
               <FileIcon className="size-8 text-muted-foreground" />
             </div>
@@ -587,7 +587,7 @@ export function FilesManagerPage() {
           onOpenChange={setPreviewOpen}
           getConversationTitle={getConversationTitle}
         />
-      </div>
+      </>
     </FilesErrorBoundary>
   );
 }

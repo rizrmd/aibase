@@ -197,7 +197,7 @@ export function ConversationHistoryPage() {
       </Dialog>
 
       {/* New Conversation Button - Absolute positioned top right */}
-      <PageActionGroup>
+      <PageActionGroup isFixedOnMobile={true}>
         <PageActionButton
           icon={Plus}
           label="New"

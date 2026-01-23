@@ -595,12 +595,24 @@ export class Conversation {
       if ((error as Error)?.name === "AbortError" || abortController.signal.aborted) {
         return;
       }
+      // Log the error for debugging
+      console.error(`[Conversation] Error in streamContinuation for convId ${this.convId}:`, error);
+      if (error instanceof Error) {
+        console.error(`[Conversation] Error name: ${error.name}, message: ${error.message}`);
+        console.error(`[Conversation] Error stack: ${error.stack}`);
+      }
       throw error;
     }
 
     // Only add to history if not aborted
     if (abortController.signal.aborted) {
       return;
+    }
+
+    // Log if stream completed with no content
+    if (fullText.length === 0 && currentToolCalls.length === 0) {
+      console.warn(`[Conversation] Stream completed with no content or tool calls for convId ${this.convId}`);
+      console.warn(`[Conversation] Usage:`, usage);
     }
 
     // Store token usage if available

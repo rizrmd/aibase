@@ -193,7 +193,7 @@ export function ContextEditor() {
             You have unsaved changes
           </span>
         )}
-        <PageActionGroup>
+        <PageActionGroup isFixedOnMobile={true}>
           {hasChanges && (
             <PageActionButton
               icon={RefreshCw}

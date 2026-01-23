@@ -4,17 +4,25 @@
  */
 
 import { ProjectStorage } from "../storage/project-storage";
+import { Conversation } from "../llm/conversation";
+import { ChatHistoryStorage } from "../storage/chat-history-storage";
 
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || "http://localhost:7031/api/v1";
 
 // Import notification functions for WebSocket broadcasts
-let notifyWhatsAppStatus: (projectId: string, status: any) => void = () => {};
-let notifyWhatsAppQRCode: (projectId: string, qrCode: string) => void = () => {};
+let notifyWhatsAppStatus: (projectId: string, status: any) => void = () => { };
+let notifyWhatsAppQRCode: (projectId: string, qrCode: string) => void = () => { };
+let notifyWhatsAppQRTimeout: (projectId: string) => void = () => { };
 
 // Initialize notification functions (called after whatsapp-ws is loaded)
-export function initWhatsAppNotifications(notifyStatus: typeof notifyWhatsAppStatus, notifyQR: typeof notifyWhatsAppQRCode) {
+export function initWhatsAppNotifications(
+  notifyStatus: typeof notifyWhatsAppStatus,
+  notifyQR: typeof notifyWhatsAppQRCode,
+  notifyTimeout: typeof notifyWhatsAppQRTimeout
+) {
   notifyWhatsAppStatus = notifyStatus;
   notifyWhatsAppQRCode = notifyQR;
+  notifyWhatsAppQRTimeout = notifyTimeout;
 }
 
 interface WhatsAppClient {
@@ -68,7 +76,7 @@ export async function handleGetWhatsAppClient(req: Request, projectId?: string):
 
     // Find client for this project (client ID would be the projectId)
     // Handle both array response and object with clients property
-    const clientsArray = Array.isArray(data) ? data : data.clients;
+    const clientsArray = Array.isArray(data) ? data : (data as any).clients;
     const client = clientsArray?.find((c: any) => c.id === projectId);
 
     if (!client) {
@@ -102,7 +110,7 @@ export async function handleGetWhatsAppClient(req: Request, projectId?: string):
  */
 export async function handleCreateWhatsAppClient(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as any;
     const { projectId, osName } = body;
 
     if (!projectId) {
@@ -141,7 +149,7 @@ export async function handleCreateWhatsAppClient(req: Request): Promise<Response
       throw new Error("Failed to create WhatsApp client");
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     return Response.json({
       success: true,
@@ -218,7 +226,7 @@ export async function handleGetWhatsAppQRCode(req: Request): Promise<Response> {
       throw new Error("Failed to fetch client info");
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     // The QRCode field contains the raw QR code string
     // We need to generate a data URL from it
@@ -249,14 +257,22 @@ export async function handleGetWhatsAppQRCode(req: Request): Promise<Response> {
  */
 export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as any;
     const { clientId, message: messageData, timestamp } = body;
 
     console.log("[WhatsApp] Webhook received:", {
       clientId,
       from: messageData?.from,
-      type: messageData?.type
+      type: messageData?.type,
+      fromMe: messageData?.fromMe
     });
+
+    // Ignore messages sent by the bot/device itself (self-messages)
+    // This prevents the AI from replying to itself or syncing manual replies as user input
+    if (messageData?.fromMe) {
+      console.log("[WhatsApp] Ignoring self-message fromMe=true");
+      return Response.json({ success: true, ignored: true });
+    }
 
     // The clientId is the projectId
     const projectId = clientId;
@@ -268,6 +284,37 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
     if (!project) {
       console.error("[WhatsApp] Project not found:", projectId);
       return Response.json({ success: false, error: "Project not found" });
+    }
+
+    // Filter group messages: Ignore unless mentioned
+    if (messageData.isGroup) {
+      const mentions = messageData.mentions || [];
+      const myPhone = messageData.myPhone;
+
+      // If no mentions at all, ignore
+      if (mentions.length === 0) {
+        console.log("[WhatsApp] Ignoring group message (no mentions)");
+        return Response.json({ success: true, ignored: true });
+      }
+
+      // If we know our phone number, check if we are mentioned
+      if (myPhone) {
+        // Mentions are JIDs (e.g., 12345@s.whatsapp.net), myPhone is usually just digits (12345)
+        const isMentioned = mentions.some((m: string) => m.includes(myPhone));
+        if (!isMentioned) {
+          console.log("[WhatsApp] Ignoring group message (bot not mentioned)", { myPhone, mentions });
+          return Response.json({ success: true, ignored: true });
+        }
+      } else {
+        // If we don't know our phone number but there are mentions, 
+        // we conservatively ignore it to prevent spamming groups,
+        // unless we want to assume we ARE mentioned if mentions exist?
+        // Safer to ignore if we can't verify identity.
+        console.log("[WhatsApp] Ignoring group message (unknown bot identity)");
+        return Response.json({ success: true, ignored: true });
+      }
+
+      console.log("[WhatsApp] Processing group message (bot mentioned)", { myPhone, mentions });
     }
 
     // Extract WhatsApp phone number as UID
@@ -415,6 +462,46 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
 }
 
 /**
+ * Clean response before sending to WhatsApp
+ * Removes tool call JSON and other unwanted content
+ */
+function cleanWhatsAppResponse(response: string): string {
+  let cleaned = response;
+
+  // Remove structured tool call JSON with tool_call_id
+  cleaned = cleaned.replace(/\{[^}]*"tool_call_id"\s*:\s*"[^"]*"[^}]*\}/g, '');
+
+  // Remove tool call JSON patterns (e.g., {"name": "tool_name", "arguments": {...}})
+  cleaned = cleaned.replace(/\{[^}]*"name"\s*:\s*"[^"]*"[^}]*"arguments"\s*:\s*\{[^}]*\}[^}]*\}/g, '');
+
+  // Remove tool_calls array patterns
+  cleaned = cleaned.replace(/"tool_calls"\s*:\s*\[[^\]]*\]/g, '');
+
+  // Remove function call patterns
+  cleaned = cleaned.replace(/\[Function Call: [^\]]*\]/gi, '');
+
+  // Remove tool result patterns
+  cleaned = cleaned.replace(/\[Tool Result: [^\]]*\]/gi, '');
+
+  // Remove "Calling tool" messages
+  cleaned = cleaned.replace(/Calling tool:?\s*\[?[^\n\]]*\]?/gi, '');
+
+  // Remove tool execution messages
+  cleaned = cleaned.replace(/Executing\s+\w+\s+tool/gi, '');
+
+  // Remove JSON objects that look like tool results
+  cleaned = cleaned.replace(/\{[^}]*"error"[^}]*\}/g, '');
+
+  // Remove multiple newlines (compress to max 2)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // Remove leading/trailing whitespace
+  cleaned = cleaned.trim();
+
+  return cleaned;
+}
+
+/**
  * Process WhatsApp message with AI
  */
 async function processWhatsAppMessageWithAI(
@@ -428,12 +515,7 @@ async function processWhatsAppMessageWithAI(
   try {
     console.log("[WhatsApp] Starting AI processing for message:", messageText);
 
-    console.log("[WhatsApp] Loading Conversation module...");
-    // Load conversation and process message through AI
-    const { Conversation } = await import("../llm/conversation");
-    console.log("[WhatsApp] Loading ChatHistoryStorage module...");
-    const { ChatHistoryStorage } = await import("../storage/chat-history-storage");
-    console.log("[WhatsApp] Getting ChatHistoryStorage instance...");
+    // Get ChatHistoryStorage instance (singleton, already imported)
     const chatHistoryStorage = ChatHistoryStorage.getInstance();
 
     // Load existing conversation history
@@ -445,7 +527,6 @@ async function processWhatsAppMessageWithAI(
     console.log("[WhatsApp] Creating conversation instance...");
     const conversation = await Conversation.create({
       projectId,
-      userId: uid,
       convId,
       urlParams: { CURRENT_UID: uid },
     });
@@ -474,9 +555,10 @@ async function processWhatsAppMessageWithAI(
 
     // Send response back to WhatsApp
     if (fullResponse.trim()) {
-      console.log("[WhatsApp] Sending response back to WhatsApp:", fullResponse.substring(0, 100) + "...");
+      const cleanedResponse = cleanWhatsAppResponse(fullResponse);
+      console.log("[WhatsApp] Sending response back to WhatsApp:", cleanedResponse.substring(0, 100) + "...");
       await sendWhatsAppMessage(projectId, whatsappNumber, {
-        text: fullResponse,
+        text: cleanedResponse,
       });
       console.log("[WhatsApp] Response sent successfully");
     }
@@ -530,7 +612,7 @@ async function sendWhatsAppMessage(
  */
 export async function handleWhatsAppConnectionStatus(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as any;
     const { clientId, event, data } = body;
 
     console.log("[WhatsApp] Connection status update:", { clientId, event, data });
@@ -564,7 +646,7 @@ export async function handleWhatsAppConnectionStatus(req: Request): Promise<Resp
           const response = await fetch(`${WHATSAPP_API_URL}/clients`);
 
           if (response.ok) {
-            const clientsData = await response.json();
+            const clientsData = await response.json() as any;
             const clientsArray = Array.isArray(clientsData) ? clientsData : clientsData.clients;
             const client = clientsArray?.find((c: any) => c.id === projectId);
 
@@ -607,6 +689,11 @@ export async function handleWhatsAppConnectionStatus(req: Request): Promise<Resp
         if (data?.qrCode) {
           notifyWhatsAppQRCode(projectId, data.qrCode);
         }
+        break;
+
+      case "qr_timeout":
+        // QR code expired
+        notifyWhatsAppQRTimeout(projectId);
         break;
 
       case "error":

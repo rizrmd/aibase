@@ -16,11 +16,35 @@ import (
 const version = "1.0.0"
 
 func showProgress(step int, total int, description string) {
+	// Guard against invalid inputs
+	if total <= 0 {
+		total = 1
+	}
+	if step < 0 {
+		step = 0
+	}
+	if step > total {
+		step = total
+	}
+
 	percentage := (step * 100) / total
 	barWidth := 40
 	filled := (percentage * barWidth) / 100
 
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+	// Ensure filled and empty are within valid range
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > barWidth {
+		filled = barWidth
+	}
+
+	empty := barWidth - filled
+	if empty < 0 {
+		empty = 0
+	}
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
 
 	// Clear line and print progress with cyan color (ANSI code: \033[36m)
 	fmt.Printf("\r\033[K\033[36m[%s] %d%% - %s\033[0m", bar, percentage, description)
@@ -30,11 +54,30 @@ func showProgress(step int, total int, description string) {
 	}
 }
 
+func isFeatureEnabled(envVar string) bool {
+	value := strings.ToLower(os.Getenv(envVar))
+	return value == "true" || value == "1" || value == "yes"
+}
+
 func main() {
 	color.Cyan("AIBase Development Environment v%s\n", version)
 	color.Cyan("=====================================\n\n")
 
-	totalSteps := 7
+	// Check which features are enabled
+	enableAimeow := isFeatureEnabled("AIMEOW")
+	enableQdrant := isFeatureEnabled("QDRANT")
+
+	// Calculate total steps based on enabled features
+	// Base steps: Bun, Dependencies, Frontend = 3
+	// Optional: AIMEOW (+1), Qdrant (+1), Start processes (+1)
+	totalSteps := 5 // Base + start processes
+	if enableAimeow {
+		totalSteps++
+	}
+	if enableQdrant {
+		totalSteps++
+	}
+
 	currentStep := 0
 
 	// Get project root (parent of bins/)
@@ -59,9 +102,11 @@ func main() {
 		color.Red("Error creating bun directory: %v\n", err)
 		os.Exit(1)
 	}
-	if err := os.MkdirAll(qdrantBinDir, 0755); err != nil {
-		color.Red("Error creating qdrant directory: %v\n", err)
-		os.Exit(1)
+	if enableQdrant {
+		if err := os.MkdirAll(qdrantBinDir, 0755); err != nil {
+			color.Red("Error creating qdrant directory: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Step 1: Download Bun if not exists
@@ -92,24 +137,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Step 4: Build aimeow WhatsApp service
-	currentStep++
-	showProgress(currentStep, totalSteps, "Building WhatsApp service...")
-	aimeowBinary, err := buildAimeow(projectRoot)
-	if err != nil {
-		fmt.Println()
-		color.Red("Error building aimeow: %v\n", err)
-		os.Exit(1)
+	// Step 4: Build aimeow WhatsApp service (if enabled)
+	var aimeowBinary string
+	if enableAimeow {
+		currentStep++
+		showProgress(currentStep, totalSteps, "Building WhatsApp service...")
+		var err error
+		aimeowBinary, err = buildAimeow(projectRoot)
+		if err != nil {
+			fmt.Println()
+			color.Red("Error building aimeow: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
-	// Step 5: Download service binaries (Qdrant)
-	currentStep++
-	showProgress(currentStep, totalSteps, "Checking service binaries...")
-	qdrantBinary, err := ensureServiceBinaries(qdrantBinDir)
-	if err != nil {
-		fmt.Println()
-		color.Red("Error ensuring service binaries: %v\n", err)
-		os.Exit(1)
+	// Step 5: Download service binaries (Qdrant, if enabled)
+	var qdrantBinary string
+	if enableQdrant {
+		currentStep++
+		showProgress(currentStep, totalSteps, "Checking service binaries...")
+		var err error
+		qdrantBinary, err = ensureServiceBinaries(qdrantBinDir)
+		if err != nil {
+			fmt.Println()
+			color.Red("Error ensuring service binaries: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Determine ports based on OS
@@ -128,34 +181,42 @@ func main() {
 	whatsappPort := "7031"
 
 	// Clean up any processes using our ports
-	killProcessesOnPorts(backendPort, qdrantHttpPort, qdrantGrpcPort, whatsappPort)
+	portsToKill := []string{backendPort}
+	if enableQdrant {
+		portsToKill = append(portsToKill, qdrantHttpPort, qdrantGrpcPort)
+	}
+	if enableAimeow {
+		portsToKill = append(portsToKill, whatsappPort)
+	}
+	killProcessesOnPorts(portsToKill...)
 
 	// Step 6: Start all processes
 	currentStep++
 	showProgress(currentStep, totalSteps, "Starting services...")
 	orch := NewOrchestrator(projectRoot, bunExecutable)
 
-	// Add processes
-	// Qdrant service - using new organized structure: data/services/qdrant/
-	qdrantDataDir := filepath.Join(dataDir, "services", "qdrant")
-	qdrantStoragePath := filepath.Join(qdrantDataDir, "storage")
-	qdrantLogsPath := filepath.Join(dataDir, "logs", "qdrant")
+	// Add Qdrant service (if enabled)
+	if enableQdrant {
+		qdrantDataDir := filepath.Join(dataDir, "services", "qdrant")
+		qdrantStoragePath := filepath.Join(qdrantDataDir, "storage")
+		qdrantLogsPath := filepath.Join(dataDir, "logs", "qdrant")
 
-	// Create qdrant directories
-	os.MkdirAll(qdrantStoragePath, 0755)
-	os.MkdirAll(qdrantLogsPath, 0755)
+		// Create qdrant directories
+		os.MkdirAll(qdrantStoragePath, 0755)
+		os.MkdirAll(qdrantLogsPath, 0755)
 
-	// Create minimal config file to suppress warnings
-	qdrantConfigDir := filepath.Join(qdrantDataDir, "config")
-	os.MkdirAll(qdrantConfigDir, 0755)
-	createQdrantConfig(qdrantConfigDir, qdrantStoragePath)
+		// Create minimal config file to suppress warnings
+		qdrantConfigDir := filepath.Join(qdrantDataDir, "config")
+		os.MkdirAll(qdrantConfigDir, 0755)
+		createQdrantConfig(qdrantConfigDir, qdrantStoragePath)
 
-	qdrantEnv := []string{
-		"QDRANT__SERVICE__HTTP_PORT=" + qdrantHttpPort,
-		"QDRANT__SERVICE__GRPC_PORT=" + qdrantGrpcPort,
-		fmt.Sprintf("QDRANT__STORAGE__STORAGE_PATH=%s", qdrantStoragePath),
+		qdrantEnv := []string{
+			"QDRANT__SERVICE__HTTP_PORT=" + qdrantHttpPort,
+			"QDRANT__SERVICE__GRPC_PORT=" + qdrantGrpcPort,
+			fmt.Sprintf("QDRANT__STORAGE__STORAGE_PATH=%s", qdrantStoragePath),
+		}
+		orch.AddProcess("qdrant", qdrantDataDir, qdrantBinary, []string{}, qdrantEnv, qdrantLogsPath)
 	}
-	orch.AddProcess("qdrant", qdrantDataDir, qdrantBinary, []string{}, qdrantEnv, qdrantLogsPath)
 
 	// Backend serves the built frontend on port 5040
 	// Backend runs from project root so data/ is accessible
@@ -168,24 +229,31 @@ func main() {
 	backendEnv := []string{
 		"NODE_ENV=production",
 	}
+	if enableAimeow {
+		backendEnv = append(backendEnv, "AIMEOW=true")
+	}
+	if enableQdrant {
+		backendEnv = append(backendEnv, "QDRANT=true")
+	}
 	orch.AddProcess("backend", projectRoot, bunExecutable, []string{"--env-file=" + envFile, "run", "backend/src/server/index.ts"}, backendEnv, backendLogsPath)
 
 	// WhatsApp service (aimeow) - using new structure: data/services/whatsapp/
 	// Logs go to data/logs/whatsapp/
-	whatsappLogsPath := filepath.Join(dataDir, "logs", "whatsapp")
-	whatsappDataDir := filepath.Join(dataDir, "services", "whatsapp")
-	whatsappFilesDir := filepath.Join(whatsappDataDir, "files")
-	os.MkdirAll(whatsappLogsPath, 0755)
-	os.MkdirAll(whatsappFilesDir, 0755)
+	if enableAimeow {
+		whatsappLogsPath := filepath.Join(dataDir, "logs", "whatsapp")
+		whatsappDataDir := filepath.Join(dataDir, "services", "whatsapp")
+		whatsappFilesDir := filepath.Join(whatsappDataDir, "files")
+		os.MkdirAll(whatsappLogsPath, 0755)
+		os.MkdirAll(whatsappFilesDir, 0755)
 
-	whatsappEnv := []string{
-		"PORT=" + whatsappPort,
-		"BASE_URL=http://localhost:" + whatsappPort,
-		"CALLBACK_URL=http://localhost:" + backendPort + "/api/whatsapp/webhook",
-		"DATA_DIR=.", // Use current working directory (data/services/whatsapp) for data storage
+		whatsappEnv := []string{
+			"PORT=" + whatsappPort,
+			"BASE_URL=http://localhost:" + whatsappPort,
+			"CALLBACK_URL=http://localhost:" + backendPort + "/api/whatsapp/webhook",
+			"DATA_DIR=.", // Use current working directory (data/services/whatsapp) for data storage
+		}
+		orch.AddProcess("whatsapp", whatsappDataDir, aimeowBinary, []string{}, whatsappEnv, whatsappLogsPath)
 	}
-	fmt.Printf("[DEBUG] Adding whatsapp process with %d env vars: %v\n", len(whatsappEnv), whatsappEnv)
-	orch.AddProcess("whatsapp", whatsappDataDir, aimeowBinary, []string{}, whatsappEnv, whatsappLogsPath)
 
 	// Start all processes
 	if err := orch.Start(); err != nil {
@@ -209,7 +277,9 @@ func main() {
 
 	color.Green("\n✓ All services started successfully\n")
 	color.Cyan("\n→ Backend URL: %s\n", displayURL)
-	color.Cyan("→ WhatsApp API: http://localhost:%s\n", whatsappPort)
+	if enableAimeow {
+		color.Cyan("→ WhatsApp API: http://localhost:%s\n", whatsappPort)
+	}
 	color.Cyan("\nPress Ctrl+C to stop all services\n\n")
 
 	// Setup signal handling for graceful shutdown
@@ -389,8 +459,6 @@ func killProcessesOnPorts(ports ...string) {
 		killProcessOnPort(port)
 	}
 }
-
-// killProcessOnPort kills a process using the specified port
 func killProcessOnPort(port string) {
 	var cmd *exec.Cmd
 

@@ -27,9 +27,14 @@
  *     └── storage/
  */
 
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const DATA_BASE = "./data";
+// Get the project root directory (3 levels up from backend/src/config/)
+// paths.ts is in backend/src/config/, so we go: config -> src -> backend -> project root
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const projectRoot = dirname(dirname(dirname(currentDir)));
+const DATA_BASE = join(projectRoot, "data");
 
 // Application data paths
 export const PATHS = {

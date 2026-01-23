@@ -219,6 +219,9 @@ export async function handleUpdateSetup(req: Request): Promise<Response> {
 
     setup.updatedAt = Date.now();
 
+    // Ensure config directory exists before saving
+    await ensureDirectories();
+
     // Save setup
     await writeFile(SETUP_FILE, JSON.stringify(setup, null, 2));
 
@@ -339,30 +342,22 @@ async function verifyLicenseKeyWithFallback(req: Request, bodyKey?: string): Pro
  */
 async function getAdminUser(): Promise<any> {
   try {
-    await authService.initialize();
+    await userStorage.initialize();
 
-    // Try to get any user to check if users exist
-    try {
-      // When using license key, we need to bypass permission checks
-      // Directly query the database to check if users exist
-      const db = authService.getDatabase();
-      const users = db.query("SELECT * FROM users").all() as any[];
+    // Get all users to check if users exist
+    const users = userStorage.getAll();
 
-      // If no users exist, return null (initial setup scenario)
-      if (!users || users.length === 0) {
-        return null;
-      }
-
-      const adminUser = users.find((u: any) => u.role === "admin");
-      if (!adminUser) {
-        throw new Error("Admin user not found");
-      }
-      return adminUser;
-    } catch (dbError) {
-      // If we can't query the DB directly, return null
-      logger.warn({ error: dbError }, "Could not query users directly, returning null admin user");
+    // If no users exist, return null (initial setup scenario)
+    if (!users || users.length === 0) {
       return null;
     }
+
+    const adminUser = users.find((u: any) => u.role === "admin");
+    if (!adminUser) {
+      // No admin user found, return null
+      return null;
+    }
+    return adminUser;
   } catch (error) {
     logger.error({ error }, "Error getting admin user");
     throw new Error("Failed to get admin user");
@@ -383,22 +378,12 @@ export async function handleGetUsers(req: Request): Promise<Response> {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
     }
 
+    await userStorage.initialize();
     await authService.initialize();
 
-    // Try to get users directly from database to bypass permission checks
-    try {
-      const db = authService.getDatabase();
-      const users = db.query("SELECT id, username, email, role, tenant_id FROM users").all() as any[];
-      return Response.json({ success: true, users });
-    } catch (dbError) {
-      // Fall back to normal method if available
-      const adminUser = await getAdminUser();
-      if (!adminUser) {
-        return Response.json({ success: true, users: [] });
-      }
-      const users = await authService.getAllUsers(adminUser.id);
-      return Response.json({ success: true, users });
-    }
+    // Get all users directly from storage
+    const users = userStorage.getAll();
+    return Response.json({ success: true, users });
   } catch (error) {
     logger.error({ error }, "Error getting users");
     return Response.json({ success: false, error: "Internal server error" }, { status: 500 });
@@ -449,8 +434,7 @@ export async function handleCreateUser(req: Request): Promise<Response> {
         if (finalTenantId === null) {
           // Check if any tenant exists
           try {
-            const db = authService.getDatabase();
-            const tenants = db.query("SELECT * FROM tenants").all() as any[];
+            const tenants = tenantStorage.getAll();
 
             if (!tenants || tenants.length === 0) {
               // Create a default tenant
@@ -533,19 +517,10 @@ export async function handleUpdateUser(req: Request, userId: string): Promise<Re
 
     await authService.initialize();
     await userStorage.initialize();
-    const adminUser = await getAdminUser();
 
     const userIdNum = parseInt(userId, 10);
     if (isNaN(userIdNum)) {
       return Response.json({ success: false, error: "Invalid user ID" }, { status: 400 });
-    }
-
-    // Prevent modifying yourself (if admin user exists)
-    if (adminUser && adminUser.id === userIdNum) {
-      return Response.json(
-        { success: false, error: "Cannot modify your own account via admin-setup" },
-        { status: 400 }
-      );
     }
 
     // Build update object
@@ -593,19 +568,10 @@ export async function handleDeleteUser(req: Request, userId: string): Promise<Re
     }
 
     await authService.initialize();
-    const adminUser = await getAdminUser();
 
     const userIdNum = parseInt(userId, 10);
     if (isNaN(userIdNum)) {
       return Response.json({ success: false, error: "Invalid user ID" }, { status: 400 });
-    }
-
-    // Prevent deleting yourself (if admin user exists)
-    if (adminUser && adminUser.id === userIdNum) {
-      return Response.json(
-        { success: false, error: "Cannot delete your own account via admin-setup" },
-        { status: 400 }
-      );
     }
 
     const successDeleted = await authService.deleteUserById(userIdNum);
@@ -767,12 +733,12 @@ export async function handleDeleteTenant(req: Request, tenantId: string): Promis
 
     await authService.initialize();
     await tenantStorage.initialize();
+    await userStorage.initialize();
 
     // Check if tenant has users
-    const db = authService.getDatabase();
-    const usersWithTenant = db.query("SELECT COUNT(*) as count FROM users WHERE tenant_id = ?").get(tenantIdNum) as any;
+    const usersWithTenant = userStorage.getByTenantId(tenantIdNum);
 
-    if (usersWithTenant.count > 0) {
+    if (usersWithTenant.length > 0) {
       return Response.json(
         { success: false, error: "Cannot delete tenant with users. Please reassign or delete users first." },
         { status: 400 }

@@ -3,13 +3,14 @@ import { useAuthStore, type User } from "@/stores/auth-store";
 import { useAdminStore } from "@/stores/admin-store";
 import { Badge } from "./badge";
 import { Button } from "./button";
-import { Trash2, Shield, Crown, User as UserIcon } from "lucide-react";
+import { Trash2, Shield, Crown, User as UserIcon, UserCog } from "lucide-react";
 
 interface UsersListProps {
   onDeleteUser?: (user: User) => void;
+  onImpersonateUser?: (user: User) => void;
 }
 
-export function UsersList({ onDeleteUser }: UsersListProps) {
+export function UsersList({ onDeleteUser, onImpersonateUser }: UsersListProps) {
   const token = useAuthStore((state) => state.token);
   const currentUser = useAuthStore((state) => state.user);
   const { users, isLoading, error, fetchUsers } = useAdminStore();
@@ -142,16 +143,28 @@ export function UsersList({ onDeleteUser }: UsersListProps) {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {currentUser?.id !== user.id && onDeleteUser && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => onDeleteUser(user)}
-                      title="Delete user"
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  )}
+                  <div className="flex justify-end gap-1">
+                    {currentUser?.id !== user.id && onImpersonateUser && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onImpersonateUser(user)}
+                        title="Impersonate user"
+                      >
+                        <UserCog className="size-4" />
+                      </Button>
+                    )}
+                    {currentUser?.id !== user.id && onDeleteUser && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onDeleteUser(user)}
+                        title="Delete user"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

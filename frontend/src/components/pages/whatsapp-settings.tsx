@@ -48,7 +48,7 @@ interface WhatsAppConversation {
 }
 
 interface WhatsAppWSMessage {
-  type: 'subscribed' | 'status' | 'qr_code' | 'connected' | 'disconnected' | 'error';
+  type: 'subscribed' | 'status' | 'qr_code' | 'qr_timeout' | 'connected' | 'disconnected' | 'error';
   projectId?: string;
   data?: {
     projectId: string;
@@ -73,6 +73,7 @@ export function WhatsAppSettings() {
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
+  const [isQrExpired, setIsQrExpired] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<WhatsAppConversation | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -131,6 +132,7 @@ export function WhatsAppSettings() {
         // API says connected, update our WebSocket ref
         wsConnectedRef.current = true;
         setQrCodeImage(null);
+        setIsQrExpired(false);
       }
     } catch (err) {
       const errorMessage =
@@ -148,6 +150,8 @@ export function WhatsAppSettings() {
       const response = await fetch(
         `${API_BASE_URL}/api/whatsapp/qr?clientId=${clientId}`,
       );
+
+      setIsQrExpired(false);
 
       if (!response.ok) {
         throw new Error("Failed to fetch QR code");
@@ -255,6 +259,7 @@ export function WhatsAppSettings() {
       // Reset all state
       setClient(null);
       setQrCodeImage(null);
+      setIsQrExpired(false);
       wsConnectedRef.current = false;
 
       toast.success("WhatsApp client deleted successfully");
@@ -395,6 +400,7 @@ export function WhatsAppSettings() {
               // Clear QR code if device is connected
               if (isConnected) {
                 setQrCodeImage(null);
+                setIsQrExpired(false);
                 setIsLoading(false);
               }
 
@@ -418,7 +424,14 @@ export function WhatsAppSettings() {
                 },
               });
               setQrCodeImage(qrDataUrl);
+              setIsQrExpired(false);
             }
+            break;
+
+          case 'qr_timeout':
+            setQrCodeImage(null);
+            setIsQrExpired(true);
+            toast.error("QR Code expired. Please regenerate.");
             break;
 
           case 'error':
@@ -510,163 +523,182 @@ export function WhatsAppSettings() {
         {/* Device Tab */}
         {activeTab === 'device' && (
           <>
-        {!client ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Connect WhatsApp Device</CardTitle>
-              <CardDescription>
-                Link a WhatsApp device to this project to enable AI
-                conversations via WhatsApp
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={createClient}
-                disabled={isCreating}
-                className="w-full"
-              >
-                {isCreating ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Creating client...
-                  </>
-                ) : (
-                  <>
-                    <Smartphone className="mr-2 h-4 w-4" />
-                    Link Device
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {/* Connection Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Device Status</span>
-                  {client.connected ? (
-                    <span className="text-sm font-normal text-green-600 flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-green-600" />
-                      Connected
-                    </span>
-                  ) : (
-                    <span className="text-sm font-normal text-yellow-600 flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-yellow-600" />
-                      Waiting for connection
-                    </span>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  {client.connected
-                    ? `Connected since ${new Date(client.connectedAt || "").toLocaleString()}`
-                    : "Scan the QR code below with WhatsApp to link your device"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {client.connected ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Smartphone className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">WhatsApp Device</p>
-                          <p className="text-sm text-muted-foreground">
-                            {formatPhoneNumber(client.phone)}
+            {!client ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Connect WhatsApp Device</CardTitle>
+                  <CardDescription>
+                    Link a WhatsApp device to this project to enable AI
+                    conversations via WhatsApp
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    onClick={createClient}
+                    disabled={isCreating}
+                    className="w-full"
+                  >
+                    {isCreating ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Creating client...
+                      </>
+                    ) : (
+                      <>
+                        <Smartphone className="mr-2 h-4 w-4" />
+                        Link Device
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {/* Connection Status */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Device Status</span>
+                      {client.connected ? (
+                        <span className="text-sm font-normal text-green-600 flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-green-600" />
+                          Connected
+                        </span>
+                      ) : (
+                        <span className="text-sm font-normal text-yellow-600 flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-yellow-600" />
+                          Waiting for connection
+                        </span>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      {client.connected
+                        ? `Connected since ${new Date(client.connectedAt || "").toLocaleString()}`
+                        : "Scan the QR code below with WhatsApp to link your device"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {client.connected ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <Smartphone className="h-5 w-5 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">WhatsApp Device</p>
+                              <p className="text-sm text-muted-foreground">
+                                {formatPhoneNumber(client.phone)}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={deleteClient}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Disconnect
+                          </Button>
+                        </div>
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                          <p className="text-xs text-blue-800">
+                            <strong>Note:</strong> To fully disconnect, also remove this device from Linked Devices in WhatsApp on your phone.
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={deleteClient}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Disconnect
-                      </Button>
-                    </div>
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                      <p className="text-xs text-blue-800">
-                        <strong>Note:</strong> To fully disconnect, also remove this device from Linked Devices in WhatsApp on your phone.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {qrCodeImage ? (
-                      <div className="flex flex-col items-center gap-4 p-6 border rounded-lg bg-white">
-                        <img
-                          src={qrCodeImage}
-                          alt="WhatsApp QR Code"
-                          className="w-64 h-64"
-                        />
-                        <p className="text-sm text-muted-foreground flex items-center gap-2">
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                          Waiting for QR code to be scanned...
-                        </p>
-                      </div>
                     ) : (
-                      <div className="flex items-center justify-center p-12 border rounded-lg">
-                        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                      <div className="space-y-4">
+                        {qrCodeImage ? (
+                          <div className="flex flex-col items-center gap-4 p-6 border rounded-lg bg-white">
+                            <img
+                              src={qrCodeImage}
+                              alt="WhatsApp QR Code"
+                              className="w-64 h-64"
+                            />
+                            <p className="text-sm text-muted-foreground flex items-center gap-2">
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              Waiting for QR code to be scanned...
+                            </p>
+                          </div>
+                        ) : isQrExpired ? (
+                          <div className="flex flex-col items-center gap-4 p-8 border rounded-lg bg-red-50/50 border-red-200">
+                            <div className="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center mb-2">
+                              <RefreshCw className="h-8 w-8 text-red-600" />
+                            </div>
+                            <div className="text-center">
+                              <p className="font-medium text-red-900 mb-1">QR Code Expired</p>
+                              <p className="text-sm text-red-700 mb-4">
+                                The security code has timed out. Please generate a new one.
+                              </p>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => createClient()}
+                              >
+                                Generate New Code
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center p-12 border rounded-lg">
+                            <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="text-sm text-muted-foreground space-y-2">
+                          <p className="font-medium">How to link your device:</p>
+                          <ol className="list-decimal list-inside space-y-1 ml-2">
+                            <li>Open WhatsApp on your phone</li>
+                            <li>Tap Menu or Settings and select Linked Devices</li>
+                            <li>Tap on Link a Device</li>
+                            <li>
+                              Point your phone at this screen to scan the QR code
+                            </li>
+                          </ol>
+
+                          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                            <p className="text-xs text-yellow-800 font-medium mb-1">⚠️ Important:</p>
+                            <ul className="text-xs text-yellow-700 space-y-1 ml-2">
+                              <li>• If you previously connected a device, make sure to remove it from Linked Devices on your phone first</li>
+                              <li>• This ensures a clean connection and prevents conflicts</li>
+                            </ul>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          onClick={deleteClient}
+                          className="w-full"
+                        >
+                          Cancel
+                        </Button>
                       </div>
                     )}
-                    <div className="text-sm text-muted-foreground space-y-2">
-                      <p className="font-medium">How to link your device:</p>
-                      <ol className="list-decimal list-inside space-y-1 ml-2">
-                        <li>Open WhatsApp on your phone</li>
-                        <li>Tap Menu or Settings and select Linked Devices</li>
-                        <li>Tap on Link a Device</li>
-                        <li>
-                          Point your phone at this screen to scan the QR code
-                        </li>
-                      </ol>
+                  </CardContent>
+                </Card>
 
-                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                        <p className="text-xs text-yellow-800 font-medium mb-1">⚠️ Important:</p>
-                        <ul className="text-xs text-yellow-700 space-y-1 ml-2">
-                          <li>• If you previously connected a device, make sure to remove it from Linked Devices on your phone first</li>
-                          <li>• This ensures a clean connection and prevents conflicts</li>
-                        </ul>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={deleteClient}
-                      className="w-full"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
+                {/* Information Card */}
+                {client.connected && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>How it works</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm text-muted-foreground">
+                      <p>
+                        When someone sends a message to your WhatsApp number, the AI
+                        will automatically respond to them in this project's
+                        context.
+                      </p>
+                      <p>
+                        Each WhatsApp contact will get their own unique conversation
+                        that persists across sessions.
+                      </p>
+                      <p>
+                        The AI can receive and send text messages, images,
+                        locations, and other media types.
+                      </p>
+                    </CardContent>
+                  </Card>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Information Card */}
-            {client.connected && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>How it works</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  <p>
-                    When someone sends a message to your WhatsApp number, the AI
-                    will automatically respond to them in this project's
-                    context.
-                  </p>
-                  <p>
-                    Each WhatsApp contact will get their own unique conversation
-                    that persists across sessions.
-                  </p>
-                  <p>
-                    The AI can receive and send text messages, images,
-                    locations, and other media types.
-                  </p>
-                </CardContent>
-              </Card>
+              </div>
             )}
-          </div>
-        )}
           </>
         )}
 
@@ -757,6 +789,6 @@ export function WhatsAppSettings() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </div >
   );
 }

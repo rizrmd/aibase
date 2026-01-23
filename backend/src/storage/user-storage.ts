@@ -39,11 +39,21 @@ export interface UpdateUserData {
 
 export class UserStorage {
   private static instance: UserStorage;
-  private db: Database;
-  private dbPath: string;
+  private db: Database | null = null;
 
   private constructor() {
-    this.dbPath = PATHS.USERS_DB;
+    // Don't cache dbPath in constructor, evaluate it dynamically
+  }
+
+  private get dbPath(): string {
+    return PATHS.USERS_DB;
+  }
+
+  private getDatabase(): Database {
+    if (!this.db) {
+      throw new Error('UserStorage not initialized. Call initialize() first.');
+    }
+    return this.db;
   }
 
   static getInstance(): UserStorage {
@@ -64,18 +74,29 @@ export class UserStorage {
     // Open database
     this.db = new Database(this.dbPath);
 
-    // Create users table
+    // Check if we need to migrate from old schema to new schema
+    // Old schema: UNIQUE constraint on username alone
+    // New schema: UNIQUE constraint on (username, tenant_id) composite
+    const needsMigration = await this.checkNeedsMigration();
+
+    if (needsMigration) {
+      console.log('[UserStorage] Migrating database schema for multi-tenant username uniqueness...');
+      await this.migrateSchema();
+    }
+
+    // Create users table with correct schema if it doesn't exist
     this.db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
-        username TEXT UNIQUE NOT NULL,
+        username TEXT NOT NULL,
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
-        tenant_id INTEGER,
+        tenant_id INTEGER NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        UNIQUE(username, tenant_id)
       )
     `);
 
@@ -91,7 +112,7 @@ export class UserStorage {
 
     // Add tenant_id column if it doesn't exist (for existing databases)
     try {
-      this.db.run(`ALTER TABLE users ADD COLUMN tenant_id INTEGER`);
+      this.db.run(`ALTER TABLE users ADD COLUMN tenant_id INTEGER NOT NULL DEFAULT 1`);
     } catch (error: any) {
       // Column already exists, ignore error
       if (!error.message?.includes('duplicate column name')) {
@@ -101,9 +122,133 @@ export class UserStorage {
 
     // Create indexes for faster lookups
     this.db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
-    this.db.run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+
+    // Remove old single-column username index if it exists
+    // The composite UNIQUE constraint provides the indexing benefit
+    try {
+      this.db.run('DROP INDEX IF EXISTS idx_users_username');
+    } catch (error: any) {
+      // Index doesn't exist or other error, ignore
+    }
 
     console.log('[UserStorage] Database initialized at', this.dbPath);
+  }
+
+  /**
+   * Check if database needs migration from old schema to new schema
+   * Old: UNIQUE constraint on username alone (username TEXT UNIQUE NOT NULL)
+   * New: UNIQUE constraint on (username, tenant_id) composite
+   */
+  private async checkNeedsMigration(): Promise<boolean> {
+    try {
+      // Get the actual CREATE TABLE SQL from sqlite_master
+      const tableSchema = this.db.prepare(`
+        SELECT sql FROM sqlite_master WHERE type='table' AND name='users'
+      `).get() as { sql: string } | undefined;
+
+      if (!tableSchema || !tableSchema.sql) {
+        // Table doesn't exist, no migration needed
+        return false;
+      }
+
+      // Check if the old schema (single-column UNIQUE on username) exists
+      // Old schema pattern: username TEXT UNIQUE NOT NULL
+      // New schema pattern: username TEXT NOT NULL, with UNIQUE(username, tenant_id) at the end
+      const hasOldSingleColumnUnique = tableSchema.sql.includes('username TEXT UNIQUE');
+
+      if (hasOldSingleColumnUnique) {
+        console.log('[UserStorage] Detected old schema with single-column username UNIQUE constraint');
+        return true;
+      }
+
+      // Check if the new composite unique constraint exists
+      const hasNewCompositeUnique = tableSchema.sql.includes('UNIQUE(username, tenant_id)');
+
+      if (!hasNewCompositeUnique) {
+        console.log('[UserStorage] No composite unique constraint found, migration needed');
+        return true;
+      }
+
+      // Check if tenant_id is NOT NULL
+      const hasNotNullTenantId = tableSchema.sql.includes('tenant_id INTEGER NOT NULL');
+      if (!hasNotNullTenantId) {
+        console.log('[UserStorage] tenant_id is not NOT NULL, migration needed');
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      // If there's any error checking, assume no migration needed
+      console.error('[UserStorage] Error checking migration status:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Migrate database schema from old to new
+   * Old: UNIQUE constraint on username alone
+   * New: UNIQUE constraint on (username, tenant_id) composite
+   */
+  private async migrateSchema(): Promise<void> {
+    try {
+      // Begin transaction
+      this.db.run('BEGIN TRANSACTION');
+
+      // Create new table with composite unique constraint
+      this.db.run(`
+        CREATE TABLE users_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT UNIQUE NOT NULL,
+          username TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'user',
+          tenant_id INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          UNIQUE(username, tenant_id)
+        )
+      `);
+
+      // Copy data from old table to new table
+      // For users with NULL tenant_id, set tenant_id to 1 (default tenant)
+      this.db.run(`
+        INSERT INTO users_new (id, email, username, password_hash, role, tenant_id, created_at, updated_at)
+        SELECT
+          id,
+          email,
+          username,
+          password_hash,
+          COALESCE(role, 'user') as role,
+          COALESCE(tenant_id, 1) as tenant_id,
+          created_at,
+          updated_at
+        FROM users
+      `);
+
+      // Drop old table
+      this.db.run('DROP TABLE users');
+
+      // Rename new table to users
+      this.db.run('ALTER TABLE users_new RENAME TO users');
+
+      // Create indexes
+      this.db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+
+      // Commit transaction
+      this.db.run('COMMIT');
+
+      console.log('[UserStorage] Schema migration completed successfully');
+    } catch (error: any) {
+      // Rollback on error
+      try {
+        this.db.run('ROLLBACK');
+      } catch (rollbackError) {
+        // Ignore rollback errors
+      }
+      console.error('[UserStorage] Schema migration failed:', error);
+      throw new Error(`Failed to migrate database schema: ${error.message}`);
+    }
   }
 
   /**
@@ -139,8 +284,8 @@ export class UserStorage {
         if (error.message.includes('email')) {
           throw new Error('Email already exists');
         }
-        if (error.message.includes('username')) {
-          throw new Error('Username already exists');
+        if (error.message.includes('username') && error.message.includes('tenant_id')) {
+          throw new Error('Username already exists in this tenant');
         }
       }
       throw error;
@@ -224,8 +369,8 @@ export class UserStorage {
         if (error.message.includes('email')) {
           throw new Error('Email already exists');
         }
-        if (error.message.includes('username')) {
-          throw new Error('Username already exists');
+        if (error.message.includes('username') && error.message.includes('tenant_id')) {
+          throw new Error('Username already exists in this tenant');
         }
       }
       throw error;
@@ -293,6 +438,9 @@ export class UserStorage {
    * Close database connection
    */
   close(): void {
-    this.db.close();
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
   }
 }
