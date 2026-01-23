@@ -204,7 +204,13 @@ Generate the complete extension code following the structure specified above.`;
     let jsonMatch = content.match(/```json\s*([\s\S]*)$/);
     if (jsonMatch && jsonMatch[1]) {
       jsonStr = jsonMatch[1].trim();
-      console.log('[ExtensionGenerator] Found JSON in ```json block (no closing), length:', jsonStr.length);
+      // Remove leading ```json if present at the start
+      if (jsonStr.startsWith('```json')) {
+        jsonStr = jsonStr.substring(8).trim();
+      }
+      console.log('[ExtensionGenerator] Found JSON in ```json block, length:', jsonStr.length);
+    } else {
+      console.log('[ExtensionGenerator] Strategy 2 (```json block): No match');
     }
   }
 
@@ -213,7 +219,13 @@ Generate the complete extension code following the structure specified above.`;
     let jsonMatch = content.match(/```\s*([\s\S]*)$/);
     if (jsonMatch && jsonMatch[1]) {
       jsonStr = jsonMatch[1].trim();
-      console.log('[ExtensionGenerator] Found JSON in ``` block (no closing), length:', jsonStr.length);
+      // Remove leading ``` if present at the start
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.substring(3).trim();
+      }
+      console.log('[ExtensionGenerator] Found JSON in ``` block, length:', jsonStr.length);
+    } else {
+      console.log('[ExtensionGenerator] Strategy 3 (``` block): No match');
     }
   }
 
