@@ -5,8 +5,8 @@
   "author": "AIBase",
   "version": "1.0.0",
   "category": "visualization-tools",
-  "enabled": false,
-  "isDefault": false,
+  "enabled": true,
+  "isDefault": true,
   "createdAt": 0,
   "updatedAt": 0
 }
