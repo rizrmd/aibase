@@ -775,13 +775,12 @@ export function AdminSetupPage() {
                 <div key={step.id} className="flex items-center">
                   <div className="flex flex-col items-center">
                     <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors ${
-                        isCompleted
+                      className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors ${isCompleted
                           ? "border-primary bg-primary text-primary-foreground"
                           : isCurrent
-                          ? "border-primary text-primary"
-                          : "border-muted-foreground/30 text-muted-foreground"
-                      }`}
+                            ? "border-primary text-primary"
+                            : "border-muted-foreground/30 text-muted-foreground"
+                        }`}
                     >
                       {step.id === "admin" ? (
                         <ShieldIcon className="h-5 w-5" />
@@ -789,17 +788,15 @@ export function AdminSetupPage() {
                         <Icon className="h-5 w-5" />
                       )}
                     </div>
-                    <span className={`mt-2 text-xs font-medium ${
-                      isCurrent ? "text-primary" : "text-muted-foreground"
-                    }`}>
+                    <span className={`mt-2 text-xs font-medium ${isCurrent ? "text-primary" : "text-muted-foreground"
+                      }`}>
                       {step.label}
                     </span>
                   </div>
                   {index < steps.length - 1 && (
                     <div
-                      className={`h-0.5 w-16 mx-2 transition-colors ${
-                        index < currentStepIndex ? "bg-primary" : "bg-muted-foreground/30"
-                      }`}
+                      className={`h-0.5 w-16 mx-2 transition-colors ${index < currentStepIndex ? "bg-primary" : "bg-muted-foreground/30"
+                        }`}
                     />
                   )}
                 </div>
@@ -980,8 +977,8 @@ export function AdminSetupPage() {
           <button
             onClick={() => setActiveTab("setup")}
             className={`px-4 py-2 font-medium transition-colors ${activeTab === "setup"
-                ? "border-b-2 border-primary text-primary"
-                : "text-muted-foreground hover:text-foreground"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
               }`}
           >
             App Settings
@@ -989,8 +986,8 @@ export function AdminSetupPage() {
           <button
             onClick={() => setActiveTab("tenants")}
             className={`px-4 py-2 font-medium transition-colors ${activeTab === "tenants"
-                ? "border-b-2 border-primary text-primary"
-                : "text-muted-foreground hover:text-foreground"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
               }`}
           >
             Tenant & User Management
@@ -1242,7 +1239,7 @@ export function AdminSetupPage() {
                     No users found in this tenant. Create your first user to get started.
                   </div>
                 ) : (
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-lg overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-muted">
                         <tr>
@@ -1259,11 +1256,10 @@ export function AdminSetupPage() {
                             <td className="px-4 py-3 text-sm">{user.email}</td>
                             <td className="px-4 py-3 text-sm">
                               <span
-                                className={`px-2 py-1 rounded text-xs font-medium ${
-                                  user.role === "admin"
+                                className={`px-2 py-1 rounded text-xs font-medium ${user.role === "admin"
                                     ? "bg-blue-100 text-blue-800"
                                     : "bg-gray-100 text-gray-800"
-                                }`}
+                                  }`}
                               >
                                 {user.role}
                               </span>
@@ -1365,7 +1361,7 @@ export function AdminSetupPage() {
                     No tenants found. Create your first tenant to get started.
                   </div>
                 ) : (
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-lg overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-muted">
                         <tr>
