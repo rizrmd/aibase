@@ -225,4 +225,27 @@ export class CategoryStorage {
     await this.ensureCategoriesFile(projectId);
     return this.getAll(projectId);
   }
+
+  /**
+   * Reset categories to defaults (recreate categories.json with default categories)
+   * Used when user resets extensions to defaults
+   */
+  async resetToDefaults(projectId: string): Promise<void> {
+    const categoriesPath = this.getCategoriesPath(projectId);
+
+    // Delete existing categories file if exists
+    try {
+      await fs.unlink(categoriesPath);
+    } catch (error: any) {
+      // Ignore if file doesn't exist
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
+    // Ensure categories file is recreated with defaults
+    await this.ensureCategoriesFile(projectId);
+
+    console.log(`[CategoryStorage] Reset categories to defaults for project ${projectId}`);
+  }
 }

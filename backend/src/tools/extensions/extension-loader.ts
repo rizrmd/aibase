@@ -6,13 +6,16 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { ExtensionStorage, type Extension, type ExtensionMetadata } from '../../storage/extension-storage';
+import { CategoryStorage } from '../../storage/category-storage';
 
 export class ExtensionLoader {
   private extensionStorage: ExtensionStorage;
+  private categoryStorage: CategoryStorage;
   private defaultsPath: string;
 
   constructor() {
     this.extensionStorage = new ExtensionStorage();
+    this.categoryStorage = new CategoryStorage();
     this.defaultsPath = path.join(__dirname, 'defaults');
   }
 
@@ -167,6 +170,9 @@ export class ExtensionLoader {
     for (const ext of existingExtensions) {
       await this.extensionStorage.delete(projectId, ext.metadata.id);
     }
+
+    // Reset categories to defaults (recreate categories.json)
+    await this.categoryStorage.resetToDefaults(projectId);
 
     // Copy defaults
     await this.copyDefaultExtensions(projectId);
