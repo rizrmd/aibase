@@ -57,5 +57,45 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      outDir: "dist",
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            if (id.includes("node_modules")) {
+              if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) {
+                return "react-vendor";
+              }
+              if (id.includes("shiki") || id.includes("vscode-oniguruma") || id.includes("vscode-textmate")) {
+                return "shiki-vendor";
+              }
+              if (id.includes("mermaid") || id.includes("khroma") || id.includes("stylis")) {
+                return "mermaid-vendor";
+              }
+              if (id.includes("@codemirror") || id.includes("@uiw") || id.includes("@lezer")) {
+                return "codemirror-vendor";
+              }
+              if (id.includes("echarts") || id.includes("zrender")) {
+                return "charts-vendor";
+              }
+              if (id.includes("framer-motion")) {
+                return "framer-motion-vendor";
+              }
+              if (id.includes("@radix-ui") || id.includes("lucide-react")) {
+                return "ui-vendor";
+              }
+              if (id.includes("react-markdown") || id.includes("remark-gfm") || id.includes("micromark") || id.includes("mdast") || id.includes("unist")) {
+                return "markdown-vendor";
+              }
+              if (id.includes("html2canvas") || id.includes("qrcode")) {
+                return "utils-vendor";
+              }
+              return "vendor";
+            }
+          },
+        },
+      },
+    },
   };
 });

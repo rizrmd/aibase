@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { ProjectCreateModal } from "@/components/project/project-create-modal";
 import { ProjectRenameModal } from "@/components/project/project-rename-modal";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Project } from "@/stores/project-store";
 
@@ -25,6 +25,7 @@ export function ProjectSelectorPage() {
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
     null
   );
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const {
     projects,
@@ -32,11 +33,20 @@ export function ProjectSelectorPage() {
     selectProject,
     deleteProject,
     isLoading,
+    error,
     initializeProject,
   } = useProjectStore();
 
   useEffect(() => {
-    initializeProject();
+    // We wrap initialization to ensure we track when it's requested
+    const init = async () => {
+      try {
+        await initializeProject();
+      } finally {
+        setHasInitialized(true);
+      }
+    };
+    init();
   }, [initializeProject]);
 
   const handleSelectProject = (projectId: string) => {
@@ -85,11 +95,26 @@ export function ProjectSelectorPage() {
     }
   };
 
-  if (isLoading && projects.length === 0) {
+  if ((isLoading || !hasInitialized) && projects.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="text-lg font-medium">Loading projects...</div>
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background to-muted/20">
+        <div className="text-center space-y-4 animate-in fade-in zoom-in duration-300">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <div className="text-lg font-medium text-muted-foreground">Loading projects...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && projects.length === 0) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-background to-muted/20">
+        <div className="text-center space-y-4 max-w-md px-6">
+          <div className="text-destructive font-medium text-lg">Error Loading Projects</div>
+          <p className="text-muted-foreground">{error}</p>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            Try Again
+          </Button>
         </div>
       </div>
     );
