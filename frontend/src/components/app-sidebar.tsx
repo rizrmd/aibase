@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 
-import { getAppName, getLogoUrl } from "@/lib/setup"
+import { getAppName, getLogoUrl, isWhatsAppEnabled } from "@/lib/setup"
 import { NavSection } from "@/components/nav-section"
 import {
   Sidebar,
@@ -38,15 +38,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isAdmin = currentUser?.role === "admin"
   const [appName, setAppName] = React.useState<string>("")
   const [logoUrl, setLogoUrl] = React.useState<string | null>(null)
-  const aimeowEnabled = import.meta.env.VITE_AIMEOW === "true"
+  const [aimeowEnabled, setAimeowEnabled] = React.useState<boolean>(false)
 
   const { isMobile, setOpenMobile } = useSidebar()
 
   React.useEffect(() => {
     const loadConfig = async () => {
-      const [name, logo] = await Promise.all([getAppName(), getLogoUrl()])
+      const [name, logo, whatsappEnabled] = await Promise.all([
+        getAppName(),
+        getLogoUrl(),
+        isWhatsAppEnabled()
+      ])
       setAppName(name)
       setLogoUrl(logo)
+      setAimeowEnabled(whatsappEnabled)
     }
     loadConfig()
   }, [])
@@ -101,6 +106,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: getUrl("whatsapp"),
       icon: MessageCircle,
     }] : []),
+    {
+      title: "API",
+      url: getUrl("api"),
+      icon: Terminal,
+    },
     {
       title: "Embed",
       url: getUrl("embed"),

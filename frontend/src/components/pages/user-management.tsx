@@ -130,14 +130,11 @@ export function UserManagementPage() {
         </div>
 
         {/* Users List */}
-        <div className="flex-1 overflow-auto bg-card rounded-lg border shadow-sm">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4">All Users</h2>
-            <UsersList
-              onDeleteUser={handleDeleteUser}
-              onImpersonateUser={handleImpersonateUser}
-            />
-          </div>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <UsersList
+            onDeleteUser={handleDeleteUser}
+            onImpersonateUser={handleImpersonateUser}
+          />
         </div>
 
         {/* Create User Dialog */}

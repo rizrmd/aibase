@@ -11,7 +11,6 @@ export default defineConfig(({ mode }) => {
   // Also check process.env (set by the Go build script) as fallback
   const basePath = env.PUBLIC_BASE_PATH || process.env.PUBLIC_BASE_PATH || "";
   const appName = env.APP_NAME || process.env.APP_NAME || "AI-BASE";
-  const aimeowEnabled = env.AIMEOW === "true" || process.env.AIMEOW === "true";
 
   // Normalize base path - ensure it starts with / and doesn't end with /
   const normalizedBasePath = basePath
@@ -45,7 +44,10 @@ export default defineConfig(({ mode }) => {
     define: {
       "import.meta.env.PUBLIC_BASE_PATH": JSON.stringify(normalizedBasePath),
       "import.meta.env.APP_NAME": JSON.stringify(appName),
-      "import.meta.env.VITE_AIMEOW": JSON.stringify(aimeowEnabled),
+    },
+    esbuild: {
+      pure: mode === "production" ? ["console.log", "console.info", "console.debug", "console.trace"] : [],
+      drop: mode === "production" ? ["debugger"] : [],
     },
     server: {
       port: 5050,
@@ -56,6 +58,51 @@ export default defineConfig(({ mode }) => {
           secure: false,
           ws: true,
           rewrite: (path) => path.replace(normalizedBasePath, ""),
+        },
+      },
+    },
+    build: {
+      outDir: "dist",
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            if (id.includes("node_modules")) {
+              // 1. Core UI and Icons - Used across most pages
+              if (
+                id.includes("node_modules/@radix-ui/") ||
+                id.includes("node_modules/lucide-react/") ||
+                id.includes("node_modules/framer-motion/")
+              ) {
+                return "ui-vendor";
+              }
+
+              // 2. Content Processing - Used in Chat and Editors
+              if (
+                id.includes("node_modules/react-markdown/") ||
+                id.includes("node_modules/remark-") ||
+                id.includes("node_modules/micromark") ||
+                id.includes("node_modules/mdast") ||
+                id.includes("node_modules/unist") ||
+                id.includes("node_modules/hast-") ||
+                id.includes("node_modules/vfile")
+              ) {
+                return "markdown-vendor";
+              }
+
+              // 3. Misc Utils
+              if (id.includes("node_modules/html2canvas/") || id.includes("node_modules/qrcode/")) {
+                return "utils-vendor";
+              }
+
+              // 4. Everything else (React, Router, Zustand, etc.)
+              // We return undefined for these to let Vite/Rollup handle them with default logic.
+              // This is critical for libraries that are lazy-loaded via dynamic imports (Shiki, Mermaid, ECharts).
+              // If we force them into "vendor", they get loaded on initial page load, which is slow 
+              // and can cause initialization errors like "this.clear is not a function".
+              return undefined;
+            }
+          },
         },
       },
     },

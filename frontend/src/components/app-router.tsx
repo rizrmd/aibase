@@ -1,23 +1,12 @@
 import { Routes, Route, useLocation } from "react-router-dom";
-import { MainChat } from "./pages/main-chat";
-import { MemoryEditor } from "./pages/memory-editor";
-import { ContextEditor } from "./pages/context-editor";
-import { ConversationHistoryPage } from "./pages/conversation-history";
-import { FilesManagerPage } from "./pages/files-manager";
-import { ProjectSelectorPage } from "./pages/project-selector";
-import { UserManagementPage } from "./pages/user-management";
-import { LoginPage } from "./pages/login";
-import { AdminSetupPage } from "./pages/admin-setup";
-import { EmbedChatPage } from "./pages/embed-chat";
-import { EmbedSettings } from "./pages/embed-settings";
-import { ExtensionsSettings } from "./pages/extensions-settings";
-import { ExtensionAICreator } from "./pages/extension-ai-creator";
-import { WhatsAppSettings } from "./pages/whatsapp-settings";
 import { ProjectRouteHandler } from "./project/project-route-handler";
 import { ProtectedRoute } from "./auth/protected-route";
 import { Toaster } from "./ui/sonner";
 import { SetupRequired } from "./setup-required";
-import { useEffect } from "react";
+import { useEffect, Suspense, lazy } from "react";
+import { Loader2 } from "lucide-react";
+import { getAppName, isWhatsAppEnabled } from "@/lib/setup";
+import * as React from "react";
 import { useProjectStore } from "@/stores/project-store";
 import { useConversationStore } from "@/stores/conversation-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -25,24 +14,59 @@ import { AppSidebar } from "./app-sidebar";
 import { UserAccountMenu } from "./user-account-menu";
 import { SidebarProvider, SidebarTrigger } from "./ui/sidebar";
 
+// Lazy load page components
+const MainChat = lazy(() => import("./pages/main-chat").then(module => ({ default: module.MainChat })));
+const MemoryEditor = lazy(() => import("./pages/memory-editor").then(module => ({ default: module.MemoryEditor })));
+const ContextEditor = lazy(() => import("./pages/context-editor").then(module => ({ default: module.ContextEditor })));
+const ConversationHistoryPage = lazy(() => import("./pages/conversation-history").then(module => ({ default: module.ConversationHistoryPage })));
+const FilesManagerPage = lazy(() => import("./pages/files-manager").then(module => ({ default: module.FilesManagerPage })));
+const ProjectSelectorPage = lazy(() => import("./pages/project-selector").then(module => ({ default: module.ProjectSelectorPage })));
+const UserManagementPage = lazy(() => import("./pages/user-management").then(module => ({ default: module.UserManagementPage })));
+const LoginPage = lazy(() => import("./pages/login").then(module => ({ default: module.LoginPage })));
+const AdminSetupPage = lazy(() => import("./pages/admin-setup").then(module => ({ default: module.AdminSetupPage })));
+const EmbedChatPage = lazy(() => import("./pages/embed-chat").then(module => ({ default: module.EmbedChatPage })));
+const EmbedSettings = lazy(() => import("./pages/embed-settings").then(module => ({ default: module.EmbedSettings })));
+const ExtensionsSettings = lazy(() => import("./pages/extensions-settings").then(module => ({ default: module.ExtensionsSettings })));
+const ExtensionEditor = lazy(() => import("./pages/extension-editor").then(module => ({ default: module.ExtensionEditor })));
+const ExtensionAICreator = lazy(() => import("./pages/extension-ai-creator").then(module => ({ default: module.ExtensionAICreator })));
+const WhatsAppSettings = lazy(() => import("./pages/whatsapp-settings").then(module => ({ default: module.WhatsAppSettings })));
+const DeveloperAPIPage = lazy(() => import("./pages/developer-api").then(module => ({ default: module.DeveloperAPIPage })));
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center p-8 w-full h-full min-h-[50vh]">
+    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  </div>
+);
+
 interface AppRouterProps {
   wsUrl: string;
 }
 
 export function AppRouter({ wsUrl }: AppRouterProps) {
   const location = useLocation();
-  const appName = import.meta.env.APP_NAME || "AI Base";
-  const aimeowEnabled = import.meta.env.VITE_AIMEOW === "true";
+  const [appName, setAppName] = React.useState<string>("AI Base");
+  const [aimeowEnabled, setAimeowEnabled] = React.useState<boolean>(false);
 
   const { currentProject } = useProjectStore();
   const { loadConversations } = useConversationStore();
   const { user, logout, needsSetup, checkSetup, setupChecked } = useAuthStore();
 
-  // Check setup status on mount
+  // Check setup status, load app name and settings on mount
   useEffect(() => {
     if (!setupChecked) {
       checkSetup();
     }
+
+    const loadConfig = async () => {
+      const [name, whatsappEnabled] = await Promise.all([
+        getAppName(),
+        isWhatsAppEnabled()
+      ]);
+      setAppName(name);
+      setAimeowEnabled(whatsappEnabled);
+    };
+    loadConfig();
   }, [checkSetup, setupChecked]);
 
   // Load conversations when project changes
@@ -100,127 +124,149 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
           {shouldShowSetupRequired ? (
             <SetupRequired />
           ) : (
-            <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/admin-setup" element={<AdminSetupPage />} />
-          <Route path="/embed" element={<EmbedChatPage />} />
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/admin-setup" element={<AdminSetupPage />} />
+                <Route path="/embed" element={<EmbedChatPage />} />
 
-          {/* Protected routes */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <ProjectSelectorPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute>
-                <UserManagementPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/chat"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <MainChat
-                    wsUrl={wsUrl}
-                    isTodoPanelVisible={true}
+                {/* Protected routes */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectSelectorPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/users"
+                  element={
+                    <ProtectedRoute>
+                      <UserManagementPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/chat"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <MainChat
+                          wsUrl={wsUrl}
+                          isTodoPanelVisible={true}
+                        />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/history"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <ConversationHistoryPage />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/memory"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <MemoryEditor />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/context"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <ContextEditor />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/files"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <FilesManagerPage />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                {aimeowEnabled && (
+                  <Route
+                    path="/projects/:projectId/whatsapp"
+                    element={
+                      <ProtectedRoute>
+                        <ProjectRouteHandler>
+                          <WhatsAppSettings />
+                        </ProjectRouteHandler>
+                      </ProtectedRoute>
+                    }
                   />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/history"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ConversationHistoryPage />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/memory"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <MemoryEditor />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/context"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ContextEditor />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/files"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <FilesManagerPage />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          {aimeowEnabled && (
-            <Route
-              path="/projects/:projectId/whatsapp"
-              element={
-                <ProtectedRoute>
-                  <ProjectRouteHandler>
-                    <WhatsAppSettings />
-                  </ProjectRouteHandler>
-                </ProtectedRoute>
-              }
-            />
-          )}
-          <Route
-            path="/projects/:projectId/embed"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <EmbedSettings />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/extensions"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ExtensionsSettings />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects/:projectId/extensions/ai-create"
-            element={
-              <ProtectedRoute>
-                <ProjectRouteHandler>
-                  <ExtensionAICreator />
-                </ProjectRouteHandler>
-              </ProtectedRoute>
-            }
-          />
-          {/* Catch-all route - redirect to root */}
-          <Route path="*" element={<ProtectedRoute><ProjectSelectorPage /></ProtectedRoute>} />
-          </Routes>
+                )}
+                <Route
+                  path="/projects/:projectId/api"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <DeveloperAPIPage />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/embed"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <EmbedSettings />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/extensions"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <ExtensionsSettings />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/extensions/:extensionId"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <ExtensionEditor />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId/extensions/ai-create"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectRouteHandler>
+                        <ExtensionAICreator />
+                      </ProjectRouteHandler>
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Catch-all route - redirect to root */}
+                <Route path="*" element={<ProtectedRoute><ProjectSelectorPage /></ProtectedRoute>} />
+              </Routes>
+            </Suspense>
           )}
         </main>
 

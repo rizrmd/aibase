@@ -13,6 +13,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -487,42 +493,34 @@ export function WhatsAppSettings() {
   return (
     <div className="h-full overflow-auto">
       <div className="container max-w-4xl mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="h-6 w-6" />
-            <h1 className="text-2xl font-semibold">WhatsApp Integration</h1>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabType)} className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-6 w-6" />
+              <h1 className="text-2xl font-semibold">WhatsApp Integration</h1>
+            </div>
+
+            {/* Tabs */}
+            <TabsList>
+              <TabsTrigger value="device">
+                <Smartphone className="h-4 w-4 mr-2" />
+                Device
+              </TabsTrigger>
+              <TabsTrigger value="conversations">
+                <Users className="h-4 w-4 mr-2" />
+                Conversations
+              </TabsTrigger>
+            </TabsList>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-2">
-            <Button
-              variant={activeTab === 'device' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTab('device')}
-            >
-              <Smartphone className="h-4 w-4 mr-2" />
-              Device
-            </Button>
-            <Button
-              variant={activeTab === 'conversations' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTab('conversations')}
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Conversations
-            </Button>
-          </div>
-        </div>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Device Tab */}
-        {activeTab === 'device' && (
-          <>
+          {/* Device Tab */}
+          <TabsContent value="device" className="mt-0">
             {!client ? (
               <Card>
                 <CardHeader>
@@ -699,67 +697,67 @@ export function WhatsAppSettings() {
                 )}
               </div>
             )}
-          </>
-        )}
+          </TabsContent>
 
-        {/* Conversations Tab */}
-        {activeTab === 'conversations' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                WhatsApp Conversations
-              </CardTitle>
-              <CardDescription>
-                Manage all conversations with different WhatsApp contacts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingConversations ? (
-                <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : conversations.length === 0 ? (
-                <div className="text-center py-12">
-                  <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-muted-foreground mb-2">No conversations yet</p>
-                  <p className="text-sm text-muted-foreground">
-                    Conversations will appear here when people send messages to your WhatsApp number
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {conversations.map((conv) => (
-                    <div
-                      key={conv.convId}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium">{conv.title}</p>
-                          <span className="text-xs text-muted-foreground">
-                            {conv.messageCount} {conv.messageCount === 1 ? 'message' : 'messages'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Last active: {new Date(conv.lastUpdatedAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => deleteConversation(conv)}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          {/* Conversations Tab */}
+          <TabsContent value="conversations" className="mt-0">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  WhatsApp Conversations
+                </CardTitle>
+                <CardDescription>
+                  Manage all conversations with different WhatsApp contacts
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingConversations ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : conversations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground mb-2">No conversations yet</p>
+                    <p className="text-sm text-muted-foreground">
+                      Conversations will appear here when people send messages to your WhatsApp number
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {conversations.map((conv) => (
+                      <div
+                        key={conv.convId}
+                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-medium">{conv.title}</p>
+                            <span className="text-xs text-muted-foreground">
+                              {conv.messageCount} {conv.messageCount === 1 ? 'message' : 'messages'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Last active: {new Date(conv.lastUpdatedAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteConversation(conv)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

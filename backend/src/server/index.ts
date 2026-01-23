@@ -117,6 +117,7 @@ import {
   handleUpdateTenantUser,
   handleDeleteTenantUser,
 } from "./tenant-handler";
+import { handleChatCompletion } from "./llm-handler";
 import {
   handleGetEmbedInfo,
   handleGetEmbedCss,
@@ -639,6 +640,11 @@ export class WebSocketServer {
             (req.method === "POST" && req.headers.get("X-HTTP-Method-Override") === "DELETE")) {
             return handleDeleteEmbedConversation(req, convId!);
           }
+        }
+
+        // LLM API endpoints
+        if (pathname === "/api/llm/completion" && req.method === "POST") {
+          return handleChatCompletion(req);
         }
 
         // Conversations API endpoints

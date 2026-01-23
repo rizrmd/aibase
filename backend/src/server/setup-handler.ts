@@ -291,6 +291,7 @@ export async function handleGetPublicSetup(req: Request): Promise<Response> {
         setup: {
           appName: null,
           hasLogo: false,
+          aimeowEnabled: process.env.AIMEOW === "true",
         },
       });
     }
@@ -304,6 +305,7 @@ export async function handleGetPublicSetup(req: Request): Promise<Response> {
         appName: setup.appName || null,
         hasLogo: !!setup.logoPath,
         hasFavicon: !!setup.faviconPath,
+        aimeowEnabled: process.env.AIMEOW === "true",
       },
     });
   } catch (error) {
