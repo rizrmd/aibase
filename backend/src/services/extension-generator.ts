@@ -188,39 +188,41 @@ Generate the complete extension code following the structure specified above.`;
   let jsonStr: string | null = null;
   let parsed: any = null;
 
-  // Strategy 1: Try to extract JSON from markdown code blocks with json tag
-  let jsonMatch = content.match(/```json\\s*([\\s\\S]*?)\\s*```/);
-  if (jsonMatch && jsonMatch[1]) {
-    jsonStr = jsonMatch[1];
-    console.log('[ExtensionGenerator] Found JSON in ```json block');
+  // Strategy 1: Try to parse the entire content as JSON FIRST
+  // This is most reliable and handles nested braces correctly
+  try {
+    parsed = JSON.parse(content);
+    jsonStr = content;
+    console.log('[ExtensionGenerator] Parsed entire content as JSON');
+  } catch {
+    // Not valid JSON as-is, continue to extraction strategies
   }
 
-  // Strategy 2: Try to extract JSON from markdown code blocks without json tag
+  // Strategy 2: Try to extract JSON from markdown code blocks with json tag
   if (!jsonStr) {
-    jsonMatch = content.match(/```\\s*([\\s\\S]*?)\\s*```/);
+    let jsonMatch = content.match(/```json\\s*([\\s\\S]*?)\\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      jsonStr = jsonMatch[1];
+      console.log('[ExtensionGenerator] Found JSON in ```json block');
+    }
+  }
+
+  // Strategy 3: Try to extract JSON from markdown code blocks without json tag
+  if (!jsonStr) {
+    let jsonMatch = content.match(/```\\s*([\\s\\S]*?)\\s*```/);
     if (jsonMatch && jsonMatch[1]) {
       jsonStr = jsonMatch[1];
       console.log('[ExtensionGenerator] Found JSON in ``` block');
     }
   }
 
-  // Strategy 3: Try to find JSON object directly (starts with {, ends with })
+  // Strategy 4: Try to find JSON object directly (starts with {, ends with })
+  // NOTE: This is unreliable for JSON with nested braces in strings, use as last resort
   if (!jsonStr) {
-    jsonMatch = content.match(/\\{[\\s\\S]*\\}/);
+    let jsonMatch = content.match(/\\{[\\s\\S]*\\}/);
     if (jsonMatch && jsonMatch[0]) {
       jsonStr = jsonMatch[0];
-      console.log('[ExtensionGenerator] Found JSON object directly');
-    }
-  }
-
-  // Strategy 4: Try to parse the entire content as JSON
-  if (!jsonStr) {
-    try {
-      parsed = JSON.parse(content);
-      jsonStr = content;
-      console.log('[ExtensionGenerator] Parsed entire content as JSON');
-    } catch {
-      // Not valid JSON, continue to error
+      console.log('[ExtensionGenerator] Found JSON object directly (may fail with nested braces)');
     }
   }
 
