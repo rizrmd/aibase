@@ -821,14 +821,11 @@ export function ExtensionsSettings() {
               value={changeCategoryDialog.newCategory}
               onChange={(e) => setChangeCategoryDialog({ ...changeCategoryDialog, newCategory: e.target.value })}
             >
-              <option value="">Uncategorized</option>
-              {categoryGroups
-                .filter((group) => group.category.id !== "") // Exclude the Uncategorized group
-                .map((group) => (
-                  <option key={group.category.id} value={group.category.id}>
-                    {group.category.name}
-                  </option>
-                ))}
+              {categoryGroups.map((group) => (
+                <option key={group.category.id} value={group.category.id}>
+                  {group.category.name}
+                </option>
+              ))}
             </select>
             <p className="text-xs text-muted-foreground mt-2">
               Current category: {changeCategoryDialog.currentCategory || "Uncategorized"}
