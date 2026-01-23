@@ -754,6 +754,13 @@ func createClient(c *gin.Context) {
 				waClient.mutex.Lock()
 				waClient.qrCode = evt.Code
 				waClient.mutex.Unlock()
+			} else if evt.Event == "timeout" {
+				// QR code expired
+				fmt.Printf("QR code expired for client %s\n", clientID)
+				
+				// Send webhook for timeout
+				// We need to use the clientID (UUID) here
+				go manager.sendConnectionStatusWebhook(clientID, "qr_timeout", map[string]interface{}{})
 			}
 		}
 	}()
@@ -2308,6 +2315,7 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		"from":      fromUser,
 		"timestamp": msg.Info.Timestamp,
 		"pushName":  msg.Info.PushName,
+		"fromMe":    msg.Info.IsFromMe,
 	}
 
 	// Include additional sender info for LID resolution on the receiving end
@@ -2320,11 +2328,26 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 	}
 
 	// Determine message type and extract content
+	var mentions []string
+	
 	switch {
 	case msg.Message.GetConversation() != "":
 		// Text message
 		messageData["type"] = "text"
 		messageData["text"] = msg.Message.GetConversation()
+
+	case msg.Message.GetExtendedTextMessage() != nil:
+		// Extended text message (reply, mention, etc.)
+		extMsg := msg.Message.GetExtendedTextMessage()
+		messageData["type"] = "text"
+		messageData["text"] = extMsg.GetText()
+		
+		// Extract mentions
+		if extMsg.ContextInfo != nil {
+			for _, mentionedJID := range extMsg.ContextInfo.MentionedJID {
+				mentions = append(mentions, mentionedJID)
+			}
+		}
 
 	case msg.Message.GetImageMessage() != nil:
 		// Image message
@@ -2337,6 +2360,30 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		if imgMsg.GetFileLength() > 0 {
 			messageData["fileSize"] = imgMsg.GetFileLength()
 		}
+		
+		// Extract mentions
+		if imgMsg.ContextInfo != nil {
+			for _, mentionedJID := range imgMsg.ContextInfo.MentionedJID {
+				mentions = append(mentions, mentionedJID)
+			}
+		}
+
+	case msg.Message.GetVideoMessage() != nil:
+		// Video message
+		vidMsg := msg.Message.GetVideoMessage()
+		messageData["type"] = "video"
+		messageData["caption"] = vidMsg.GetCaption()
+		messageData["mimeType"] = vidMsg.GetMimetype()
+		if vidMsg.GetFileLength() > 0 {
+			messageData["fileSize"] = vidMsg.GetFileLength()
+		}
+		
+		// Extract mentions
+		if vidMsg.ContextInfo != nil {
+			for _, mentionedJID := range vidMsg.ContextInfo.MentionedJID {
+				mentions = append(mentions, mentionedJID)
+			}
+		}
 
 	case msg.Message.GetLiveLocationMessage() != nil:
 		// Live location message
@@ -2348,6 +2395,14 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		messageData["speed"] = locMsg.GetSpeedInMps()
 		messageData["bearing"] = locMsg.GetDegreesClockwiseFromMagneticNorth()
 		messageData["caption"] = locMsg.GetCaption()
+		
+		// Extract mentions
+		if locMsg.ContextInfo != nil {
+			for _, mentionedJID := range locMsg.ContextInfo.MentionedJID {
+				mentions = append(mentions, mentionedJID)
+			}
+		}
+		
 		fmt.Printf("[Location] Live location received: lat=%.6f, lng=%.6f, accuracy=%dm\n",
 			locMsg.GetDegreesLatitude(), locMsg.GetDegreesLongitude(), locMsg.GetAccuracyInMeters())
 
@@ -2362,12 +2417,31 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		if locMsg.GetURL() != "" {
 			messageData["url"] = locMsg.GetURL()
 		}
+		
+		// Extract mentions
+		if locMsg.ContextInfo != nil {
+			for _, mentionedJID := range locMsg.ContextInfo.MentionedJID {
+				mentions = append(mentions, mentionedJID)
+			}
+		}
+		
 		fmt.Printf("[Location] Static location received: lat=%.6f, lng=%.6f, name=%s\n",
 			locMsg.GetDegreesLatitude(), locMsg.GetDegreesLongitude(), locMsg.GetName())
 
 	default:
 		// Other message types
 		messageData["type"] = "other"
+	}
+
+	// Add mentions to message data
+	if len(mentions) > 0 {
+		messageData["mentions"] = mentions
+	}
+	
+	// Add isGroup flag and myPhone
+	messageData["isGroup"] = msg.Info.IsGroup
+	if client.deviceStore.ID != nil {
+		messageData["myPhone"] = client.deviceStore.ID.User
 	}
 
 	// Add file access URL if media file was downloaded

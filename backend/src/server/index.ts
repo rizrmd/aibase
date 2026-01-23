@@ -114,6 +114,7 @@ import {
   handleUpdateEmbedCss,
   handleUpdateWelcomeMessage,
   handleGetEmbedStatus,
+  handleRegenerateEmbedToken,
 } from "./embed-handler";
 import { handleEmbedAuth } from "./embed-auth-handler";
 import {
@@ -245,7 +246,18 @@ export class WebSocketServer {
 
     const wsHandlers = this.wsServer.getWebSocketHandlers();
 
-    this.bunServer = Bun.serve({
+    // Define WebSocket data type
+    interface WebSocketData {
+      convId?: string | null;
+      projectId?: string | null;
+      isEmbed?: boolean;
+      token?: string | null;
+      embedUid?: string | null;
+      urlParams?: Record<string, string>;
+      isWhatsAppWS?: boolean;
+    }
+
+    this.bunServer = Bun.serve<WebSocketData>({
       port: this.options.port,
       hostname: this.options.hostname,
       development: this.options.development,
@@ -370,14 +382,14 @@ export class WebSocketServer {
         const fileDeleteMatch = pathname.match(/^\/api\/files\/([^\/]+)\/([^\/]+)\/([^\/]+)$/);
         if (fileDeleteMatch && req.method === "DELETE") {
           const [, projectId, convId, fileName] = fileDeleteMatch;
-          return handleDeleteFile(req, projectId, convId, fileName);
+          return handleDeleteFile(req, projectId!, convId!, fileName!);
         }
 
         // Handle file rename (PATCH /api/files/{projectId}/{convId}/{fileName}/rename)
         const fileRenameMatch = pathname.match(/^\/api\/files\/([^\/]+)\/([^\/]+)\/([^\/]+)\/rename$/);
         if (fileRenameMatch && req.method === "PATCH") {
           const [, projectId, convId, fileName] = fileRenameMatch;
-          return handleRenameFile(req, projectId, convId, fileName);
+          return handleRenameFile(req, projectId!, convId!, fileName!);
         }
 
         // Handle file move (POST /api/files/move)
@@ -415,11 +427,11 @@ export class WebSocketServer {
         if (projectIdMatch) {
           const projectId = projectIdMatch[1];
           if (req.method === "GET") {
-            return handleGetProject(req, projectId);
+            return handleGetProject(req, projectId!);
           } else if (req.method === "PUT") {
-            return handleUpdateProject(req, projectId);
+            return handleUpdateProject(req, projectId!);
           } else if (req.method === "DELETE") {
-            return handleDeleteProject(req, projectId);
+            return handleDeleteProject(req, projectId!);
           }
         }
 
@@ -427,35 +439,30 @@ export class WebSocketServer {
         const embedRegenerateMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/regenerate$/);
         if (embedRegenerateMatch && req.method === "POST") {
           const projectId = embedRegenerateMatch[1];
-          return handleRegenerateEmbedToken(req, projectId);
+          return handleRegenerateEmbedToken(req, projectId!);
         }
 
 
         const embedStatusMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/status$/);
         if (embedStatusMatch && req.method === "GET") {
           const projectId = embedStatusMatch[1];
-          return handleGetEmbedStatus(req, projectId);
+          return handleGetEmbedStatus(req, projectId!);
         }
 
         const embedCssMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/css$/);
         if (embedCssMatch && req.method === "GET") {
           const projectId = embedCssMatch[1];
-          return handleGetEmbedCss(req, projectId);
+          return handleGetEmbedCss(req, projectId!);
         }
         if (embedCssMatch && req.method === "POST") {
           const projectId = embedCssMatch[1];
-          return handleUpdateEmbedCss(req, projectId);
+          return handleUpdateEmbedCss(req, projectId!);
         }
 
         const embedWelcomeMessageMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/embed\/welcome-message$/);
         if (embedWelcomeMessageMatch && req.method === "POST") {
           const projectId = embedWelcomeMessageMatch[1];
-          return handleUpdateWelcomeMessage(req, projectId);
-        }
-
-        if (embedWelcomeMessageMatch && req.method === "POST") {
-          const projectId = embedWelcomeMessageMatch[1];
-          return handleUpdateWelcomeMessage(req, projectId);
+          return handleUpdateWelcomeMessage(req, projectId!);
         }
 
         // Extensions API endpoints
@@ -463,16 +470,16 @@ export class WebSocketServer {
         if (extensionsMatch) {
           const projectId = extensionsMatch[1];
           if (req.method === "GET") {
-            return handleGetExtensions(req, projectId);
+            return handleGetExtensions(req, projectId!);
           } else if (req.method === "POST") {
-            return handleCreateExtension(req, projectId);
+            return handleCreateExtension(req, projectId!);
           }
         }
 
         const extensionResetMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/extensions\/reset$/);
         if (extensionResetMatch && req.method === "POST") {
           const projectId = extensionResetMatch[1];
-          return handleResetExtensions(req, projectId);
+          return handleResetExtensions(req, projectId!);
         }
 
         const extensionIdMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/extensions\/([^\/]+)$/);
@@ -480,11 +487,11 @@ export class WebSocketServer {
           const projectId = extensionIdMatch[1];
           const extensionId = extensionIdMatch[2];
           if (req.method === "GET") {
-            return handleGetExtension(req, projectId, extensionId);
+            return handleGetExtension(req, projectId!, extensionId!);
           } else if (req.method === "PUT") {
-            return handleUpdateExtension(req, projectId, extensionId);
+            return handleUpdateExtension(req, projectId!, extensionId!);
           } else if (req.method === "DELETE") {
-            return handleDeleteExtension(req, projectId, extensionId);
+            return handleDeleteExtension(req, projectId!, extensionId!);
           }
         }
 
@@ -492,7 +499,7 @@ export class WebSocketServer {
         if (extensionToggleMatch && req.method === "POST") {
           const projectId = extensionToggleMatch[1];
           const extensionId = extensionToggleMatch[2];
-          return handleToggleExtension(req, projectId, extensionId);
+          return handleToggleExtension(req, projectId!, extensionId!);
         }
 
         // WhatsApp endpoints (only enabled if AIMEOW=true)
@@ -503,7 +510,8 @@ export class WebSocketServer {
           if (pathname === "/api/whatsapp/ws") {
             const wsModule = await import("./whatsapp-ws");
             // Initialize notification functions so whatsapp-handler can use them
-            initWhatsAppNotifications(wsModule.notifyWhatsAppStatus, wsModule.notifyWhatsAppQRCode);
+            // Initialize notification functions so whatsapp-handler can use them
+            initWhatsAppNotifications(wsModule.notifyWhatsAppStatus, wsModule.notifyWhatsAppQRCode, wsModule.notifyWhatsAppQRTimeout);
 
             // Register WhatsApp handlers with the WebSocket server
             this.wsServer.registerWhatsAppHandlers(wsModule.getWhatsAppWebSocketHandlers());
@@ -585,7 +593,7 @@ export class WebSocketServer {
           // (for reverse proxies that don't forward DELETE methods)
           if (req.method === "DELETE" ||
             (req.method === "POST" && req.headers.get("X-HTTP-Method-Override") === "DELETE")) {
-            return handleDeleteEmbedConversation(req, convId);
+            return handleDeleteEmbedConversation(req, convId!);
           }
         }
 
@@ -602,21 +610,21 @@ export class WebSocketServer {
         const convMessagesMatch = pathname.match(/^\/api\/conversations\/([^\/]+)\/messages$/);
         if (convMessagesMatch && req.method === "GET") {
           const convId = convMessagesMatch[1];
-          return handleGetConversationMessages(req, convId);
+          return handleGetConversationMessages(req, convId!);
         }
 
         // Match /api/conversations/:convId/files endpoints
         const convFilesMatch = pathname.match(/^\/api\/conversations\/([^\/]+)\/files$/);
         if (convFilesMatch && req.method === "GET") {
           const convId = convFilesMatch[1];
-          return handleGetConversationFiles(req, convId);
+          return handleGetConversationFiles(req, convId!);
         }
 
         // Match /api/conversations/:convId/regenerate-title endpoints
         const convRegenerateTitleMatch = pathname.match(/^\/api\/conversations\/([^\/]+)\/regenerate-title$/);
         if (convRegenerateTitleMatch && req.method === "POST") {
           const convId = convRegenerateTitleMatch[1];
-          return handleRegenerateConversationTitle(req, convId);
+          return handleRegenerateConversationTitle(req, convId!);
         }
 
         // Match /api/conversations/:convId endpoints
@@ -627,7 +635,7 @@ export class WebSocketServer {
           // (for reverse proxies that don't forward DELETE methods)
           if (req.method === "DELETE" ||
             (req.method === "POST" && req.headers.get("X-HTTP-Method-Override") === "DELETE")) {
-            return handleDeleteConversation(req, convId);
+            return handleDeleteConversation(req, convId!);
           }
         }
 
@@ -681,14 +689,14 @@ export class WebSocketServer {
         const adminUserIdMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)$/);
         if (adminUserIdMatch && req.method === "DELETE") {
           const userId = adminUserIdMatch[1];
-          return handleAdminDeleteUser(req, userId);
+          return handleAdminDeleteUser(req, userId!);
         }
 
         // Match /api/admin/users/:userId/impersonate endpoints
         const impersonateMatch = pathname.match(/^\/api\/admin\/users\/([^\/]+)\/impersonate$/);
         if (impersonateMatch && req.method === "POST") {
           const userId = impersonateMatch[1];
-          return handleAdminImpersonateUser(req, userId);
+          return handleAdminImpersonateUser(req, userId!);
         }
 
         // Tenant API endpoints
@@ -706,9 +714,9 @@ export class WebSocketServer {
           const tenantId = tenantUserIdMatch[1];
           const userId = tenantUserIdMatch[2];
           if (req.method === "PUT") {
-            return handleUpdateTenantUser(req, tenantId, userId);
+            return handleUpdateTenantUser(req, tenantId!, userId!);
           } else if (req.method === "DELETE") {
-            return handleDeleteTenantUser(req, tenantId, userId);
+            return handleDeleteTenantUser(req, tenantId!, userId!);
           }
         }
 
@@ -717,9 +725,9 @@ export class WebSocketServer {
         if (tenantUsersMatch) {
           const tenantId = tenantUsersMatch[1];
           if (req.method === "GET") {
-            return handleGetTenantUsers(req, tenantId);
+            return handleGetTenantUsers(req, tenantId!);
           } else if (req.method === "POST") {
-            return handleCreateTenantUser(req, tenantId);
+            return handleCreateTenantUser(req, tenantId!);
           }
         }
 
@@ -728,11 +736,11 @@ export class WebSocketServer {
         if (tenantLogoMatch) {
           const tenantId = tenantLogoMatch[1];
           if (req.method === "POST") {
-            return handleUploadTenantLogo(req, tenantId);
+            return handleUploadTenantLogo(req, tenantId!);
           } else if (req.method === "GET") {
-            return handleGetTenantLogo(req, tenantId);
+            return handleGetTenantLogo(req, tenantId!);
           } else if (req.method === "DELETE") {
-            return handleDeleteTenantLogo(req, tenantId);
+            return handleDeleteTenantLogo(req, tenantId!);
           }
         }
 
@@ -741,11 +749,11 @@ export class WebSocketServer {
         if (tenantIdMatch) {
           const tenantId = tenantIdMatch[1];
           if (req.method === "GET") {
-            return handleGetTenant(req, tenantId);
+            return handleGetTenant(req, tenantId!);
           } else if (req.method === "PUT") {
-            return handleUpdateTenant(req, tenantId);
+            return handleUpdateTenant(req, tenantId!);
           } else if (req.method === "DELETE") {
-            return handleDeleteTenant(req, tenantId);
+            return handleDeleteTenant(req, tenantId!);
           }
         }
 
@@ -792,9 +800,9 @@ export class WebSocketServer {
         if (setupUserIdMatch) {
           const userId = setupUserIdMatch[1];
           if (req.method === "PUT") {
-            return handleUpdateUser(req, userId);
+            return handleUpdateUser(req, userId!);
           } else if (req.method === "DELETE") {
-            return handleDeleteUser(req, userId);
+            return handleDeleteUser(req, userId!);
           }
         }
 
@@ -812,9 +820,9 @@ export class WebSocketServer {
         if (setupTenantIdMatch) {
           const tenantId = setupTenantIdMatch[1];
           if (req.method === "PUT") {
-            return handleUpdateTenantAdmin(req, tenantId);
+            return handleUpdateTenantAdmin(req, tenantId!);
           } else if (req.method === "DELETE") {
-            return handleDeleteTenantAdmin(req, tenantId);
+            return handleDeleteTenantAdmin(req, tenantId!);
           }
         }
 

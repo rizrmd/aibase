@@ -16,7 +16,7 @@
 
 ### TypeScript Configuration
 - Strict mode enabled with `noUncheckedIndexedAccess`, `noImplicitOverride`
-- ESNext target with React JSX
+- ES2022 target with React JSX (ESNext for backend)
 - Path aliases: `@/*` maps to `./src/*` in frontend
 
 ### Import Style
@@ -96,7 +96,7 @@ All pages MUST follow consistent layout patterns to ensure proper spacing and pr
 8. `main-chat.tsx` - Already correctly implemented
 
 ### WebSocket Architecture
-- Real-time communication using custom WSClient/WServer classes
+- Real-time communication using custom WSClient/WSServer classes
 - Event-driven architecture with typed message handling
 - Connection state management with reconnection logic
 
@@ -112,7 +112,7 @@ All pages MUST follow consistent layout patterns to ensure proper spacing and pr
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd sync      # Beads workflow for session management and sync
    git push
    git status  # MUST show "up to date with origin"
    ```
