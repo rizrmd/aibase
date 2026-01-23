@@ -184,7 +184,7 @@ export function ContextEditor() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 px-4 pt-[60px] md:px-6 pb-4">
+    <div className="flex h-full flex-col gap-4 px-4 pt-[60px] md:px-6 pb-4 w-full max-w-full min-w-0">
 
       {/* Header */}
       <div className="flex items-center justify-end gap-4 shrink-0">
@@ -235,7 +235,7 @@ export function ContextEditor() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto rounded-lg border min-h-0">
+        <div className="flex-1 overflow-auto rounded-lg border min-h-0 w-full max-w-full">
           <CodeMirror
             value={content}
             height="100%"
