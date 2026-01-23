@@ -14,24 +14,12 @@ import { storeOutput } from "../script-runtime/output-storage";
 import { ExtensionLoader } from "../extensions/extension-loader";
 
 /**
- * Dynamically merge contexts from all script-runtime files
+ * Script Tool context
+ * Note: Detailed examples are in the Script Tool's description parameter
+ * This context is intentionally brief to avoid confusion with project extensions
  */
 export const context = async () => {
-  const contexts = await Promise.all([
-    scriptRuntimeContext(),
-    duckdbContext(),
-    postgresqlContext(),
-    clickhouseContext(),
-    trinoContext(),
-    pdfreaderContext(),
-    webSearchContext(),
-    showChartContext(),
-    showTableContext(),
-    showMermaidContext(),
-    convertDocumentContext(),
-  ]);
-
-  return contexts.join("\n\n");
+  return scriptRuntimeContext();
 };
 
 /**
