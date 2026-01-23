@@ -155,9 +155,22 @@ Generate the complete extension code following the structure specified above.`;
   });
 
   // Parse response
+  console.log('[ExtensionGenerator] OpenAI response structure:', JSON.stringify({
+    choices: response.choices?.length,
+    firstChoice: response.choices?.[0] ? {
+      hasMessage: !!response.choices[0].message,
+      messageKeys: response.choices[0].message ? Object.keys(response.choices[0].message) : [],
+      hasContent: !!response.choices[0].message?.content,
+      contentLength: response.choices[0].message?.content?.length || 0,
+    } : null,
+  }, null, 2));
+
   const content = response.choices[0]?.message?.content;
+
   if (!content) {
-    throw new Error('No content generated from OpenAI');
+    console.error('[ExtensionGenerator] Empty response from OpenAI');
+    console.error('[ExtensionGenerator] Full response:', JSON.stringify(response, null, 2));
+    throw new Error('No content generated from OpenAI. The AI returned an empty response. This could be due to API quota limits, model restrictions, or invalid configuration.');
   }
 
   console.log('[ExtensionGenerator] Received response from OpenAI');
