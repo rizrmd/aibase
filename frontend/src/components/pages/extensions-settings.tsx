@@ -80,6 +80,13 @@ export function ExtensionsSettings() {
   }>({ open: false, categoryId: "" });
   const [resetExtensionsDialog, setResetExtensionsDialog] = useState(false);
 
+  // Delete extension dialog state
+  const [deleteExtensionDialog, setDeleteExtensionDialog] = useState<{
+    open: boolean;
+    extensionId: string;
+    extensionName: string;
+  }>({ open: false, extensionId: "", extensionName: "" });
+
   // Change category dialog state
   const [changeCategoryDialog, setChangeCategoryDialog] = useState<{
     open: boolean;
@@ -223,25 +230,30 @@ export function ExtensionsSettings() {
   };
 
   // Handle delete extension
-  const handleDelete = async (extensionId: string) => {
+  const handleDelete = (extensionId: string, extensionName: string) => {
     if (!currentProject) return;
+    // Open confirmation dialog instead of browser confirm
+    setDeleteExtensionDialog({
+      open: true,
+      extensionId,
+      extensionName,
+    });
+  };
 
-    if (
-      !confirm(
-        "Are you sure you want to delete this extension? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
+  // Confirm delete extension
+  const confirmDeleteExtension = async () => {
+    if (!currentProject || !deleteExtensionDialog.extensionId) return;
 
     try {
-      await deleteExtension(currentProject.id, extensionId);
+      await deleteExtension(currentProject.id, deleteExtensionDialog.extensionId);
       await loadData();
       toast.success("Extension deleted");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to delete extension"
       );
+    } finally {
+      setDeleteExtensionDialog({ open: false, extensionId: "", extensionName: "" });
     }
   };
 
@@ -641,7 +653,7 @@ export function ExtensionsSettings() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDelete(extension.metadata.id)}
+                                onClick={() => handleDelete(extension.metadata.id, extension.metadata.name)}
                                 title="Delete"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -810,11 +822,13 @@ export function ExtensionsSettings() {
               onChange={(e) => setChangeCategoryDialog({ ...changeCategoryDialog, newCategory: e.target.value })}
             >
               <option value="">Uncategorized</option>
-              {categoryGroups.map((group) => (
-                <option key={group.category.id} value={group.category.id}>
-                  {group.category.name}
-                </option>
-              ))}
+              {categoryGroups
+                .filter((group) => group.category.id !== "") // Exclude the Uncategorized group
+                .map((group) => (
+                  <option key={group.category.id} value={group.category.id}>
+                    {group.category.name}
+                  </option>
+                ))}
             </select>
             <p className="text-xs text-muted-foreground mt-2">
               Current category: {changeCategoryDialog.currentCategory || "Uncategorized"}
@@ -830,6 +844,32 @@ export function ExtensionsSettings() {
             </Button>
             <Button onClick={handleChangeCategory}>
               Move
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Extension Confirmation Dialog */}
+      <Dialog
+        open={deleteExtensionDialog.open}
+        onOpenChange={(open: boolean) => setDeleteExtensionDialog({ ...deleteExtensionDialog, open })}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Extension</DialogTitle>
+            <DialogDescription className="text-left">
+              Are you sure you want to delete "{deleteExtensionDialog.extensionName}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteExtensionDialog({ open: false, extensionId: "", extensionName: "" })}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteExtension}>
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
