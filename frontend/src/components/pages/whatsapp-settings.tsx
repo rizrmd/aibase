@@ -660,13 +660,15 @@ export function WhatsAppSettings() {
                             </ul>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          onClick={deleteClient}
-                          className="w-full"
-                        >
-                          Cancel
-                        </Button>
+                        {(qrCodeImage || isQrExpired) && (
+                          <Button
+                            variant="outline"
+                            onClick={deleteClient}
+                            className="w-full"
+                          >
+                            Cancel
+                          </Button>
+                        )}
                       </div>
                     )}
                   </CardContent>
