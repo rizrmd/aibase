@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 import {
   Command,
   MessageSquare,
@@ -13,11 +13,11 @@ import {
   Users,
   MessageCircle,
   Code,
-} from "lucide-react"
-import { Link } from "react-router-dom"
+} from "lucide-react";
+import { Link } from "react-router-dom";
 
-import { getAppName, getLogoUrl, isWhatsAppEnabled } from "@/lib/setup"
-import { NavSection } from "@/components/nav-section"
+import { getAppName, getLogoUrl, isWhatsAppEnabled } from "@/lib/setup";
+import { NavSection } from "@/components/nav-section";
 import {
   Sidebar,
   SidebarContent,
@@ -27,52 +27,52 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
-import { useProjectStore } from "@/stores/project-store"
-import { useAuthStore } from "@/stores/auth-store"
-import { UserAccountMenu } from "@/components/user-account-menu"
+} from "@/components/ui/sidebar";
+import { useProjectStore } from "@/stores/project-store";
+import { useAuthStore } from "@/stores/auth-store";
+import { UserAccountMenu } from "@/components/user-account-menu";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { currentProject, initializeProject } = useProjectStore()
-  const currentUser = useAuthStore((state) => state.user)
-  const logout = useAuthStore((state) => state.logout)
-  const isAdmin = currentUser?.role === "admin"
-  const [appName, setAppName] = React.useState<string>("AI Base")
-  const [logoUrl, setLogoUrl] = React.useState<string | null>(null)
-  const [aimeowEnabled, setAimeowEnabled] = React.useState<boolean>(false)
+  const { currentProject, initializeProject } = useProjectStore();
+  const currentUser = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
+  const isAdmin = currentUser?.role === "admin";
+  const [appName, setAppName] = React.useState<string>("AI Base");
+  const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
+  const [aimeowEnabled, setAimeowEnabled] = React.useState<boolean>(false);
 
-  const { isMobile, setOpenMobile } = useSidebar()
+  const { isMobile, setOpenMobile } = useSidebar();
 
   React.useEffect(() => {
     const loadConfig = async () => {
       const [name, logo, whatsappEnabled] = await Promise.all([
         getAppName(),
         getLogoUrl(),
-        isWhatsAppEnabled()
-      ])
-      setAppName(name)
-      setLogoUrl(logo)
-      setAimeowEnabled(whatsappEnabled)
-    }
-    loadConfig()
+        isWhatsAppEnabled(),
+      ]);
+      setAppName(name);
+      setLogoUrl(logo);
+      setAimeowEnabled(whatsappEnabled);
+    };
+    loadConfig();
 
     // Initialize project if none is selected
     if (!currentProject) {
-      initializeProject()
+      initializeProject();
     }
-  }, [])
+  }, []);
 
   const handleLinkClick = () => {
     if (isMobile) {
-      setOpenMobile(false)
+      setOpenMobile(false);
     }
-  }
+  };
 
   // Generate the URL for the current project
   const getUrl = (path: string) => {
-    if (!currentProject?.id) return "#"
-    return `/projects/${currentProject.id}/${path}`
-  }
+    if (!currentProject?.id) return "#";
+    return `/projects/${currentProject.id}/${path}`;
+  };
 
   const primaryActions = [
     {
@@ -86,7 +86,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: getUrl("history"),
       icon: History,
     },
-  ]
+  ];
 
   const workspace = [
     {
@@ -104,20 +104,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: getUrl("memory"),
       icon: Database,
     },
-  ]
+  ];
 
   const management = [
-    ...(aimeowEnabled ? [{
-      title: "WhatsApp",
-      url: getUrl("whatsapp"),
-      icon: MessageCircle,
-    }] : []),
-    ...(isAdmin ? [{
-      title: "Users",
-      url: "/admin/users",
-      icon: Users,
-    }] : []),
-  ]
+    ...(aimeowEnabled
+      ? [
+          {
+            title: "WhatsApp",
+            url: getUrl("whatsapp"),
+            icon: MessageCircle,
+          },
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            title: "Users",
+            url: "/admin/users",
+            icon: Users,
+          },
+        ]
+      : []),
+  ];
 
   const developer = [
     {
@@ -135,7 +143,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: getUrl("extensions"),
       icon: Puzzle,
     },
-  ]
+  ];
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -144,16 +152,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link to="/" onClick={handleLinkClick}>
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
+                <div
+                  className={`${logoUrl ? "" : "bg-sidebar-primary "}text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden`}
+                >
                   {logoUrl ? (
-                    <img src={logoUrl} alt={appName} className="size-full object-cover" />
+                    <img
+                      src={logoUrl}
+                      alt={appName}
+                      className="size-full object-cover"
+                    />
                   ) : (
                     <Command className="size-4" />
                   )}
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{appName}</span>
-                  <span className="truncate text-xs">{currentProject?.name || "Select Project"}</span>
+                  <span className="truncate text-xs">
+                    {currentProject?.name || "Select Project"}
+                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -166,7 +182,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {/* Workspace - project data/content */}
         <NavSection title="Workspace" items={workspace} />
         {/* Management - setup and governance */}
-        {isAdmin && management.length > 0 && <NavSection title="Management" items={management} />}
+        {isAdmin && management.length > 0 && (
+          <NavSection title="Management" items={management} />
+        )}
         {/* Developer - integration/dev tools */}
         {isAdmin && <NavSection title="Developer" items={developer} />}
       </SidebarContent>
@@ -184,5 +202,5 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarFooter>
       )}
     </Sidebar>
-  )
+  );
 }
