@@ -2,6 +2,7 @@ import { Tool } from "../../llm/conversation";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { extractTextFromFile, isDocxFile, isPdfFile, isExcelFile, isPowerPointFile } from "../../utils/document-extractor";
+import { getConversationFilesDir } from "../../config/paths";
 
 type FileScope = 'user' | 'public';
 
@@ -17,7 +18,11 @@ export const context = async () => {
 
 All file paths are relative to the conversation's files directory.
 
-**Available actions:** list, info, delete, rename, uploadUrl, write, read, peek
+**IMPORTANT:** The file tool returns JSON strings. Always parse with \`JSON.parse()\` in scripts!
+- ✓ CORRECT: \`const result = JSON.parse(await file({ action: 'read', path: 'x.txt' }));\`
+- ✗ WRONG: \`const result = await file({ action: 'read', path: 'x.txt' });\` (result is string, not object!)
+
+**Available actions:** list, search, recent, exists, info, delete, rename, uploadUrl, write, read, peek
 
 **File Scopes:**
 - user: Only visible to the user who uploaded (default)
@@ -33,20 +38,48 @@ All file paths are relative to the conversation's files directory.
 
 ### Examples:
 \`\`\`typescript
+// ===== FAST DISCOVERY ACTIONS (Use these first!) =====
+
+// Search files by pattern (supports wildcards: *, ?)
+// Example: find all PDFs
+const pdfs = JSON.parse(await file({ action: 'search', pattern: '*.pdf' }));
+console.log(pdfs.files); // Array of matching files
+
+// Find files starting with "report"
+const reports = JSON.parse(await file({ action: 'search', pattern: 'report*' }));
+
+// Find files with "data" in the name
+const dataFiles = JSON.parse(await file({ action: 'search', pattern: '*data*' }));
+
+// Get recently modified files (default: last 24 hours, max 20 files)
+const recent = JSON.parse(await file({ action: 'recent' }));
+
+// Get files from last 7 days
+const lastWeek = JSON.parse(await file({ action: 'recent', timeRange: '7d', limit: 50 }));
+
+// Get files from last hour
+const lastHour = JSON.parse(await file({ action: 'recent', timeRange: '1h' }));
+
+// Check if a specific file exists (faster than reading)
+const exists = JSON.parse(await file({ action: 'exists', path: 'document.pdf' }));
+if (exists.exists) {
+  console.log('File found:', exists.sizeHuman);
+}
+
+// ===== COMPREHENSIVE ACTIONS =====
+
 // List all files in current conversation
 // Returns: { baseDirectory, totalFiles, scope, files: [...] }
 const result = await file({ action: 'list' });
 const files = JSON.parse(result).files; // Extract the files array
 
-// Find a specific file by name
-const files = JSON.parse(await file({ action: 'list' })).files;
-const myFile = files.find(f => f.name === 'document.pdf');
-
 // List only public files
 await file({ action: 'list', scope: 'public' });
 
-// Get file information
+// Get detailed file information
 await file({ action: 'info', path: 'document.pdf' });
+
+// ===== FILE MODIFICATION =====
 
 // Delete a file
 await file({ action: 'delete', path: 'old-file.txt' });
@@ -60,36 +93,65 @@ await file({ action: 'uploadUrl', url: 'https://example.com/file.pdf', path: 'do
 // Write content to a file (creates new or overwrites existing)
 await file({ action: 'write', path: 'output.txt', content: 'Hello World' });
 
+// ===== FILE READING =====
+
 // Read file content (returns up to ~8000 characters, roughly 2000 tokens)
 // For .docx files, text is automatically extracted
-// PDF files are NOT supported - ask user to convert to .txt or .docx
 await file({ action: 'read', path: 'data.json' });
 await file({ action: 'read', path: 'document.docx' });
 
 // Peek at file with offset and limit (for paginated reading)
 await file({ action: 'peek', path: 'large-file.log', offset: 0, limit: 100 });
+
+// ===== TYPICAL WORKFLOW =====
+
+// 1. First, use 'search' to find the file you need
+const files = JSON.parse(await file({ action: 'search', pattern: '*.pdf' })).files;
+
+// 2. Use 'exists' to verify file is accessible
+if (files.length > 0) {
+  const exists = JSON.parse(await file({ action: 'exists', path: files[0].name }));
+  if (exists.exists) {
+    // 3. Read the file content
+    const content = JSON.parse(await file({ action: 'read', path: files[0].name }));
+    console.log(content.content);
+  }
+}
 \`\`\``;
 };
 
 /**
  * File Tool - Built-in file operations
- * Actions: list, info, delete, rename, uploadUrl, write, read, peek
+ * Actions: list, search, recent, exists, info, delete, rename, uploadUrl, write, read, peek
  * All operations are restricted to data/projects/{proj-id}/conversations/{conv-id}/files/ pattern
  */
 export class FileTool extends Tool {
   name = "file";
-  description = "Perform file operations: list files in directory, get file info, delete file, rename/move file, upload file from URL, write content to file, read file content (max 8000 chars ~2000 tokens), or peek at file with pagination. All paths are relative to the project directory (data/projects/{proj-id}/) and must be within conversations/{conv-id}/files/ subdirectories.";
+  description = "Perform file operations: list files, search by name pattern, get recent files, check if file exists, get file info, delete file, rename/move file, upload file from URL, write content to file, read file content (max 8000 chars ~2000 tokens), or peek at file with pagination. All paths are relative to the project directory (data/projects/{proj-id}/) and must be within conversations/{conv-id}/files/ subdirectories.";
   parameters = {
     type: "object",
     properties: {
       action: {
         type: "string",
-        enum: ["list", "info", "delete", "rename", "uploadUrl", "write", "read", "peek"],
+        enum: ["list", "search", "recent", "exists", "info", "delete", "rename", "uploadUrl", "write", "read", "peek"],
         description: "The action to perform",
       },
       path: {
         type: "string",
-        description: "File or directory path relative to project directory (must be within {conv-id}/files/ subdirectories). For list action, defaults to listing all files across all conversations if not specified. For uploadUrl/write/read/peek, this is the filename.",
+        description: "File or directory path relative to project directory (must be within {conv-id}/files/ subdirectories). For list/search/recent actions, defaults to current conversation. For uploadUrl/write/read/peek/exists/info, this is the filename.",
+      },
+      pattern: {
+        type: "string",
+        description: "Search pattern for filename matching (supports wildcards: *, ?). Required only for search action. Example: '*.pdf' finds all PDFs, 'report*' finds files starting with 'report'.",
+      },
+      limit: {
+        type: "number",
+        description: "Maximum number of files to return for search/recent action (default: 20). Maximum characters to return for peek action (default: 1000).",
+      },
+      timeRange: {
+        type: "string",
+        enum: ["1h", "24h", "7d", "30d", "all"],
+        description: "Time filter for recent action (default: 24h). Options: 1h (last hour), 24h (last 24 hours), 7d (last 7 days), 30d (last 30 days), all (no filter).",
       },
       newPath: {
         type: "string",
@@ -107,14 +169,10 @@ export class FileTool extends Tool {
         type: "number",
         description: "Starting character position for peek action (default: 0)",
       },
-      limit: {
-        type: "number",
-        description: "Maximum number of characters to return for peek action (default: 1000)",
-      },
       scope: {
         type: "string",
         enum: ["user", "public"],
-        description: "Filter files by scope (optional, only applies to list action). If not specified, returns all files regardless of scope.",
+        description: "Filter files by scope (optional, applies to list/search/recent actions). If not specified, returns all files regardless of scope.",
       },
     },
     required: ["action"],
@@ -122,6 +180,10 @@ export class FileTool extends Tool {
 
   private convId: string = "default";
   private projectId: string = "A1";
+
+  // File list cache: Map<convId, { files: string, timestamp: number }>
+  private static fileCache = new Map<string, { files: string; timestamp: number }>();
+  private static CACHE_TTL = 5000; // 5 seconds cache TTL
 
   /**
    * Set the conversation ID for this tool instance
@@ -138,10 +200,67 @@ export class FileTool extends Tool {
   }
 
   /**
+   * Get cache key for current conversation
+   */
+  private getCacheKey(): string {
+    return `${this.projectId}:${this.convId}`;
+  }
+
+  /**
+   * Get cached file list if still valid
+   */
+  private getCachedList(scope?: FileScope): string | null {
+    const key = this.getCacheKey();
+    const cached = FileTool.fileCache.get(key);
+
+    if (cached && Date.now() - cached.timestamp < FileTool.CACHE_TTL) {
+      // Parse and filter by scope if needed
+      if (scope) {
+        const data = JSON.parse(cached.files);
+        data.files = data.files.filter((f: any) => f.scope === scope);
+        data.scope = scope;
+        data.totalFiles = data.files.length;
+        return JSON.stringify(data, null, 2);
+      }
+      return cached.files;
+    }
+
+    return null;
+  }
+
+  /**
+   * Set cached file list
+   */
+  private setCachedList(files: string): void {
+    const key = this.getCacheKey();
+    FileTool.fileCache.set(key, {
+      files,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Invalidate cache for current conversation
+   */
+  private invalidateCache(): void {
+    const key = this.getCacheKey();
+    FileTool.fileCache.delete(key);
+  }
+
+  /**
    * Get the base directory for file operations
+   * Returns: data/projects/{projectId}/
    */
   private getBaseDir(): string {
-    return path.join(process.cwd(), "data", this.projectId);
+    return path.join(process.cwd(), "data", "projects", this.projectId);
+  }
+
+  /**
+   * Get the conversation files directory
+   * Returns: data/projects/{projectId}/conversations/{convId}/files/
+   */
+  private getConvFilesDir(): string {
+    return getConversationFilesDir(this.projectId, this.convId);
   }
 
   /**
@@ -234,16 +353,17 @@ ${frontmatter}
     let relativePath = path.relative(baseDir, resolvedPath);
     let pathParts = relativePath.split(path.sep);
 
-    // Check if it looks like a valid project-relative path: {conv-id}/files/...
+    // Check if it looks like a valid project-relative path: conversations/{conv-id}/files/...
     const isValidProjectRelative =
       resolvedPath.startsWith(baseDir) &&
-      pathParts.length >= 2 &&
-      pathParts[1] === "files";
+      pathParts.length >= 3 &&
+      pathParts[0] === "conversations" &&
+      pathParts[2] === "files";
 
     if (!isValidProjectRelative) {
       // 2. If not valid project-relative, try resolving relative to CURRENT conversation files dir
-      // This handles the common case: "data.csv" -> "current_conv/files/data.csv"
-      const currentConvFilesDir = path.join(baseDir, this.convId, "files");
+      // This handles the common case: "data.csv" -> "conversations/current_conv/files/data.csv"
+      const currentConvFilesDir = path.join(baseDir, "conversations", this.convId, "files");
       resolvedPath = path.resolve(currentConvFilesDir, userPath);
 
       // Re-validate against baseDir to ensure no directory traversal out of project
@@ -256,28 +376,42 @@ ${frontmatter}
     }
 
     // Final Validation: Must be within SOME public/user conversation's "files" directory
-    // Pattern: {any-conv-id}/files/{filename}
-    if (pathParts.length < 2 || pathParts[1] !== "files") {
-      throw new Error(`Access denied: Path must be within {conv-id}/files/ subdirectories. Got: ${relativePath}`);
+    // Pattern: conversations/{any-conv-id}/files/{filename}
+    if (pathParts.length < 3 || pathParts[0] !== "conversations" || pathParts[2] !== "files") {
+      throw new Error(`Access denied: Path must be within conversations/{conv-id}/files/ subdirectories. Got: ${relativePath}`);
     }
 
     return resolvedPath;
   }
 
   async execute(args: {
-    action: "list" | "info" | "delete" | "rename" | "uploadUrl" | "write" | "read" | "peek";
+    action: "list" | "search" | "recent" | "exists" | "info" | "delete" | "rename" | "uploadUrl" | "write" | "read" | "peek";
     path?: string;
+    pattern?: string;
+    limit?: number;
+    timeRange?: "1h" | "24h" | "7d" | "30d" | "all";
     newPath?: string;
     url?: string;
     content?: string;
     offset?: number;
-    limit?: number;
     scope?: FileScope;
   }): Promise<string> {
     try {
       switch (args.action) {
         case "list":
           return await this.listFiles(args.path, args.scope);
+        case "search":
+          if (!args.pattern) {
+            throw new Error("pattern is required for search action");
+          }
+          return await this.searchFiles(args.pattern, args.limit, args.scope);
+        case "recent":
+          return await this.getRecentFiles(args.limit, args.timeRange, args.scope);
+        case "exists":
+          if (!args.path) {
+            throw new Error("path is required for exists action");
+          }
+          return await this.fileExists(args.path);
         case "info":
           if (!args.path) {
             throw new Error("path is required for info action");
@@ -335,7 +469,16 @@ ${frontmatter}
 
     // If no path provided, list all files in all */files/* directories
     if (!dirPath) {
-      return await this.listAllProjectFiles(scope);
+      // Check cache first
+      const cached = this.getCachedList(scope);
+      if (cached) {
+        console.log(`[FileTool] Using cached file list for ${this.getCacheKey()}`);
+        return cached;
+      }
+
+      const result = await this.listAllProjectFiles(scope);
+      this.setCachedList(result);
+      return result;
     }
 
     // If path provided, list files in that specific directory
@@ -395,13 +538,14 @@ ${frontmatter}
 
     try {
       // List all conversation directories in the project
-      const entries = await fs.readdir(baseDir, { withFileTypes: true });
+      const conversationsDir = path.join(baseDir, "conversations");
+      const entries = await fs.readdir(conversationsDir, { withFileTypes: true });
 
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
 
         const convId = entry.name;
-        const filesDir = path.join(baseDir, convId, "files");
+        const filesDir = path.join(conversationsDir, convId, "files");
 
         // Check if files directory exists for this conversation
         try {
@@ -475,6 +619,162 @@ ${frontmatter}
     return files;
   }
 
+  /**
+   * Search files by name pattern (supports wildcards: *, ?)
+   */
+  private async searchFiles(pattern: string, limit: number = 20, scope?: FileScope): Promise<string> {
+    const filesDir = this.getConvFilesDir();
+
+    try {
+      await fs.access(filesDir);
+    } catch {
+      // Files directory doesn't exist
+      return JSON.stringify({
+        action: "search",
+        pattern,
+        scope: scope || "all",
+        totalFiles: 0,
+        files: [],
+      }, null, 2);
+    }
+
+    // Convert glob pattern to regex
+    // * matches any characters, ? matches single character
+    const regexPattern = pattern
+      .replace(/\./g, "\\.")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    const regex = new RegExp(`^${regexPattern}$`, "i");
+
+    // Get all files and filter by pattern
+    const baseDir = this.getBaseDir();
+    const allFiles = await this.listFilesRecursive(filesDir, baseDir, scope);
+    const matchedFiles = allFiles.filter((file: any) => regex.test(file.name));
+
+    // Apply limit and sort by name
+    const limitedFiles = matchedFiles
+      .sort((a: any, b: any) => a.name.localeCompare(b.name))
+      .slice(0, limit);
+
+    return JSON.stringify({
+      action: "search",
+      pattern,
+      scope: scope || "all",
+      totalMatched: matchedFiles.length,
+      returned: limitedFiles.length,
+      limit,
+      files: limitedFiles,
+    }, null, 2);
+  }
+
+  /**
+   * Get recently modified files
+   */
+  private async getRecentFiles(
+    limit: number = 20,
+    timeRange: "1h" | "24h" | "7d" | "30d" | "all" = "24h",
+    scope?: FileScope
+  ): Promise<string> {
+    const filesDir = this.getConvFilesDir();
+
+    try {
+      await fs.access(filesDir);
+    } catch {
+      // Files directory doesn't exist
+      return JSON.stringify({
+        action: "recent",
+        timeRange,
+        scope: scope || "all",
+        totalFiles: 0,
+        files: [],
+      }, null, 2);
+    }
+
+    // Calculate time threshold
+    const now = Date.now();
+    let timeThreshold = 0;
+
+    switch (timeRange) {
+      case "1h":
+        timeThreshold = now - 60 * 60 * 1000;
+        break;
+      case "24h":
+        timeThreshold = now - 24 * 60 * 60 * 1000;
+        break;
+      case "7d":
+        timeThreshold = now - 7 * 24 * 60 * 60 * 1000;
+        break;
+      case "30d":
+        timeThreshold = now - 30 * 24 * 60 * 60 * 1000;
+        break;
+      case "all":
+        timeThreshold = 0;
+        break;
+    }
+
+    // Get all files and filter by time
+    const allFiles = await this.listFilesRecursive(filesDir, baseDir, scope);
+    const recentFiles = allFiles.filter((file: any) => {
+      const modifiedTime = new Date(file.modified).getTime();
+      return modifiedTime >= timeThreshold;
+    });
+
+    // Sort by modified time (newest first) and apply limit
+    const limitedFiles = recentFiles
+      .sort((a: any, b: any) => {
+        const timeA = new Date(a.modified).getTime();
+        const timeB = new Date(b.modified).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, limit);
+
+    return JSON.stringify({
+      action: "recent",
+      timeRange,
+      scope: scope || "all",
+      totalFiles: recentFiles.length,
+      returned: limitedFiles.length,
+      limit,
+      files: limitedFiles,
+    }, null, 2);
+  }
+
+  /**
+   * Check if a file exists
+   */
+  private async fileExists(filePath: string): Promise<string> {
+    try {
+      const resolvedPath = await this.resolvePath(filePath);
+      const baseDir = this.getBaseDir();
+
+      // Check if file exists
+      await fs.access(resolvedPath);
+
+      // Get file stats
+      const stats = await fs.stat(resolvedPath);
+      const meta = await this.loadFileMeta(resolvedPath);
+
+      const relativePath = path.relative(baseDir, resolvedPath);
+
+      return JSON.stringify({
+        action: "exists",
+        path: relativePath,
+        exists: true,
+        type: stats.isDirectory() ? "directory" : "file",
+        size: stats.size,
+        sizeHuman: this.formatBytes(stats.size),
+        modified: stats.mtime.toISOString(),
+        scope: meta.scope,
+      }, null, 2);
+    } catch (error) {
+      return JSON.stringify({
+        action: "exists",
+        path: filePath,
+        exists: false,
+      }, null, 2);
+    }
+  }
+
   private async getFileInfo(filePath: string): Promise<string> {
     const resolvedPath = await this.resolvePath(filePath);
     const baseDir = this.getBaseDir();
@@ -509,11 +809,6 @@ ${frontmatter}
 
     if (stats.isDirectory()) {
       await fs.rm(resolvedPath, { recursive: true });
-      return JSON.stringify({
-        success: true,
-        message: `Directory deleted: ${relativePath}`,
-        path: relativePath,
-      });
     } else {
       await fs.unlink(resolvedPath);
 
@@ -524,13 +819,16 @@ ${frontmatter}
       } catch (error) {
         // Metadata file might not exist, ignore
       }
-
-      return JSON.stringify({
-        success: true,
-        message: `File deleted: ${relativePath}`,
-        path: relativePath,
-      });
     }
+
+    // Invalidate cache after deletion
+    this.invalidateCache();
+
+    return JSON.stringify({
+      success: true,
+      message: stats.isDirectory() ? `Directory deleted: ${relativePath}` : `File deleted: ${relativePath}`,
+      path: relativePath,
+    });
   }
 
   private async renameFile(oldPath: string, newPath: string): Promise<string> {
@@ -549,6 +847,9 @@ ${frontmatter}
     } catch (error) {
       // Metadata file might not exist, ignore
     }
+
+    // Invalidate cache after rename
+    this.invalidateCache();
 
     const relativeOldPath = path.relative(baseDir, resolvedOldPath);
     const relativeNewPath = path.relative(baseDir, resolvedNewPath);
@@ -585,6 +886,9 @@ ${frontmatter}
 
     // Save metadata with default 'user' scope
     await this.saveFileMeta(resolvedPath, { scope: 'user' });
+
+    // Invalidate cache after upload
+    this.invalidateCache();
 
     // Get file stats
     const stats = await fs.stat(resolvedPath);
@@ -624,6 +928,9 @@ ${frontmatter}
     } catch (error) {
       // File might already have metadata, ignore
     }
+
+    // Invalidate cache after write
+    this.invalidateCache();
 
     // Get file stats
     const stats = await fs.stat(resolvedPath);

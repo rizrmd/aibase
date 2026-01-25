@@ -99,7 +99,8 @@ Example (single line):
 
 Example (multi-line):
   progress("Starting batch operation...");
-  const files = await file({ action: 'list' });
+  const filesResult = await file({ action: 'list' });
+  const files = JSON.parse(filesResult).files;
   for (const f of files) {
     progress(\`Processing \${f.name}\`);
     // process file...
@@ -117,12 +118,12 @@ File write/read/peek examples (create, read, and paginate through files):
   return { written: data.users.length };
 
   // Read file (returns up to 8000 chars ~2000 tokens)
-  const result = await file({ action: 'read', path: 'data.json' });
+  const result = JSON.parse(await file({ action: 'read', path: 'data.json' }));
   return { content: result.content, truncated: result.truncated };
 
   // Peek at large file with pagination
-  const page1 = await file({ action: 'peek', path: 'large.log', offset: 0, limit: 1000 });
-  const page2 = await file({ action: 'peek', path: 'large.log', offset: page1.nextOffset, limit: 1000 });
+  const page1 = JSON.parse(await file({ action: 'peek', path: 'large.log', offset: 0, limit: 1000 }));
+  const page2 = JSON.parse(await file({ action: 'peek', path: 'large.log', offset: page1.nextOffset, limit: 1000 }));
   return { page1: page1.content, page2: page2.content, hasMore: page2.hasMore };
 
 DuckDB query examples (read CSV/Excel/Parquet files):

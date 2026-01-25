@@ -52,12 +52,14 @@ Use for: API calls, batch operations, complex workflows, data transformations.
 #### 3. BATCH PROCESS FILES (multi-line - use actual newlines!):
 \`\`\`typescript
 progress('Listing...');
-const files = await file({ action: 'list' });
+const filesResult = await file({ action: 'list' });
+const files = JSON.parse(filesResult).files;
 const tsFiles = files.filter(f => f.name.endsWith('.ts'));
 let count = 0;
 for (const f of tsFiles) {
   progress(\`Reading \${f.name}\`);
-  const content = await file({ action: 'read_file', path: f.path });
+  const contentResult = await file({ action: 'read', path: f.name });
+  const content = JSON.parse(contentResult).content;
   count += (content.match(/export /g) || []).length;
 }
 return { analyzed: tsFiles.length, totalExports: count };
@@ -65,7 +67,8 @@ return { analyzed: tsFiles.length, totalExports: count };
 
 #### 4. MULTI-TOOL WORKFLOWS:
 \`\`\`typescript
-const files = await file({ action: 'list' });
+const filesResult = await file({ action: 'list' });
+const files = JSON.parse(filesResult).files;
 progress(\`Found \${files.length} files\`);
 const texts = files.slice(0, 10).map(f => \`Review: \${f.name}\`);
 await todo({ action: 'add', texts });

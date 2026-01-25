@@ -74,8 +74,11 @@ export function useMessageSubmission({
         options?.experimental_attachments?.length || 0
       );
 
-      if (!input.trim() || !isConnected) {
-        console.log("[Submit] Skipping - no input or not connected");
+      const hasAttachments = options?.experimental_attachments && options.experimental_attachments.length > 0;
+
+      // Allow submission if there's input text OR if there are attachments
+      if ((!input.trim() && !hasAttachments) || !isConnected) {
+        console.log("[Submit] Skipping - no input/attachments or not connected");
         return;
       }
 

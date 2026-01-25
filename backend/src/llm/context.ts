@@ -20,6 +20,16 @@ interface MemoryStore {
   };
 }
 
+interface FileInfo {
+  name: string;
+  path: string;
+  type: string;
+  size?: number;
+  sizeHuman?: string;
+  modified?: string;
+  scope?: 'user' | 'public';
+}
+
 /**
  * Get the path to the todos file
  */
@@ -279,7 +289,122 @@ async function injectDynamicContent(
 }
 
 /**
- * Get default context with existing todos and memory appended
+ * Get the path to the files directory for a conversation
+ */
+function getFilesDirectory(convId: string, projectId: string): string {
+  return path.join(process.cwd(), "data", "projects", projectId, "conversations", convId, "files");
+}
+
+/**
+ * Load files for a conversation
+ */
+async function loadFiles(
+  convId: string,
+  projectId: string
+): Promise<FileInfo[] | null> {
+  const filesDir = getFilesDirectory(convId, projectId);
+
+  try {
+    const entries = await fs.readdir(filesDir, { withFileTypes: true });
+    const files: FileInfo[] = [];
+
+    for (const entry of entries) {
+      // Skip metadata files and directories
+      if (entry.name.startsWith('.') || entry.isDirectory()) {
+        continue;
+      }
+
+      const fullPath = path.join(filesDir, entry.name);
+      const stats = await fs.stat(fullPath);
+
+      // Load metadata to get scope info
+      let scope: 'user' | 'public' = 'user';
+      const metaPath = path.join(filesDir, `.${entry.name}.meta.md`);
+      try {
+        const metaContent = await fs.readFile(metaPath, 'utf-8');
+        const frontmatterMatch = metaContent.match(/^---\n([\s\S]*?)\n---/);
+        if (frontmatterMatch && frontmatterMatch[1]) {
+          const scopeMatch = frontmatterMatch[1].match(/scope:\s*["']?(user|public)["']?/);
+          if (scopeMatch) {
+            scope = scopeMatch[1] as 'user' | 'public';
+          }
+        }
+      } catch {
+        // No metadata file, use default
+      }
+
+      files.push({
+        name: entry.name,
+        path: entry.name,
+        type: entry.name.split('.').pop() || 'unknown',
+        size: stats.size,
+        sizeHuman: formatBytes(stats.size),
+        modified: stats.mtime.toISOString(),
+        scope,
+      });
+    }
+
+    // Sort by modified date (newest first)
+    files.sort((a, b) => {
+      const dateA = a.modified ? new Date(a.modified).getTime() : 0;
+      const dateB = b.modified ? new Date(b.modified).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    return files;
+  } catch (error: any) {
+    // Files directory doesn't exist or is invalid
+    return null;
+  }
+}
+
+/**
+ * Format bytes to human readable
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+}
+
+/**
+ * Format files for context
+ */
+function formatFilesForContext(files: FileInfo[]): string {
+  if (files.length === 0) {
+    return "\n\n📎 No files uploaded yet in this conversation.";
+  }
+
+  let context = `\n\n📎 Available Files (${files.length} total, sorted by newest first)`;
+
+  // Group files by scope
+  const publicFiles = files.filter(f => f.scope === 'public');
+  const userFiles = files.filter(f => f.scope === 'user');
+
+  if (publicFiles.length > 0) {
+    context += `\n\n[Public] - Visible to all users in this conversation:`;
+    for (const file of publicFiles) {
+      context += `\n  • ${file.name} (${file.sizeHuman}, type: .${file.type})`;
+    }
+  }
+
+  if (userFiles.length > 0) {
+    context += `\n\n[User] - Only visible to you:`;
+    for (const file of userFiles) {
+      context += `\n  • ${file.name} (${file.sizeHuman}, type: .${file.type})`;
+    }
+  }
+
+  context += `\n\n💡 To read file content: file({ action: 'read', path: 'filename.ext' })`;
+  context += `\n💡 To get file info: file({ action: 'info', path: 'filename.ext' })`;
+
+  return context;
+}
+
+/**
+ * Get default context with existing todos, memory, and files appended
  *
  * @param convId - Conversation ID
  * @param projectId - Project ID
@@ -300,8 +425,17 @@ export const defaultContext = async (
   // const todoList = await loadTodos(convId, projectId);
   const todoList = null;
 
+  // Load conversation-specific files
+  const files = await loadFiles(convId, projectId);
+
   // Inject dynamic content into template (URL params, tool context, memory, todos)
-  const context = await injectDynamicContent(template, memory, todoList, urlParams || null);
+  let context = await injectDynamicContent(template, memory, todoList, urlParams || null);
+
+  // Append files if they exist
+  if (files && files.length > 0) {
+    const filesContent = formatFilesForContext(files);
+    context += filesContent;
+  }
 
   return context;
 };

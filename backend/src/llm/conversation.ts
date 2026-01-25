@@ -469,10 +469,27 @@ export class Conversation {
       await this.hooks.message?.before?.(message, this._history);
       await this.hooks.message?.start?.();
 
+      // Add attachment information to message content so AI knows about files
+      let messageContent = message;
+      if (attachments && attachments.length > 0) {
+        const fileNames = attachments.map((a: any) => a.name).join(", ");
+        const attachmentInfo = `\n\n[Attached file${attachments.length > 1 ? 's' : ''}: ${fileNames}]`;
+
+        // If message is empty, use a default message
+        if (!messageContent || messageContent.trim() === "") {
+          messageContent = `I've uploaded ${attachments.length} file${attachments.length > 1 ? 's' : ''}: ${fileNames}.`;
+          console.log(`[Conversation] Empty message with attachments, using default: ${messageContent}`);
+        } else {
+          // Append attachment info to existing message
+          messageContent = messageContent + attachmentInfo;
+          console.log(`[Conversation] Appended attachment info to message: ${attachmentInfo}`);
+        }
+      }
+
       // Add user message to history
       const userMessage: ChatCompletionMessageParam & { _attachments?: any[] } = {
         role: "user",
-        content: message,
+        content: messageContent,
         ...(attachments && attachments.length > 0 && { _attachments: attachments }),
       };
       this.addMessage(userMessage);
