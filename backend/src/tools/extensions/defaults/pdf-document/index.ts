@@ -10,6 +10,65 @@ import { extractTextFromPdf, isPdfFile } from '../../../../utils/document-extrac
 import { getConversationFilesDir } from '../../../../config/paths';
 
 /**
+ * Context documentation for the PDF Document extension
+ */
+export const context = () => `
+### PDF Document Extension
+
+Extract text content from PDF files.
+
+**Available Functions:**
+
+#### extract(options)
+Extract text from PDF file.
+\`\`\`typescript
+await pdfDocument.extract({
+  filePath: "/path/to/document.pdf",  // Full path to file
+  fileId: "document.pdf"              // Or file ID in conversation
+});
+\`\`\`
+
+**Parameters:**
+- \`filePath\` (optional): Full path to the PDF file
+- \`fileId\` (optional): File ID in conversation storage
+- Either \`filePath\` or \`fileId\` is required
+
+**Returns:**
+\`\`\`typescript
+{
+  text: string,        // Extracted text content
+  pageCount: number,   // Number of pages in PDF
+  fileName: string     // File name
+}
+\`\`\`
+
+**Examples:**
+
+1. **Extract text from PDF by file ID:**
+\`\`\`typescript
+const pdf = await pdfDocument.extract({
+  fileId: "report.pdf"
+});
+return { text: pdf.text, pages: pdf.pageCount };
+\`\`\`
+
+2. **Extract text from PDF by file path:**
+\`\`\`typescript
+const pdf = await pdfDocument.extract({
+  filePath: "/data/documents/contract.pdf"
+});
+return pdf.text;
+\`\`\`
+
+**Important Notes:**
+- Works with password-protected PDFs
+- Extracts text from all pages
+- Preserves document structure
+- Use fileId for uploaded conversation files
+- Use filePath for absolute system paths
+`;
+
+/**
  * PDF Document extension
  * Provides multiple methods to read and extract text from PDF files
  */

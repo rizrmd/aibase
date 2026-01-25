@@ -10,6 +10,66 @@ import { extractTextFromExcel, isExcelFile } from '../../../../utils/document-ex
 import { getConversationFilesDir } from '../../../../config/paths';
 
 /**
+ * Context documentation for the Excel Document extension
+ */
+export const context = () => `
+### Excel Document Extension
+
+Extract text and data from Excel spreadsheets (.xlsx, .xls).
+
+**Available Functions:**
+
+#### extract(options)
+Extract text from Excel spreadsheet.
+\`\`\`typescript
+await excelDocument.extract({
+  filePath: "/path/to/spreadsheet.xlsx",  // Full path to file
+  fileId: "data.xlsx"                    // Or file ID in conversation
+});
+\`\`\`
+
+**Parameters:**
+- \`filePath\` (optional): Full path to the Excel file
+- \`fileId\` (optional): File ID in conversation storage
+- Either \`filePath\` or \`fileId\` is required
+
+**Returns:**
+\`\`\`typescript
+{
+  text: string,        // Extracted text content from all sheets
+  sheetCount: number,  // Number of sheets in workbook
+  fileName: string     // File name
+}
+\`\`\`
+
+**Examples:**
+
+1. **Extract data from Excel by file ID:**
+\`\`\`typescript
+const excel = await excelDocument.extract({
+  fileId: "sales_data.xlsx"
+});
+return { text: excel.text, sheets: excel.sheetCount };
+\`\`\`
+
+2. **Extract data from Excel by file path:**
+\`\`\`typescript
+const excel = await excelDocument.extract({
+  filePath: "/data/reports/q1_financials.xlsx"
+});
+return excel.text;
+\`\`\`
+
+**Important Notes:**
+- Supports both .xlsx and .xls formats
+- Extracts data from all sheets
+- Preserves row and column structure
+- Use fileId for uploaded conversation files
+- Use filePath for absolute system paths
+- For data analysis, consider using duckdb extension for SQL queries on Excel files
+`;
+
+/**
  * Excel Document extension
  * Extract text and data from Excel spreadsheets
  */

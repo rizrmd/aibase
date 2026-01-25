@@ -10,6 +10,65 @@ import { extractTextFromPowerPoint, isPowerPointFile } from '../../../../utils/d
 import { getConversationFilesDir } from '../../../../config/paths';
 
 /**
+ * Context documentation for the PowerPoint Document extension
+ */
+export const context = () => `
+### PowerPoint Document Extension
+
+Extract text content from PowerPoint presentations (.pptx, .ppt).
+
+**Available Functions:**
+
+#### extract(options)
+Extract text from PowerPoint presentation.
+\`\`\`typescript
+await powerpointDocument.extract({
+  filePath: "/path/to/presentation.pptx",  // Full path to file
+  fileId: "slides.pptx"                   // Or file ID in conversation
+});
+\`\`\`
+
+**Parameters:**
+- \`filePath\` (optional): Full path to the PowerPoint file
+- \`fileId\` (optional): File ID in conversation storage
+- Either \`filePath\` or \`fileId\` is required
+
+**Returns:**
+\`\`\`typescript
+{
+  text: string,         // Extracted text content from all slides
+  slideCount: number,   // Number of slides in presentation
+  fileName: string      // File name
+}
+\`\`\`
+
+**Examples:**
+
+1. **Extract text from PowerPoint by file ID:**
+\`\`\`typescript
+const ppt = await powerpointDocument.extract({
+  fileId: "presentation.pptx"
+});
+return { text: ppt.text, slides: ppt.slideCount };
+\`\`\`
+
+2. **Extract text from PowerPoint by file path:**
+\`\`\`typescript
+const ppt = await powerpointDocument.extract({
+  filePath: "/data/presentations/q1_review.pptx"
+});
+return ppt.text;
+\`\`\`
+
+**Important Notes:**
+- Supports .pptx (modern format) and .ppt (legacy format)
+- Extracts text from all slides
+- Preserves slide order
+- Use fileId for uploaded conversation files
+- Use filePath for absolute system paths
+`;
+
+/**
  * PowerPoint Document extension
  * Extract text and content from PowerPoint presentations
  */

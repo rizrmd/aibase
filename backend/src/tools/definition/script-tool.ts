@@ -49,9 +49,6 @@ export class ScriptTool extends Tool {
   name = "script";
 
   description = `Execute Bun TypeScript code with programmatic access to other tools.
-Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
-Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), showMermaid(options), and project extensions (loaded dynamically with namespace matching extension ID).
-IMPORTANT: For images (PNG/JPG), use project extensions like imageDocument.extractText(), NOT pdfReader (pdfReader is only for PDF files).
 SECURITY REQUIREMENT: NEVER hardcode credentials (API keys, database URLs, passwords) directly in script code. ALWAYS store credentials in memory first using the memory tool, then access them using memory.read(category, key). This is a mandatory security practice - hardcoding credentials exposes secrets in code history and logs.
 Context variables: convId, projectId, CURRENT_UID (user ID from authentication token - will be empty string "" if not authenticated). Note: Bun is used instead of Node.js (Do not use require).`;
 

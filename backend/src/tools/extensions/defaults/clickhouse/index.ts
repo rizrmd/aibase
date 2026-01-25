@@ -4,6 +4,130 @@
  */
 
 /**
+ * Context documentation for the ClickHouse extension
+ */
+export const context = () => `
+### ClickHouse Extension
+
+Query ClickHouse columnar databases for high-performance analytics.
+
+**Available Functions:**
+
+#### clickhouse(options)
+Execute a ClickHouse query and return results.
+\`\`\`typescript
+await clickhouse({
+  query: "SELECT * FROM events LIMIT 10",
+  serverUrl: "http://localhost:8123",
+  database: "default",        // Optional database name
+  username: "default",         // Optional username
+  password: "",                // Optional password
+  format: "json",              // Optional: "json" (default), "csv", "tsv", "raw"
+  timeout: 30000,              // Optional: timeout in milliseconds
+  params: {                    // Optional query parameters
+    param_name: "value"
+  }
+});
+\`\`\`
+
+#### testConnection(serverUrl, options)
+Test connection to ClickHouse server.
+\`\`\`typescript
+await clickhouseExtension.testConnection("http://localhost:8123", {
+  database: "mydb",
+  username: "user"
+});
+\`\`\`
+
+**Parameters:**
+- \`query\` (required): SQL query to execute
+- \`serverUrl\` (required): ClickHouse HTTP server URL (e.g., http://localhost:8123)
+- \`database\` (optional): Database name (default: uses server default)
+- \`username\` (optional): Authentication username
+- \`password\` (optional): Authentication password
+- \`format\` (optional): "json" (default), "csv", "tsv", or "raw"
+- \`timeout\` (optional): Query timeout in milliseconds (default: 30000)
+- \`params\` (optional): Query parameters to pass to ClickHouse
+
+**Returns:**
+\`\`\`typescript
+{
+  data: Array<any>,       // Result rows
+  rowCount: number,       // Number of rows returned
+  executionTime: number,  // Execution time in milliseconds
+  query: string,          // The executed query
+  stats: {                // Optional server statistics
+    rows_read: number,
+    bytes_read: number,
+    elapsed: number
+  }
+}
+\`\`\`
+
+**Examples:**
+
+1. **Simple query:**
+\`\`\`typescript
+const events = await clickhouse({
+  query: "SELECT * FROM events LIMIT 100",
+  serverUrl: "http://localhost:8123"
+});
+return { count: events.rowCount, data: events.data };
+\`\`\`
+
+2. **Using memory for secure credentials:**
+\`\`\`typescript
+await memory({
+  action: 'set',
+  category: 'database',
+  key: 'clickhouse_url',
+  value: 'http://localhost:8123'
+});
+
+const result = await clickhouse({
+  query: \`SELECT
+    event_type,
+    count() as count
+  FROM events
+  GROUP BY event_type
+  ORDER BY count DESC
+  LIMIT 10\`,
+  serverUrl: memory.read('database', 'clickhouse_url'),
+  database: 'analytics'
+});
+return result.data;
+\`\`\`
+
+3. **With query parameters:**
+\`\`\`typescript
+const result = await clickhouse({
+  query: "SELECT * FROM events WHERE date >= {date_param:Date}",
+  serverUrl: memory.read('database', 'clickhouse_url'),
+  params: {
+    date_param: '2024-01-01'
+  }
+});
+return result.data;
+\`\`\`
+
+4. **Export to CSV:**
+\`\`\`typescript
+const csv = await clickhouse({
+  query: "SELECT * FROM large_table",
+  serverUrl: memory.read('database', 'clickhouse_url'),
+  format: "csv"
+});
+return { csv: csv.raw, rows: csv.rowCount };
+\`\`\`
+
+**Important Notes:**
+- ClickHouse is optimized for analytics and large-scale data processing
+- Use the \`format\` parameter to export data in different formats
+- Query parameters are sent via HTTP for security and performance
+- Connection errors include helpful diagnostic information
+`;
+
+/**
  * ClickHouse extension
  */
 const clickhouseExtension = {

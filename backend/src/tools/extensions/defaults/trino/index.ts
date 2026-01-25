@@ -4,6 +4,113 @@
  */
 
 /**
+ * Context documentation for the Trino extension
+ */
+export const context = () => `
+### Trino Extension
+
+Execute distributed SQL queries across multiple data sources using Trino.
+
+**Available Functions:**
+
+#### trino(options)
+Execute a Trino distributed SQL query.
+\`\`\`typescript
+await trino({
+  query: "SELECT * FROM customers LIMIT 10",
+  serverUrl: "http://localhost:8080",
+  catalog: "hive",          // Optional: catalog name
+  schema: "default",         // Optional: schema name
+  username: "trino",         // Optional: username
+  password: "",              // Optional: password
+  format: "json",            // Optional: "json" (default) or "raw"
+  timeout: 30000             // Optional: timeout in milliseconds
+});
+\`\`\`
+
+**Parameters:**
+- \`query\` (required): SQL query to execute
+- \`serverUrl\` (required): Trino server URL (e.g., http://localhost:8080)
+- \`catalog\` (optional): Catalog name to query
+- \`schema\` (optional): Schema name to query
+- \`username\` (optional): Authentication username (default: "trino")
+- \`password\` (optional): Authentication password
+- \`format\` (optional): "json" (default) or "raw"
+- \`timeout\` (optional): Query timeout in milliseconds (default: 30000)
+
+**Returns:**
+\`\`\`typescript
+{
+  data: Array<any>,       // Result rows
+  rowCount: number,       // Number of rows returned
+  executionTime: number,  // Execution time in milliseconds
+  query: string          // The executed query
+}
+\`\`\`
+
+**Examples:**
+
+1. **Simple distributed query:**
+\`\`\`typescript
+const customers = await trino({
+  query: "SELECT * FROM customers LIMIT 10",
+  serverUrl: "http://localhost:8080",
+  catalog: "hive",
+  schema: "sales"
+});
+return { count: customers.rowCount, data: customers.data };
+\`\`\`
+
+2. **Using memory for secure credentials:**
+\`\`\`typescript
+await memory({
+  action: 'set',
+  category: 'database',
+  key: 'trino_url',
+  value: 'http://trino.example.com:8080'
+});
+
+const result = await trino({
+  query: \`SELECT
+    customer_id,
+    SUM(order_total) as total_spent
+  FROM orders
+  GROUP BY customer_id
+  ORDER BY total_spent DESC
+  LIMIT 10\`,
+  serverUrl: memory.read('database', 'trino_url'),
+  catalog: 'hive'
+});
+return result.data;
+\`\`\`
+
+3. **Cross-catalog query:**
+\`\`\`typescript
+const crossCatalog = await trino({
+  query: \`
+    SELECT
+      h.customer_id,
+      m.customer_name,
+      SUM(h.order_amount) as total
+    FROM hive.orders h
+    JOIN mysql.customers m ON h.customer_id = m.id
+    GROUP BY h.customer_id, m.customer_name
+    LIMIT 10
+  \`,
+  serverUrl: memory.read('database', 'trino_url')
+});
+return crossCatalog.data;
+\`\`\`
+
+**Important Notes:**
+- Trino enables distributed queries across multiple data sources
+- Supports querying across different catalogs (Hive, MySQL, PostgreSQL, etc.)
+- Automatically polls for results on large queries
+- Connection errors include helpful diagnostic information
+- Perfect for federated analytics across data systems
+`;
+
+/**
  * Trino extension
  */
 const trinoExtension = {

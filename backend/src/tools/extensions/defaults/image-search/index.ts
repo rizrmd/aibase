@@ -4,6 +4,86 @@
  */
 
 /**
+ * Context documentation for the image-search extension
+ */
+export const context = () => `
+### Image Search Extension
+
+Search for images using Brave Search API.
+
+**Available Functions:**
+
+#### imageSearch(options)
+Search for images.
+\`\`\`typescript
+await imageSearch({
+  search_query: "cute cats",
+  count: 10,                    // Optional: number of results (default: 20)
+  country: "US",                // Optional: country code
+  safesearch: "moderate",        // Optional: "off", "moderate", "strict"
+  spellcheck: true               // Optional: enable spell checking
+});
+\`\`\`
+
+**Parameters:**
+- \`search_query\` (required): Search query string
+- \`count\` (optional): Number of results to return (default: 20)
+- \`country\` (optional): Country code (e.g., "US", "UK", "ID")
+- \`safesearch\` (optional): Safe search level - "off", "moderate", "strict"
+- \`spellcheck\` (optional): Enable spell checking (default: false)
+
+**Returns:**
+\`\`\`typescript
+{
+  query: string,
+  results: Array<{
+    title: string,
+    url: string,
+    thumbnail: string,
+    source: string
+  }>
+}
+\`\`\`
+
+**Examples:**
+
+1. **Basic image search:**
+\`\`\`typescript
+const images = await imageSearch({
+  search_query: "sunset over mountains",
+  count: 5
+});
+return { count: images.results.length, images: images.results };
+\`\`\`
+
+2. **Safe search for content filtering:**
+\`\`\`typescript
+const images = await imageSearch({
+  search_query: "nature photography",
+  count: 10,
+  safesearch: "strict"
+});
+return images.results;
+\`\`\`
+
+3. **Country-specific search:**
+\`\`\`typescript
+const images = await imageSearch({
+  search_query: "Indonesian food",
+  count: 15,
+  country: "ID"
+});
+return images.results;
+\`\`\`
+
+**Important Notes:**
+- Requires BRAVE_API_KEY environment variable
+- Get API key from https://brave.com/search/api/
+- Returns thumbnail URLs and source information
+- Images are returned from the Brave search index
+`;
+
+/**
  * Get API key from environment
  */
 function getBraveApiKey(): string {

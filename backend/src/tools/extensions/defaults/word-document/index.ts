@@ -10,6 +10,66 @@ import { extractTextFromDocx, isDocxFile } from '../../../../utils/document-extr
 import { getConversationFilesDir } from '../../../../config/paths';
 
 /**
+ * Context documentation for the Word Document extension
+ */
+export const context = () => `
+### Word Document Extension
+
+Extract text content from Word documents (.docx).
+
+**Available Functions:**
+
+#### extract(options)
+Extract text from Word document.
+\`\`\`typescript
+await wordDocument.extract({
+  filePath: "/path/to/document.docx",  // Full path to file
+  fileId: "report.docx"                // Or file ID in conversation
+});
+\`\`\`
+
+**Parameters:**
+- \`filePath\` (optional): Full path to the Word document
+- \`fileId\` (optional): File ID in conversation storage
+- Either \`filePath\` or \`fileId\` is required
+
+**Returns:**
+\`\`\`typescript
+{
+  text: string,        // Extracted text content
+  paragraphCount: number,  // Number of paragraphs
+  fileName: string     // File name
+}
+\`\`\`
+
+**Examples:**
+
+1. **Extract text from Word document by file ID:**
+\`\`\`typescript
+const doc = await wordDocument.extract({
+  fileId: "contract.docx"
+});
+return { text: doc.text, paragraphs: doc.paragraphCount };
+\`\`\`
+
+2. **Extract text from Word document by file path:**
+\`\`\`typescript
+const doc = await wordDocument.extract({
+  filePath: "/data/documents/proposal.docx"
+});
+return doc.text;
+\`\`\`
+
+**Important Notes:**
+- Supports .docx format (modern Word format)
+- Preserves paragraph structure
+- Extracts text with formatting removed
+- Use fileId for uploaded conversation files
+- Use filePath for absolute system paths
+- Does not support legacy .doc format (convert to .docx first)
+`;
+
+/**
  * Word Document extension
  * Extract text and metadata from Word documents
  */

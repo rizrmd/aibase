@@ -4,6 +4,107 @@
  */
 
 /**
+ * Context documentation for the web-search extension
+ */
+export const context = () => `
+### Web Search Extension
+
+Search the web for current information using Brave Search API.
+
+**Available Functions:**
+
+#### webSearch(options)
+Search the web.
+\`\`\`typescript
+await webSearch({
+  search_query: "latest AI developments 2024",
+  count: 10,                   // Optional: number of results (default: 10)
+  country: "US",               // Optional: country code
+  search_lang: "en",           // Optional: language code
+  safesearch: "moderate",      // Optional: "off", "moderate", "strict"
+  freshness: "py",             // Optional: time filter - "pd", "pw", "pm", "py", "pn", "pw"
+  text_decorrelation: true      // Optional: deduplicate results
+});
+\`\`\`
+
+**Parameters:**
+- \`search_query\` (required): Search query string
+- \`count\` (optional): Number of results to return (default: 10)
+- \`country\` (optional): Country code (e.g., "US", "UK", "ID")
+- \`search_lang\` (optional): Language code (e.g., "en", "id", "es")
+- \`safesearch\` (optional): Safe search level - "off", "moderate", "strict"
+- \`freshness\` (optional): Time filter
+  - \`pd\`: past day
+  - \`pw\`: past week
+  - \`pm\`: past month
+  - \`py\`: past year
+  - \`pn\`: no limit
+- \`text_decorrelation\` (optional): Remove similar results (default: false)
+
+**Returns:**
+\`\`\`typescript
+{
+  query: string,
+  results: Array<{
+    title: string,
+    url: string,
+    description: string,
+    published: string
+  }>
+}
+\`\`\`
+
+**Examples:**
+
+1. **Basic web search:**
+\`\`\`typescript
+const results = await webSearch({
+  search_query: "TypeScript vs JavaScript 2024",
+  count: 5
+});
+return { count: results.results.length, results: results.results };
+\`\`\`
+
+2. **Recent news with freshness filter:**
+\`\`\`typescript
+const news = await webSearch({
+  search_query: "AI news",
+  count: 10,
+  freshness: "pw"  // Past week
+});
+return news.results;
+\`\`\`
+
+3. **Country-specific search:**
+\`\`\`typescript
+const results = await webSearch({
+  search_query: "resep masakan enak",
+  count: 10,
+  country: "ID",
+  search_lang: "id"
+});
+return results.results;
+\`\`\`
+
+4. **Safe search enabled:**
+\`\`\`typescript
+const results = await webSearch({
+  search_query: "educational resources",
+  count: 15,
+  safesearch: "strict"
+});
+return results.results;
+\`\`\`
+
+**Important Notes:**
+- Requires BRAVE_API_KEY environment variable
+- Get API key from https://brave.com/search/api/
+- Provides access to current web information
+- Great for finding recent articles, documentation, and news
+- Use freshness parameter to get recent results
+`;
+
+/**
  * Get API key from environment
  */
 function getBraveApiKey() {
