@@ -1,0 +1,19 @@
+/**
+ * Script Details Dialog Tabs Customization
+ * Ensures tabs work properly in the dialog context
+ */
+
+/* Ensure tabs container takes full height */
+.script-details-dialog-tabs {
+  height: 100%;
+}
+
+/* Ensure tabs list wraps properly on smaller screens */
+.script-details-dialog-tabs [data-radix-tabs-list] {
+  flex-wrap: wrap;
+}
+
+/* Ensure tabs content fills available space */
+.script-details-dialog-tabs [data-radix-tabs-content] {
+  height: 100%;
+}

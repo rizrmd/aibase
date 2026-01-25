@@ -6,6 +6,8 @@ interface ScriptDetails {
   state: "call" | "executing" | "progress" | "result" | "error";
   result?: any;
   error?: string;
+  // NEW: Inspection data for extension-specific tabs
+  inspectionData?: Record<string, any>; // extensionId -> inspection data
 }
 
 interface FileToolDetails {

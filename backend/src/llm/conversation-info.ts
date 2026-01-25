@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { getConversationDir } from "../config/paths";
 
 export interface TokenUsage {
   promptTokens: number;
@@ -11,6 +12,7 @@ export interface TokenUsage {
 export interface ConversationInfo {
   convId: string;
   projectId: string;
+  tenantId: number | string;
   createdAt: number;
   lastUpdatedAt: number;
   totalMessages: number;
@@ -24,15 +26,15 @@ export interface ConversationInfo {
 /**
  * Get the path to the conversation info file
  */
-function getInfoFilePath(convId: string, projectId: string): string {
-  return path.join(process.cwd(), "data", projectId, convId, "info.json");
+function getInfoFilePath(convId: string, projectId: string, tenantId: number | string): string {
+  return path.join(getConversationDir(projectId, convId, tenantId), "info.json");
 }
 
 /**
  * Ensure the conversation directory exists
  */
-async function ensureConvDirectory(convId: string, projectId: string): Promise<void> {
-  const convDir = path.join(process.cwd(), "data", projectId, convId);
+async function ensureConvDirectory(convId: string, projectId: string, tenantId: number | string): Promise<void> {
+  const convDir = getConversationDir(projectId, convId, tenantId);
   try {
     await fs.mkdir(convDir, { recursive: true });
   } catch (error: any) {
@@ -45,9 +47,10 @@ async function ensureConvDirectory(convId: string, projectId: string): Promise<v
  */
 export async function loadConversationInfo(
   convId: string,
-  projectId: string
+  projectId: string,
+  tenantId: number | string
 ): Promise<ConversationInfo | null> {
-  const infoPath = getInfoFilePath(convId, projectId);
+  const infoPath = getInfoFilePath(convId, projectId, tenantId);
 
   try {
     const content = await fs.readFile(infoPath, "utf-8");
@@ -63,12 +66,14 @@ export async function loadConversationInfo(
  */
 function initializeConversationInfo(
   convId: string,
-  projectId: string
+  projectId: string,
+  tenantId: number | string
 ): ConversationInfo {
   const now = Date.now();
   return {
     convId,
     projectId,
+    tenantId,
     createdAt: now,
     lastUpdatedAt: now,
     totalMessages: 0,
@@ -90,6 +95,7 @@ function initializeConversationInfo(
 export async function updateTokenUsage(
   convId: string,
   projectId: string,
+  tenantId: number | string,
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -97,12 +103,12 @@ export async function updateTokenUsage(
   }
 ): Promise<ConversationInfo> {
   // Ensure directory exists
-  await ensureConvDirectory(convId, projectId);
+  await ensureConvDirectory(convId, projectId, tenantId);
 
   // Load existing info or create new
-  let info = await loadConversationInfo(convId, projectId);
+  let info = await loadConversationInfo(convId, projectId, tenantId);
   if (!info) {
-    info = initializeConversationInfo(convId, projectId);
+    info = initializeConversationInfo(convId, projectId, tenantId);
   }
 
   const now = Date.now();
@@ -127,7 +133,7 @@ export async function updateTokenUsage(
   info.totalMessages += 1;
 
   // Save to file
-  const infoPath = getInfoFilePath(convId, projectId);
+  const infoPath = getInfoFilePath(convId, projectId, tenantId);
   await fs.writeFile(infoPath, JSON.stringify(info, null, 2), "utf-8");
 
   return info;
@@ -138,7 +144,8 @@ export async function updateTokenUsage(
  */
 export async function getConversationInfo(
   convId: string,
-  projectId: string
+  projectId: string,
+  tenantId: number | string
 ): Promise<ConversationInfo | null> {
-  return await loadConversationInfo(convId, projectId);
+  return await loadConversationInfo(convId, projectId, tenantId);
 }

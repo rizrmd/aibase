@@ -1,0 +1,12 @@
+{
+  "id": "pdf-document",
+  "name": "PDF Document",
+  "description": "Extract text content from PDF files using multiple extraction methods",
+  "author": "AIBase",
+  "version": "1.0.0",
+  "category": "document-tools",
+  "enabled": false,
+  "isDefault": true,
+  "createdAt": 0,
+  "updatedAt": 0
+}

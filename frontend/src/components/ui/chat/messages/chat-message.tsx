@@ -29,6 +29,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   completionTime,
   isThinking,
   aborted,
+  uploadProgress,
 }) => {
   const files = useMemo(() => {
     return experimental_attachments?.map((attachment) => {
@@ -58,6 +59,38 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             <span className="text-muted-foreground">{content}</span>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // If this is an upload progress message, show progress bar
+  if (uploadProgress !== undefined) {
+    return (
+      <div className={cn("flex flex-col", isUser ? "items-end" : "items-start")}>
+        <div className={cn(chatBubbleVariants({ isUser, animation }))}>
+          <div className="flex items-center gap-3 min-w-[200px]">
+            <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+            <span className="flex-1">{content}</span>
+          </div>
+          <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+        {showTimeStamp && createdAt ? (
+          <time
+            dateTime={createdAt.toISOString()}
+            className={cn(
+              "t1",
+              "mt-1 block px-1 text-xs opacity-50",
+              animation !== "none" && "duration-500 animate-in fade-in-0"
+            )}
+          >
+            {formattedTime}
+          </time>
+        ) : null}
       </div>
     );
   }

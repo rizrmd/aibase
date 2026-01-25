@@ -12,6 +12,9 @@ interface ChatStore {
   // Connection state
   connectionStatus: string;
 
+  // Processing state (for file uploads, extension processing, etc.)
+  processingStatus: string | null;
+
   // Todos from backend
   todos: any;
 
@@ -44,6 +47,9 @@ interface ChatStore {
   // Actions for connection
   setConnectionStatus: (status: string) => void;
 
+  // Actions for processing
+  setProcessingStatus: (status: string | null) => void;
+
   // Actions for todos
   setTodos: (todos: any) => void;
 
@@ -62,6 +68,7 @@ export const useChatStore = create<ChatStore>((set) => ({
   isHistoryLoading: false,
   error: null,
   connectionStatus: "disconnected",
+  processingStatus: null,
   todos: null,
   maxTokens: null,
   tokenUsage: null,
@@ -91,6 +98,9 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   // Connection actions
   setConnectionStatus: (status) => set({ connectionStatus: status }),
+
+  // Processing actions
+  setProcessingStatus: (status) => set({ processingStatus: status }),
 
   // Todo actions
   setTodos: (todos) => set({ todos }),

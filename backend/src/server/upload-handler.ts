@@ -9,11 +9,38 @@ import { createLogger } from '../utils/logger';
 import * as sharp from 'sharp';
 import * as path from 'path';
 import { extensionHookRegistry } from '../tools/extensions/extension-hooks';
+import { ExtensionLoader } from '../tools/extensions/extension-loader';
 import type { WSServer } from '../ws/entry';
 import { FileTool } from '../tools/definition/file-tool';
 import { getConversationFilesDir } from '../config/paths';
 
 const logger = createLogger('Upload');
+
+// Track which projects have had extensions loaded (to avoid re-loading)
+const loadedProjects = new Set<string>();
+
+/**
+ * Ensure extensions are loaded for a project (for hooks to be registered)
+ */
+async function ensureExtensionsLoaded(projectId: string): Promise<void> {
+  if (loadedProjects.has(projectId)) {
+    return; // Already loaded
+  }
+
+  try {
+    const extensionLoader = new ExtensionLoader();
+    const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
+
+    // Load extensions (this registers hooks)
+    await extensionLoader.loadExtensions(projectId, useDefaults);
+
+    // Mark as loaded
+    loadedProjects.add(projectId);
+    logger.info({ projectId }, 'Extensions loaded for hook registration');
+  } catch (error) {
+    logger.warn({ projectId, error }, 'Failed to load extensions, hooks may not be available');
+  }
+}
 
 export interface UploadedFileInfo {
   id: string;
@@ -249,6 +276,9 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
       (async () => {
         try {
           console.log('[UPLOAD-HANDLER] Starting background analysis for file:', file.name);
+
+          // Ensure extensions are loaded (hooks registered) before executing hooks
+          await ensureExtensionsLoaded(projectId);
 
           // Broadcast: Analyzing image (for images with afterFileUpload hooks)
           if (isImage) {

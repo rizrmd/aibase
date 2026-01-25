@@ -54,6 +54,8 @@ export interface UploadedFileAttachment {
   type: string;
   url: string;
   uploadedAt: number;
+  description?: string;
+  thumbnailUrl?: string;
 }
 
 export interface Message {
@@ -74,11 +76,12 @@ export interface Message {
   }; // Token usage for this message
   isThinking?: boolean; // Temporary thinking indicator
   aborted?: boolean; // Message was aborted/cancelled
+  uploadProgress?: number; // File upload progress percentage (0-100) for temporary upload progress message
 }
 
 export interface ChatMessageProps extends Omit<
   Message,
-  "completionTime" | "thinkingDuration" | "isThinking" | "aborted" | "tokenUsage"
+  "completionTime" | "thinkingDuration" | "isThinking" | "aborted" | "tokenUsage" | "uploadProgress"
 > {
   showTimeStamp?: boolean;
   animation?: Animation;
@@ -92,4 +95,5 @@ export interface ChatMessageProps extends Omit<
   };
   isThinking?: boolean;
   aborted?: boolean;
+  uploadProgress?: number;
 }

@@ -32,7 +32,7 @@ interface ChatPropsBase {
   ) => void;
   setMessages?: (messages: any[]) => void;
   transcribeAudio?: (blob: Blob) => Promise<string>;
-  uploadProgress?: number | null;
+  processingStatus?: string | null;
   welcomeMessage?: string | null;
 }
 
@@ -50,7 +50,7 @@ export function Chat({
   onRateResponse,
   setMessages,
   transcribeAudio,
-  uploadProgress,
+  processingStatus,
   welcomeMessage,
 }: ChatProps) {
   const isEmpty = messages.length === 0;
@@ -221,10 +221,19 @@ export function Chat({
         </ChatMessages>
       ) : null}
 
+      {/* Processing status indicator */}
+      {processingStatus && (
+        <div className="mx-auto md:max-w-[650px] w-full px-4 mb-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground animate-in fade-in-0 slide-in-from-top-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>{processingStatus}</span>
+          </div>
+        </div>
+      )}
+
       <ChatForm
         className="mt-auto mx-auto w-full md:max-w-[650px]"
         handleSubmit={handleSubmit}
-        uploadProgress={uploadProgress}
       >
         {({ files, setFiles }) => (
           <MessageInput
@@ -236,7 +245,6 @@ export function Chat({
             stop={handleStop}
             isGenerating={isGenerating}
             transcribeAudio={transcribeAudio}
-            uploadProgress={uploadProgress}
           />
         )}
       </ChatForm>
@@ -312,7 +320,6 @@ interface ChatFormProps {
     files: File[] | null;
     setFiles: React.Dispatch<React.SetStateAction<File[] | null>>;
   }) => ReactElement;
-  uploadProgress?: number | null;
 }
 
 export const ChatForm = forwardRef<HTMLFormElement, ChatFormProps>(

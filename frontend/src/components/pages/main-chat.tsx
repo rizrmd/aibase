@@ -52,6 +52,7 @@ export function MainChat({
     isHistoryLoading,
     error,
     todos,
+    processingStatus,
     setMessages,
     setInput,
     setIsLoading,
@@ -60,6 +61,7 @@ export function MainChat({
     setTodos,
     setMaxTokens,
     setTokenUsage,
+    updateMessage,
   } = useChatStore(
     useShallow((state) => ({
       messages: state.messages,
@@ -68,6 +70,7 @@ export function MainChat({
       isHistoryLoading: state.isHistoryLoading,
       error: state.error,
       todos: state.todos,
+      processingStatus: state.processingStatus,
       setMessages: state.setMessages,
       setInput: state.setInput,
       setIsLoading: state.setIsLoading,
@@ -76,12 +79,12 @@ export function MainChat({
       setTodos: state.setTodos,
       setMaxTokens: state.setMaxTokens,
       setTokenUsage: state.setTokenUsage,
+      updateMessage: state.updateMessage,
     }))
   );
 
-  const { uploadProgress, setUploadProgress } = useFileStore(
+  const { setUploadProgress } = useFileStore(
     useShallow((state) => ({
-      uploadProgress: state.uploadProgress,
       setUploadProgress: state.setUploadProgress,
     }))
   );
@@ -195,6 +198,7 @@ export function MainChat({
       currentPartsRef,
       generateNewConvId,
       isEmbedMode,
+      updateMessage,
     });
 
   const handleInputChange = useCallback(
@@ -315,23 +319,6 @@ export function MainChat({
           </Alert>
         )}
 
-        {/* Upload Progress */}
-        {uploadProgress !== null && (
-          <Alert className="mx-4 mb-2 border-blue-200 bg-blue-50">
-            <AlertDescription className="text-blue-800">
-              <div className="flex items-center gap-2">
-                <span>Uploading files... {uploadProgress}%</span>
-                <div className="flex-1 h-2 bg-blue-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
         {/* Compaction Status - Show when messages exist */}
         {messages.length > 0 && (
           <div className="mx-4 mb-2">
@@ -349,7 +336,7 @@ export function MainChat({
           stop={abort}
           setMessages={setMessages}
           className="h-full"
-          uploadProgress={uploadProgress}
+          processingStatus={processingStatus}
           welcomeMessage={welcomeMessage}
         />
       </div>

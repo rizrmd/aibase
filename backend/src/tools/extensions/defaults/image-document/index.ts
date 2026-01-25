@@ -31,20 +31,24 @@ async function analyzeImageFile(filePath, mimeType) {
     return null;
   }
 
+  // Read image file and convert to base64
+  const imageBuffer = await Bun.file(filePath).arrayBuffer();
+  const base64Image = Buffer.from(imageBuffer).toString('base64');
+
+  // Default prompt for image description
+  const defaultPrompt = "Describe this image in detail, including the main subjects, colors, composition, mood, and any text visible in the image.";
+
+  // Use OPENAI_BASE_URL from environment or default to Z.AI Vision API
+  const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.z.ai/v1';
+  const endpoint = `${baseUrl}/chat/completions`;
+
+  console.log('[ImageDocument] Calling vision API:', { endpoint, model: 'GLM-4.6V' });
+
+  // Add timeout to prevent hanging
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
   try {
-    // Read image file and convert to base64
-    const imageBuffer = await Bun.file(filePath).arrayBuffer();
-    const base64Image = Buffer.from(imageBuffer).toString('base64');
-
-    // Default prompt for image description
-    const defaultPrompt = "Describe this image in detail, including the main subjects, colors, composition, mood, and any text visible in the image.";
-
-    // Use OPENAI_BASE_URL from environment or default to Z.AI Vision API
-    const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.z.ai/v1';
-    const endpoint = `${baseUrl}/chat/completions`;
-
-    console.log('[ImageDocument] Calling vision API:', { endpoint, model: 'GLM-4.6V' });
-
     // Call Z.AI Vision API
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -73,7 +77,9 @@ async function analyzeImageFile(filePath, mimeType) {
         ],
         max_tokens: 500,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -99,6 +105,11 @@ async function analyzeImageFile(filePath, mimeType) {
     console.log('[ImageDocument] No description found in response, returning null');
     return null;
   } catch (error) {
+    clearTimeout(timeoutId); // Ensure timeout is cleared on error
+    if (error.name === 'AbortError') {
+      console.error('[ImageDocument] Vision API request timed out after 30 seconds');
+      return null;
+    }
     console.error('[ImageDocument] Image analysis failed:', error.message);
     return null;
   }

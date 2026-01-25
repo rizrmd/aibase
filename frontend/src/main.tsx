@@ -5,6 +5,9 @@ import { AppRouter } from "./components/app-router";
 import { getBasePath, buildWsUrl } from "./lib/base-path";
 import { getAppName, getFaviconUrl } from "./lib/setup";
 
+// Register extension inspectors (triggers registration on import)
+import "./components/ui/chat/tools/inspectors";
+
 // Set document title from setup config or environment variable
 getAppName().then((appName) => {
   document.title = appName;

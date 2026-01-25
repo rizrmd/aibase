@@ -133,13 +133,29 @@ const clickhouseExtension = {
             }
           }
 
-          return {
+          const extensionResult = {
             data: dataArray,
             rowCount: dataArray.length,
             executionTime,
             query: options.query,
             stats: Object.keys(stats).length > 0 ? stats : undefined,
           };
+
+          // Broadcast inspection data if __broadcastInspection is available
+          if (globalThis.__broadcastInspection) {
+            globalThis.__broadcastInspection('clickhouse', {
+              query: options.query,
+              executionTime,
+              rowCount: dataArray.length,
+              columns: dataArray.length > 0 ? Object.keys(dataArray[0]) : [],
+              sampleData: dataArray.slice(0, 3), // First 3 rows
+              serverUrl: options.serverUrl,
+              database: options.database,
+              stats,
+            });
+          }
+
+          return extensionResult;
         } else {
           const raw = await response.text();
           return {

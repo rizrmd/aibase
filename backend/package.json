@@ -23,6 +23,7 @@
   "dependencies": {
     "@phukon/duckduckgo-search": "^1.1.0",
     "@types/multer": "^2.0.0",
+    "dotenv": "^17.2.3",
     "hono": "^4.11.4",
     "mammoth": "^1.11.0",
     "multer": "^2.0.2",

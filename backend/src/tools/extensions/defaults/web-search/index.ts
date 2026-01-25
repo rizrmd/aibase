@@ -6,7 +6,7 @@
 /**
  * Get API key from environment
  */
-function getBraveApiKey(): string {
+function getBraveApiKey() {
   const apiKey = process.env.BRAVE_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -19,21 +19,14 @@ function getBraveApiKey(): string {
 /**
  * Web search extension
  */
-export default {
+const webSearchExtension = {
   /**
    * Search the web for information
    *
    * Usage:
    * const results = await webSearch({ search_query: 'latest AI news', count: 5 });
    */
-  webSearch: async (options: {
-    search_query: string;
-    count?: number;
-    country?: string;
-    search_lang?: string;
-    safesearch?: "off" | "moderate" | "strict";
-    freshness?: "pd" | "pw" | "pm" | "py";
-  }) {
+  webSearch: async (options) => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "webSearch requires an options object. Usage: await webSearch({ search_query: 'your query' })"
@@ -84,10 +77,10 @@ export default {
         );
       }
 
-      const data = await response.json() as any;
+      const data = await response.json();
 
       const webResults = data.web?.results || [];
-      const transformedResults = webResults.map((item: any) => ({
+      const transformedResults = webResults.map((item) => ({
         title: item.title || "",
         url: item.url || "",
         description: item.description || "",
@@ -100,8 +93,10 @@ export default {
         results: transformedResults,
         total: transformedResults.length,
       };
-    } catch (error: any) {
+    } catch (error) {
       throw new Error(`Web search failed: ${error.message}`);
     }
   },
 };
+
+return webSearchExtension;

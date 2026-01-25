@@ -6,7 +6,7 @@
 /**
  * Show mermaid extension
  */
-export default {
+const showMermaidExtension = {
   /**
    * Display Mermaid diagram
    *
@@ -16,12 +16,7 @@ export default {
    *   code: 'graph TD\n    A[Start] --> B[End]'
    * });
    */
-  showMermaid: async (args: {
-    title: string;
-    code: string;
-    description?: string;
-    saveTo?: string;
-  }) {
+  showMermaid: async (args) => {
     const toolCallId = `call_${Date.now()}_mermaid`;
 
     return {
@@ -33,3 +28,5 @@ export default {
     };
   },
 };
+
+return showMermaidExtension;

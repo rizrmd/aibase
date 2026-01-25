@@ -6,7 +6,7 @@
 /**
  * Show chart extension
  */
-export default {
+const showChartExtension = {
   /**
    * Display interactive chart
    *
@@ -20,13 +20,7 @@ export default {
    *   }
    * });
    */
-  showChart: async (args: {
-    title: string;
-    description?: string;
-    chartType: string;
-    data: { xAxis: string[]; series: Array<{ name: string; data: number[] }> };
-    saveTo?: string;
-  }) {
+  showChart: async (args) => {
     const toolCallId = `call_${Date.now()}_chart`;
 
     return {
@@ -38,3 +32,5 @@ export default {
     };
   },
 };
+
+return showChartExtension;

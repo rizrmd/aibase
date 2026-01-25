@@ -8,6 +8,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { loadConversationInfo } from "./conversation-info";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { getConversationDir } from "../config/paths";
 
 /**
  * Generate a title for a conversation using AI
@@ -16,10 +17,11 @@ import * as path from "path";
 export async function generateConversationTitle(
   messages: ChatCompletionMessageParam[],
   convId: string,
-  projectId: string
+  projectId: string,
+  tenantId: number | string
 ): Promise<string> {
   // Check if title already exists in conversation info
-  const existingInfo = await loadConversationInfo(convId, projectId);
+  const existingInfo = await loadConversationInfo(convId, projectId, tenantId);
   if (existingInfo?.title) {
     return existingInfo.title;
   }
@@ -50,7 +52,7 @@ export async function generateConversationTitle(
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
       const title = firstUserMsg.content.slice(0, 60).trim();
-      await saveConversationTitle(convId, projectId, title);
+      await saveConversationTitle(convId, projectId, tenantId, title);
       return title;
     }
     return "New Conversation";
@@ -89,7 +91,7 @@ export async function generateConversationTitle(
 
     if (title && title.length > 0) {
       // Save the title to conversation info
-      await saveConversationTitle(convId, projectId, title);
+      await saveConversationTitle(convId, projectId, tenantId, title);
       return title;
     }
 
@@ -99,7 +101,7 @@ export async function generateConversationTitle(
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
       const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
-      await saveConversationTitle(convId, projectId, fallbackTitle);
+      await saveConversationTitle(convId, projectId, tenantId, fallbackTitle);
       return fallbackTitle;
     }
 
@@ -113,7 +115,7 @@ export async function generateConversationTitle(
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
       const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
-      await saveConversationTitle(convId, projectId, fallbackTitle);
+      await saveConversationTitle(convId, projectId, tenantId, fallbackTitle);
       return fallbackTitle;
     }
 
@@ -127,13 +129,14 @@ export async function generateConversationTitle(
 async function saveConversationTitle(
   convId: string,
   projectId: string,
+  tenantId: number | string,
   title: string
 ): Promise<void> {
-  const infoPath = path.join(process.cwd(), "data", projectId, convId, "info.json");
+  const infoPath = path.join(getConversationDir(projectId, convId, tenantId), "info.json");
 
   try {
     // Load existing info
-    let info = await loadConversationInfo(convId, projectId);
+    let info = await loadConversationInfo(convId, projectId, tenantId);
 
     if (info) {
       // Update existing info with title
@@ -150,10 +153,11 @@ async function saveConversationTitle(
  */
 export async function getConversationTitle(
   convId: string,
-  projectId: string
+  projectId: string,
+  tenantId: number | string
 ): Promise<string | null> {
   try {
-    const info = await loadConversationInfo(convId, projectId);
+    const info = await loadConversationInfo(convId, projectId, tenantId);
     return info?.title || null;
   } catch (error) {
     console.error("[TitleGenerator] Error getting title:", error);
@@ -166,12 +170,13 @@ export async function getConversationTitle(
  */
 export async function regenerateConversationTitle(
   convId: string,
-  projectId: string
+  projectId: string,
+  tenantId: number | string
 ): Promise<string> {
   // Load conversation messages
   const { ChatHistoryStorage } = await import("../storage/chat-history-storage");
   const chatHistoryStorage = ChatHistoryStorage.getInstance();
-  const messages = await chatHistoryStorage.loadChatHistory(convId, projectId);
+  const messages = await chatHistoryStorage.loadChatHistory(convId, projectId, tenantId);
 
   // If no messages, return a default title
   if (messages.length === 0) {
@@ -199,7 +204,7 @@ export async function regenerateConversationTitle(
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
       const title = firstUserMsg.content.slice(0, 60).trim();
-      await saveConversationTitle(convId, projectId, title);
+      await saveConversationTitle(convId, projectId, tenantId, title);
       return title;
     }
     return "New Conversation";
@@ -238,7 +243,7 @@ export async function regenerateConversationTitle(
 
     if (title && title.length > 0) {
       // Save the title to conversation info
-      await saveConversationTitle(convId, projectId, title);
+      await saveConversationTitle(convId, projectId, tenantId, title);
       return title;
     }
 
@@ -248,7 +253,7 @@ export async function regenerateConversationTitle(
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
       const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
-      await saveConversationTitle(convId, projectId, fallbackTitle);
+      await saveConversationTitle(convId, projectId, tenantId, fallbackTitle);
       return fallbackTitle;
     }
 
@@ -262,7 +267,7 @@ export async function regenerateConversationTitle(
     );
     if (firstUserMsg && typeof firstUserMsg.content === "string") {
       const fallbackTitle = firstUserMsg.content.slice(0, 60).trim();
-      await saveConversationTitle(convId, projectId, fallbackTitle);
+      await saveConversationTitle(convId, projectId, tenantId, fallbackTitle);
       return fallbackTitle;
     }
 

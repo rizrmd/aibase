@@ -7,6 +7,7 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
 import { chatCompaction } from "../storage/chat-compaction";
+import { ProjectStorage } from "../storage/project-storage";
 
 export interface ConvMessageHistory {
   convId: string;
@@ -250,8 +251,13 @@ export class MessagePersistence {
     tokensSaved?: number;
   }> {
     try {
+      // Get tenantId from project
+      const projectStorage = ProjectStorage.getInstance();
+      const project = projectStorage.getById(projectId);
+      const tenantId = project?.tenant_id ?? 'default';
+
       // Check if compaction is needed
-      const shouldCompact = await chatCompaction.shouldCompact(projectId, convId, userId);
+      const shouldCompact = await chatCompaction.shouldCompact(projectId, convId, tenantId);
 
       if (!shouldCompact) {
         return { compacted: false };
@@ -261,7 +267,7 @@ export class MessagePersistence {
       const messages = await this.getClientHistory(convId, projectId, userId);
 
       // Perform compaction
-      const result = await chatCompaction.compactChat(projectId, convId, messages, userId);
+      const result = await chatCompaction.compactChat(projectId, convId, tenantId, messages);
 
       if (result.compacted && result.newChatFile) {
         console.log(`[MessagePersistence] Compacted ${result.messagesCompacted} messages for ${convId}`);
@@ -288,6 +294,11 @@ export class MessagePersistence {
    * Get compaction status for a conversation
    */
   async getCompactionStatus(projectId: string, convId: string, userId?: string) {
-    return await chatCompaction.getCompactionStatus(projectId, convId, userId);
+    // Get tenantId from project
+    const projectStorage = ProjectStorage.getInstance();
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? 'default';
+
+    return await chatCompaction.getCompactionStatus(projectId, convId, tenantId);
   }
 }

@@ -7,6 +7,7 @@ import { MemoryToolGroup } from "./memory-tool-group";
 import { FileToolGroup } from "./file-tool-group";
 import { Suspense, lazy } from "react";
 import type { ToolInvocation } from "./types";
+import { getExtensionComponent } from "./extension-component-registry";
 
 // Helper function to format duration display
 function formatDuration(duration?: number): string | null {
@@ -15,7 +16,7 @@ function formatDuration(duration?: number): string | null {
   return `${duration}s`;
 }
 
-// Lazy load heavy visualization tools
+// Lazy load heavy visualization tools - now using registry
 const ChartTool = lazy(() => import("./chart-tool").then(m => ({ default: m.ChartTool })));
 const TableTool = lazy(() => import("./table-tool").then(m => ({ default: m.TableTool })));
 const MermaidTool = lazy(() => import("./mermaid-tool").then(m => ({ default: m.MermaidTool })));
@@ -142,28 +143,38 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
           console.log('[ToolCall] Script visualizations found:', scriptVisualizations);
         }
 
-        if (isChart) {
-          return (
-            <Suspense key={index} fallback={<div className="h-[300px] w-full animate-pulse bg-muted rounded-xl" />}>
-              <ChartTool toolInvocation={invocation as any} />
-            </Suspense>
-          );
-        }
-
-        if (isTable) {
-          return (
-            <Suspense key={index} fallback={<div className="h-[200px] w-full animate-pulse bg-muted rounded-xl" />}>
-              <TableTool toolInvocation={invocation as any} />
-            </Suspense>
-          );
-        }
-
-        if (isMermaid) {
-          return (
-            <Suspense key={index} fallback={<div className="h-[300px] w-full animate-pulse bg-muted rounded-xl" />}>
-              <MermaidTool toolInvocation={invocation as any} />
-            </Suspense>
-          );
+        // Handle direct visualization tool calls using registry
+        if (isChart || isTable || isMermaid) {
+          const VizComponent = getExtensionComponent(invocation.toolName);
+          if (VizComponent) {
+            return (
+              <Suspense key={index} fallback={<div className="h-[300px] w-full animate-pulse bg-muted rounded-xl" />}>
+                <VizComponent toolInvocation={invocation as any} />
+              </Suspense>
+            );
+          }
+          // Fallback to original components if registry fails
+          if (isChart) {
+            return (
+              <Suspense key={index} fallback={<div className="h-[300px] w-full animate-pulse bg-muted rounded-xl" />}>
+                <ChartTool toolInvocation={invocation as any} />
+              </Suspense>
+            );
+          }
+          if (isTable) {
+            return (
+              <Suspense key={index} fallback={<div className="h-[200px] w-full animate-pulse bg-muted rounded-xl" />}>
+                <TableTool toolInvocation={invocation as any} />
+              </Suspense>
+            );
+          }
+          if (isMermaid) {
+            return (
+              <Suspense key={index} fallback={<div className="h-[300px] w-full animate-pulse bg-muted rounded-xl" />}>
+                <MermaidTool toolInvocation={invocation as any} />
+              </Suspense>
+            );
+          }
         }
 
         const handleScriptClick = () => {
@@ -208,6 +219,8 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                     : invocation.state,
                 result: actualResult,
                 error: ('result' in invocation && invocation.result?.error) || ('error' in invocation ? invocation.error : undefined),
+                // Include inspection data if available
+                inspectionData: (invocation as any).inspectionData,
               });
             }
           }
@@ -390,25 +403,28 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                 {/* Render visualizations from script result */}
                 {scriptVisualizations && scriptVisualizations.length > 0 && (
                   <div className="mt-2 mb-4">
-                    {scriptVisualizations
-                      .filter((viz: any) => ["show-chart", "show-table", "show-mermaid"].includes(viz.type))
-                      .map((viz: any, vizIndex: number) => {
-                        const vizInvocation = {
-                          toolName: viz.type,
-                          toolCallId: viz.toolCallId,
-                          args: viz.args,
-                          state: "result" as const,
-                          result: { __visualization: viz }
-                        };
+                    {scriptVisualizations.map((viz: any, vizIndex: number) => {
+                      const VizComponent = getExtensionComponent(viz.type);
 
-                        if (viz.type === "show-chart") {
-                          return <ChartTool key={`${index}-viz-${vizIndex}`} toolInvocation={vizInvocation} />;
-                        }
-                        if (viz.type === "show-table") {
-                          return <TableTool key={`${index}-viz-${vizIndex}`} toolInvocation={vizInvocation} />;
-                        }
-                        return <MermaidTool key={`${index}-viz-${vizIndex}`} toolInvocation={vizInvocation} />;
-                      })}
+                      if (!VizComponent) {
+                        console.warn(`[ToolCall] Unknown visualization type: ${viz.type}`);
+                        return null;
+                      }
+
+                      const vizInvocation = {
+                        toolName: viz.type,
+                        toolCallId: viz.toolCallId,
+                        args: viz.args,
+                        state: "result" as const,
+                        result: { __visualization: viz }
+                      };
+
+                      return (
+                        <Suspense key={`${index}-viz-${vizIndex}`} fallback={<div className="h-[200px] w-full animate-pulse bg-muted rounded-xl" />}>
+                          <VizComponent toolInvocation={vizInvocation} />
+                        </Suspense>
+                      );
+                    })}
                   </div>
                 )}
               </div>

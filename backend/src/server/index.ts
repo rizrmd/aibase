@@ -5,6 +5,10 @@
  * between WebSocket clients and LLM conversation systems.
  */
 
+// Load environment variables from .env file
+import { config } from 'dotenv';
+config();
+
 // Export core classes
 export { WSServer } from "../ws/entry";
 export { WSEventEmitter, EventEmitter } from "../ws/events";
@@ -375,7 +379,7 @@ export class WebSocketServer {
 
         // Handle file upload (POST /api/upload?convId=xxx)
         if (pathname === "/api/upload" && req.method === "POST") {
-          return handleFileUpload(req);
+          return handleFileUpload(req, this.wsServer);
         }
 
         // Handle image save from base64 (POST /api/save-image?convId=xxx&projectId=xxx)

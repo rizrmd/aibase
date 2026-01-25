@@ -50,8 +50,13 @@ export function TokenStatus({ convId }: TokenStatusProps) {
         lines.push("");
         for (const file of msg.attachments) {
           lines.push(`- **${file.name}** (${(file.size / 1024).toFixed(2)} KB)`);
-          lines.push(`  - Type: ${file.type}`);
+          if (file.type) {
+            lines.push(`  - Type: ${file.type}`);
+          }
           lines.push(`  - URL: ${file.url}`);
+          if (file.description) {
+            lines.push(`  - Description: ${file.description}`);
+          }
         }
         lines.push("");
       }

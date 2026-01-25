@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import OpenAI from 'openai';
+import { getConversationDir, getConversationChatsDir } from '../config/paths';
 
 interface CompactionConfig {
   // Token threshold to trigger compaction (default: 150K tokens)
@@ -39,8 +40,8 @@ export class ChatCompaction {
   /**
    * Check if compaction is needed based on token usage
    */
-  async shouldCompact(projectId: string, convId: string): Promise<boolean> {
-    const infoPath = path.join(process.cwd(), 'data', projectId, convId, 'info.json');
+  async shouldCompact(projectId: string, convId: string, tenantId: number | string): Promise<boolean> {
+    const infoPath = path.join(getConversationDir(projectId, convId, tenantId), 'info.json');
 
     try {
       // Check if file exists first
@@ -72,6 +73,7 @@ export class ChatCompaction {
   async compactChat(
     projectId: string,
     convId: string,
+    tenantId: number | string,
     messages: ChatCompletionMessageParam[]
   ): Promise<CompactionResult> {
     try {
@@ -104,6 +106,7 @@ export class ChatCompaction {
       const newChatFile = await this.saveCompactedChat(
         projectId,
         convId,
+        tenantId,
         newMessages,
         timestamp
       );
@@ -225,10 +228,11 @@ Key topics: ${this.extractKeyTopics(messages)}
   private async saveCompactedChat(
     projectId: string,
     convId: string,
+    tenantId: number | string,
     messages: ChatCompletionMessageParam[],
     timestamp: number
   ): Promise<string> {
-    const chatsDir = path.join(process.cwd(), 'data', projectId, convId, 'chats');
+    const chatsDir = getConversationChatsDir(projectId, convId, tenantId);
     await fs.mkdir(chatsDir, { recursive: true });
 
     const chatFile = path.join(chatsDir, `${timestamp}.json`);
@@ -236,6 +240,7 @@ Key topics: ${this.extractKeyTopics(messages)}
       metadata: {
         convId,
         projectId,
+        tenantId,
         createdAt: timestamp,
         lastUpdatedAt: timestamp,
         messageCount: messages.length,
@@ -271,13 +276,13 @@ Key topics: ${this.extractKeyTopics(messages)}
   /**
    * Get compaction status and recommendation
    */
-  async getCompactionStatus(projectId: string, convId: string): Promise<{
+  async getCompactionStatus(projectId: string, convId: string, tenantId: number | string): Promise<{
     shouldCompact: boolean;
     currentTokens: number;
     threshold: number;
     utilizationPercent: number;
   }> {
-    const infoPath = path.join(process.cwd(), 'data', projectId, convId, 'info.json');
+    const infoPath = path.join(getConversationDir(projectId, convId, tenantId), 'info.json');
 
     try {
       // Check if file exists first

@@ -15,6 +15,9 @@ import { Loader2, Copy, Check, X } from "lucide-react";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import { useUIStore } from "@/stores/ui-store";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs";
+import { getInspector } from "./chat/tools/extension-inspector-registry";
+import "./script-details-dialog-tabs.css";
 
 interface ScriptDetailsDialogProps {
   open: boolean;
@@ -25,6 +28,8 @@ interface ScriptDetailsDialogProps {
   progressMessages?: string[];
   result?: any;
   error?: string;
+  // NEW: Inspection data for extension-specific tabs
+  inspectionData?: Record<string, any>;
 }
 
 export function ScriptDetailsDialog({
@@ -36,6 +41,7 @@ export function ScriptDetailsDialog({
   progressMessages = [],
   result,
   error,
+  inspectionData,
 }: ScriptDetailsDialogProps) {
   const {
     highlightedCode,
@@ -209,7 +215,7 @@ export function ScriptDetailsDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
-          <div className="space-y-4 h-full">
+          <div className="space-y-4 h-full flex flex-col">
             {/* Executing Status */}
             {state === "executing" && (
               <div className="rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/30 p-3">
@@ -240,127 +246,166 @@ export function ScriptDetailsDialog({
               </div>
             )}
 
-            {/* Code and Result Side by Side */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full min-h-0">
-              {/* Script Code - Left */}
-              <div className="flex flex-col min-h-0 h-[40vh] md:h-[70vh]">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold">Code</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    onClick={() => copyToClipboard(code, "code")}
-                  >
-                    {copiedCode ? (
-                      <Check className="h-3.5 w-3.5 text-green-600" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex-1 flex text-[11px]">
-                  {highlightedCode ? (
-                    <div
-                      dangerouslySetInnerHTML={{ __html: highlightedCode }}
-                      className="overflow-auto relative flex-1 [&>pre]:absolute [&>pre]:p-4 [&>pre>code]:whitespace-pre-wrap  [&>pre]:bg-[#0d1117]"
-                    />
-                  ) : (
-                    <pre className="p-4 bg-[#fff] overflow-auto">
-                      <code>{code}</code>
-                    </pre>
-                  )}
-                </div>
-              </div>
+            {/* Tabbed Interface */}
+            <div className="flex-1 min-h-0">
+              <Tabs defaultValue="code" className="h-full flex flex-col">
+                <TabsList className="grid w-full auto-cols-fr">
+                  <TabsTrigger value="code">Code</TabsTrigger>
+                  {(result && state === "result") || error ? (
+                    <TabsTrigger value="result">Result</TabsTrigger>
+                  ) : null}
+                  {inspectionData && Object.keys(inspectionData).length > 0 && Object.keys(inspectionData).map((extensionId) => (
+                    <TabsTrigger key={extensionId} value={`inspection-${extensionId}`}>
+                      {extensionId.charAt(0).toUpperCase() + extensionId.slice(1)} Details
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-              {/* Result/Error - Right */}
-              <div className="flex flex-col min-h-0 h-[40vh] md:h-auto">
-                {result && state === "result" && (
-                  <>
+                {/* Code Tab */}
+                <TabsContent value="code" className="flex-1 min-h-0 mt-2">
+                  <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold">Result</h3>
+                      <h3 className="text-sm font-semibold">Code</h3>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 px-2"
-                        onClick={() =>
-                          copyToClipboard(
-                            typeof result === "string"
-                              ? result
-                              : JSON.stringify(result, null, 2),
-                            "result"
-                          )
-                        }
+                        onClick={() => copyToClipboard(code, "code")}
                       >
-                        {copiedResult ? (
+                        {copiedCode ? (
                           <Check className="h-3.5 w-3.5 text-green-600" />
                         ) : (
                           <Copy className="h-3.5 w-3.5" />
                         )}
                       </Button>
                     </div>
-
-                    {/* Truncation Warning */}
-                    {resultTruncated && (
-                      <div className="mb-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-400">
-                        ⚠️ Result truncated for display (too large). Use Copy button for full data.
-                      </div>
-                    )}
-
-                    <div className="flex-1 flex text-[11px]">
-                      {highlightedResult ? (
+                    <div className="flex-1 flex text-[11px] min-h-0">
+                      {highlightedCode ? (
                         <div
-                          dangerouslySetInnerHTML={{
-                            __html: highlightedResult,
-                          }}
+                          dangerouslySetInnerHTML={{ __html: highlightedCode }}
                           className="overflow-auto relative flex-1 [&>pre]:absolute [&>pre]:p-4 [&>pre>code]:whitespace-pre-wrap  [&>pre]:bg-[#0d1117]"
                         />
                       ) : (
-                        <pre className="p-4 bg-[#0d1117]  overflow-x-auto">
-                          <code>
-                            {typeof displayResult === "string"
-                              ? displayResult
-                              : JSON.stringify(displayResult, null, 2)}
-                          </code>
+                        <pre className="p-4 bg-[#fff] overflow-auto flex-1">
+                          <code>{code}</code>
                         </pre>
                       )}
                     </div>
-                  </>
-                )}
-
-                {error && (
-                  <>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">
-                        Error
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2"
-                        onClick={() => copyToClipboard(error, "error")}
-                      >
-                        {copiedError ? (
-                          <Check className="h-3.5 w-3.5 text-green-600" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                    <div className="text-[11px] border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30 p-3 overflow-auto">
-                      <pre className="text-red-700 dark:text-red-400 whitespace-pre-wrap">
-                        {error}
-                      </pre>
-                    </div>
-                  </>
-                )}
-
-                {!result && !error && state !== "executing" && (
-                  <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-                    No result yet
                   </div>
-                )}
-              </div>
+                </TabsContent>
+
+                {/* Result Tab */}
+                {(result && state === "result") || error ? (
+                  <TabsContent value="result" className="flex-1 min-h-0 mt-2">
+                    <div className="flex flex-col h-full">
+                      {result && state === "result" && (
+                        <>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-semibold">Result</h3>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() =>
+                                copyToClipboard(
+                                  typeof result === "string"
+                                    ? result
+                                    : JSON.stringify(result, null, 2),
+                                  "result"
+                                )
+                              }
+                            >
+                              {copiedResult ? (
+                                <Check className="h-3.5 w-3.5 text-green-600" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </div>
+
+                          {/* Truncation Warning */}
+                          {resultTruncated && (
+                            <div className="mb-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-400">
+                              ⚠️ Result truncated for display (too large). Use Copy button for full data.
+                            </div>
+                          )}
+
+                          <div className="flex-1 flex text-[11px] min-h-0">
+                            {highlightedResult ? (
+                              <div
+                                dangerouslySetInnerHTML={{
+                                  __html: highlightedResult,
+                                }}
+                                className="overflow-auto relative flex-1 [&>pre]:absolute [&>pre]:p-4 [&>pre>code]:whitespace-pre-wrap  [&>pre]:bg-[#0d1117]"
+                              />
+                            ) : (
+                              <pre className="p-4 bg-[#0d1117]  overflow-x-auto flex-1">
+                                <code>
+                                  {typeof displayResult === "string"
+                                    ? displayResult
+                                    : JSON.stringify(displayResult, null, 2)}
+                                </code>
+                              </pre>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {error && (
+                        <>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">
+                              Error
+                            </h3>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => copyToClipboard(error, "error")}
+                            >
+                              {copiedError ? (
+                                <Check className="h-3.5 w-3.5 text-green-600" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </div>
+                          <div className="text-[11px] border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30 p-3 overflow-auto flex-1">
+                            <pre className="text-red-700 dark:text-red-400 whitespace-pre-wrap">
+                              {error}
+                            </pre>
+                          </div>
+                        </>
+                      )}
+
+                      {!result && !error && state !== "executing" && (
+                        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                          No result yet
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                ) : null}
+
+                {/* Extension-Specific Inspection Tabs */}
+                {inspectionData && Object.keys(inspectionData).length > 0 && Object.entries(inspectionData).map(([extensionId, data]) => (
+                  <TabsContent key={`inspection-${extensionId}`} value={`inspection-${extensionId}`} className="flex-1 min-h-0 mt-2">
+                    <div className="h-full overflow-auto">
+                      {(() => {
+                        const InspectorComponent = getInspector(extensionId);
+                        if (InspectorComponent) {
+                          return <InspectorComponent data={data} error={error} />;
+                        }
+                        return (
+                          <div className="p-4 text-sm text-muted-foreground">
+                            No inspector available for extension: <code className="font-mono">{extensionId}</code>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
             </div>
           </div>
         </div>

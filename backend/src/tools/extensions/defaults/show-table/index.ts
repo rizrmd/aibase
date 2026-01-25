@@ -6,7 +6,7 @@
 /**
  * Show table extension
  */
-export default {
+const showTableExtension = {
   /**
    * Display tabular data
    *
@@ -17,13 +17,7 @@ export default {
    *   data: [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }]
    * });
    */
-  showTable: async (args: {
-    title: string;
-    description?: string;
-    columns: Array<{ key: string; label: string }>;
-    data: any[];
-    saveTo?: string;
-  }) {
+  showTable: async (args) => {
     const toolCallId = `call_${Date.now()}_table`;
 
     return {
@@ -35,3 +29,5 @@ export default {
     };
   },
 };
+
+return showTableExtension;

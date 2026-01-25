@@ -3,38 +3,6 @@
  * Query PostgreSQL databases with secure connection management
  */
 
-import { SQL } from "bun";
-
-/**
- * PostgreSQL query options
- */
-export interface PostgreSQLOptions {
-  /** SQL query to execute */
-  query: string;
-  /** PostgreSQL connection URL */
-  connectionUrl: string;
-  /** Return format: 'json' (default), 'raw' */
-  format?: "json" | "raw";
-  /** Query timeout in milliseconds (default: 30000) */
-  timeout?: number;
-}
-
-/**
- * PostgreSQL query result
- */
-export interface PostgreSQLResult {
-  /** Query results as array of objects */
-  data?: any[];
-  /** Raw result (when format is 'raw') */
-  raw?: any;
-  /** Number of rows returned */
-  rowCount?: number;
-  /** Execution time in milliseconds */
-  executionTime?: number;
-  /** Query executed */
-  query?: string;
-}
-
 /**
  * PostgreSQL extension
  */
@@ -48,7 +16,7 @@ const postgresqlExtension = {
    *   connectionUrl: memory.read('database', 'postgresql_url')
    * });
    */
-  postgresql: async (options: PostgreSQLOptions): Promise<PostgreSQLResult> => {
+  postgresql: async (options) => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "postgresql requires an options object. Usage: await postgresql({ query: 'SELECT * FROM users', connectionUrl: '...' })"
@@ -72,11 +40,14 @@ const postgresqlExtension = {
     const startTime = Date.now();
 
     try {
+      // Import SQL dynamically
+      const { SQL } = await import('bun');
+
       // Create PostgreSQL connection using Bun's SQL
       const db = new SQL(options.connectionUrl);
 
       // Execute query with timeout
-      const timeoutPromise = new Promise<never>((_, reject) =>
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`Query timeout after ${timeout}ms`)), timeout)
       );
 
@@ -97,98 +68,41 @@ const postgresqlExtension = {
         // Bun's SQL returns arrays of objects
         const dataArray = Array.isArray(result) ? result : [result];
 
-        return {
+        const extensionResult = {
           data: dataArray,
           rowCount: dataArray.length,
           executionTime,
           query: options.query,
         };
+
+        // Broadcast inspection data if __broadcastInspection is available
+        if (globalThis.__broadcastInspection) {
+          globalThis.__broadcastInspection('postgresql', {
+            ...extensionResult,
+          });
+        }
+
+        return extensionResult;
       } else {
-        // Return raw result
-        return {
+        // Raw format
+        const extensionResult = {
           raw: result,
-          rowCount: Array.isArray(result) ? result.length : undefined,
           executionTime,
           query: options.query,
         };
-      }
-    } catch (error: any) {
-      const executionTime = Date.now() - startTime;
 
-      // Check for common errors
-      if (error.message?.includes("ENOTFOUND") || error.message?.includes("ECONNREFUSED")) {
-        throw new Error(
-          `PostgreSQL connection failed: Unable to connect to database. Check your connection URL and ensure the database is running. ${error.message}`
-        );
-      }
+        if (globalThis.__broadcastInspection) {
+          globalThis.__broadcastInspection('postgresql', {
+            ...extensionResult,
+          });
+        }
 
-      if (error.message?.includes("password authentication failed")) {
-        throw new Error(
-          `PostgreSQL authentication failed: Invalid credentials in connection URL. ${error.message}`
-        );
+        return extensionResult;
       }
-
-      if (error.message?.includes("does not exist")) {
-        throw new Error(
-          `PostgreSQL query error: ${error.message}. Check that tables/columns exist.`
-        );
-      }
-
-      if (error.message?.includes("syntax error")) {
-        throw new Error(
-          `PostgreSQL syntax error: ${error.message}. Check your SQL query syntax.`
-        );
-      }
-
-      throw new Error(`PostgreSQL query failed (${executionTime}ms): ${error.message}`);
+    } catch (error) {
+      throw new Error(`PostgreSQL query failed: ${error.message}`);
     }
-  },
-
-  /**
-   * Test PostgreSQL connection
-   */
-  testConnection: async (connectionUrl: string): Promise<{ connected: boolean; version?: string; error?: string }> => {
-    try {
-      const result = await postgresqlExtension.postgresql({
-        query: "SELECT version()",
-        connectionUrl,
-      });
-
-      return {
-        connected: true,
-        version: result.data?.[0]?.version,
-      };
-    } catch (error: any) {
-      return {
-        connected: false,
-        error: error.message,
-      };
-    }
-  },
-
-  /**
-   * Quick SELECT query helper
-   */
-  query: async (
-    table: string,
-    connectionUrl: string,
-    options?: {
-      where?: string;
-      limit?: number;
-      orderBy?: string;
-    }
-  ): Promise<PostgreSQLResult> => {
-    const where = options?.where ? `WHERE ${options.where}` : "";
-    const orderBy = options?.orderBy ? `ORDER BY ${options.orderBy}` : "";
-    const limit = options?.limit ? `LIMIT ${options.limit}` : "";
-
-    const query = `SELECT * FROM ${table} ${where} ${orderBy} ${limit}`.trim();
-
-    return postgresqlExtension.postgresql({
-      query,
-      connectionUrl,
-    });
   },
 };
 
-export default postgresqlExtension;
+return postgresqlExtension;

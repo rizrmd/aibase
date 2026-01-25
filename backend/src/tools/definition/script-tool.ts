@@ -375,9 +375,10 @@ PDF reader examples (extract text from PDF files):
     };
 
     try {
-      // Load project extensions
+      // Load project extensions (respect USE_DEFAULT_EXTENSIONS flag)
       const extensionLoader = new ExtensionLoader();
-      const extensions = await extensionLoader.loadExtensions(this.projectId);
+      const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
+      const extensions = await extensionLoader.loadExtensions(this.projectId, useDefaults);
 
       // Create runtime with injected context and extensions
       const runtime = new ScriptRuntime({

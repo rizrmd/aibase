@@ -143,7 +143,7 @@ const trinoExtension = {
             }
           }
 
-          return {
+          const extensionResult = {
             data: dataArray,
             rowCount: dataArray.length,
             executionTime,
@@ -160,6 +160,23 @@ const trinoExtension = {
                 }
               : undefined,
           };
+
+          // Broadcast inspection data if __broadcastInspection is available
+          if (globalThis.__broadcastInspection) {
+            globalThis.__broadcastInspection('trino', {
+              query: options.query,
+              executionTime,
+              rowCount: dataArray.length,
+              columns: dataArray.length > 0 ? Object.keys(dataArray[0]) : [],
+              sampleData: dataArray.slice(0, 3), // First 3 rows
+              serverUrl: options.serverUrl,
+              catalog: options.catalog,
+              schema: options.schema,
+              stats: extensionResult.stats,
+            });
+          }
+
+          return extensionResult;
         } else {
           return {
             raw: result,

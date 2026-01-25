@@ -5,6 +5,7 @@ import { uploadFiles } from "@/lib/file-upload";
 import { useChatStore } from "@/stores/chat-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { useFileStore } from "@/stores/file-store";
 
 export interface UseChatOptions {
   wsUrl: string;
@@ -19,6 +20,7 @@ export interface UseChatReturn {
   handleSubmit: (e?: React.FormEvent, options?: { experimental_attachments?: FileList }) => Promise<void>;
   isLoading: boolean;
   connectionStatus: string;
+  processingStatus: string | null;
   error: string | null;
   clearHistory: () => void;
   abort: () => void;
@@ -32,11 +34,13 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
     input,
     isLoading,
     connectionStatus,
+    processingStatus,
     error,
     setMessages,
     setInput,
     setIsLoading,
     setConnectionStatus,
+    setProcessingStatus,
     setError,
   } = useChatStore();
 
@@ -150,9 +154,38 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
     };
 
     const handleStatus = (data: any) => {
-      if (data.status) {
+      // Connection-related status
+      if (data.status === 'connected' || data.status === 'disconnected' || data.status === 'reconnecting') {
         setConnectionStatus(data.status);
         onStatusChange?.(data.status);
+      }
+
+      // Processing-related status (file uploads, extension processing, etc.)
+      if (data.status === 'processing' || data.status === 'complete') {
+        const { setProcessingStatus } = useChatStore.getState();
+        setProcessingStatus(data.message || null);
+
+        // Auto-clear processing status after 3 seconds if it's 'complete'
+        if (data.status === 'complete') {
+          setTimeout(() => {
+            setProcessingStatus(null);
+          }, 3000);
+        }
+      }
+
+      // File update status - when an extension finishes processing a file
+      if (data.status === 'file_updated') {
+        try {
+          const update = JSON.parse(data.message);
+          const { setFiles } = useFileStore.getState();
+          setFiles((prevFiles) =>
+            prevFiles.map((f) =>
+              f.name === update.fileName ? { ...f, description: update.description } : f
+            )
+          );
+        } catch (e) {
+          console.error('[useChat] Failed to parse file update:', data.message);
+        }
       }
     };
 
@@ -249,6 +282,7 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
     handleSubmit,
     isLoading,
     connectionStatus,
+    processingStatus,
     error,
     clearHistory,
     abort,

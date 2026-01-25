@@ -214,12 +214,8 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk-Accumulated] Returning ${updatedMessages.length} messages`
               );
-              // FIX: Only add thinking indicator if one doesn't already exist in the result
-              // This prevents duplicates when multiple setMessages calls race
-              const hasThinkingIndicator = updatedMessages.some((m) => "isThinking" in m && m.isThinking);
-              return !hasThinkingIndicator && thinkingMsg
-                ? [...updatedMessages, thinkingMsg]
-                : updatedMessages;
+              // Don't add thinking indicator when we're actively updating the assistant message
+              return updatedMessages;
             } else {
               // Create new message with accumulated content
               console.log(
@@ -245,12 +241,8 @@ export function useWebSocketHandlers({
                 `[Chunk-Accumulated] Returning ${prev.length + 1
                 } messages (added new)`
               );
-              const resultArray = [...prev, newMessage];
-              // FIX: Only add thinking indicator if one doesn't already exist in the result
-              const hasThinkingIndicator = resultArray.some((m) => "isThinking" in m && m.isThinking);
-              return !hasThinkingIndicator && thinkingMsg
-                ? [...resultArray, thinkingMsg]
-                : resultArray;
+              // Don't add thinking indicator when we're actively creating the assistant message
+              return [...prev, newMessage];
             }
           } else {
             // Real-time chunk - check if message already exists in array
@@ -313,13 +305,10 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk] Returning new array with ${newArray.length} messages`
               );
-              // FIX: Only add thinking indicator if one doesn't already exist in the result
-              const hasThinkingIndicator = newArray.some((m) => "isThinking" in m && m.isThinking);
-              const finalArray = !hasThinkingIndicator && thinkingMsg
-                ? [...newArray, thinkingMsg]
-                : newArray;
-              console.log(`[Chunk] Final array has ${finalArray.length} messages (with thinking: ${!!thinkingMsg})`);
-              return finalArray;
+              // Don't add thinking indicator when we're actively creating/updating the assistant message
+              // The thinking indicator is only shown before the first chunk arrives
+              console.log(`[Chunk] Final array has ${newArray.length} messages (thinking indicator removed)`);
+              return newArray;
             } else {
               // Append to existing message
               const existingMessage = prev[existingIndex];
@@ -409,11 +398,9 @@ export function useWebSocketHandlers({
               console.log(
                 `[Chunk] Returning updated array with ${updatedArray.length} messages`
               );
-              // FIX: Only add thinking indicator if one doesn't already exist in the result
-              const hasThinkingIndicator = updatedArray.some((m) => "isThinking" in m && m.isThinking);
-              return !hasThinkingIndicator && thinkingMsg
-                ? [...updatedArray, thinkingMsg]
-                : updatedArray;
+              // Don't add thinking indicator when we're actively updating the assistant message
+              // The thinking indicator is only shown before the first chunk arrives
+              return updatedArray;
             }
           }
         });
@@ -1194,6 +1181,20 @@ export function useWebSocketHandlers({
         "[Tool Call] Current parts array:",
         currentPartsRef.current.map(p => ({ type: p.type, ...(p.type === "text" ? { textLength: p.text.length } : { toolName: p.toolInvocation.toolName }) }))
       );
+
+      // Handle inspection data from extensions
+      if (data.result?.__inspectionData) {
+        const { extensionId, data: inspectionData } = data.result.__inspectionData;
+        console.log("[Tool Call] Received inspection data for extension:", extensionId, inspectionData);
+
+        // Store inspection data for use in dialog
+        // We'll attach this to the tool invocation
+        toolInvocation.inspectionData = {
+          ...toolInvocation.inspectionData,
+          [extensionId]: inspectionData,
+        };
+        currentToolInvocationsRef.current.set(data.toolCallId, toolInvocation);
+      }
 
       // Update or create assistant message to include tool invocations
       // Use flushSync to ensure immediate rendering, especially for errors

@@ -24,7 +24,6 @@ interface MessageInputBaseProps
   isGenerating: boolean
   enableInterrupt?: boolean
   transcribeAudio?: (blob: Blob) => Promise<string>
-  uploadProgress?: number | null
 }
 
 interface MessageInputWithoutAttachmentProps extends MessageInputBaseProps {
@@ -224,8 +223,8 @@ export function MessageInput({
               className
             )}
             {...(props.allowAttachments
-              ? omit(props, ["allowAttachments", "files", "setFiles", "uploadProgress"])
-              : omit(props, ["allowAttachments", "uploadProgress"]))}
+              ? omit(props, ["allowAttachments", "files", "setFiles"])
+              : omit(props, ["allowAttachments"]))}
           />
 
           {props.allowAttachments && (
@@ -302,13 +301,9 @@ export function MessageInput({
             size="icon"
             className="h-8 w-8 transition-opacity"
             aria-label="Send message"
-            disabled={(!props.value && !(props.allowAttachments && props.files?.length)) || isGenerating || props.uploadProgress !== null}
+            disabled={(!props.value && !(props.allowAttachments && props.files?.length)) || isGenerating}
           >
-            {props.uploadProgress !== null ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowUp className="h-5 w-5" />
-            )}
+            <ArrowUp className="h-5 w-5" />
           </Button>
         )}
       </div>

@@ -13,7 +13,7 @@ interface UseMessageSubmissionProps {
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setTodos: (todos: any) => void;
-  setUploadProgress: (progress: number | null) => void;
+  setUploadProgress: (progress: number | null) => void; // Kept for backwards compatibility
   isLoading: boolean;
   thinkingStartTimeRef: React.MutableRefObject<number | null>;
   currentMessageRef: React.MutableRefObject<string | null>;
@@ -22,6 +22,7 @@ interface UseMessageSubmissionProps {
   currentPartsRef: React.MutableRefObject<any[]>;
   generateNewConvId: () => string;
   isEmbedMode?: boolean;
+  updateMessage: (id: string, updates: Partial<Message>) => void; // For updating upload progress
 }
 
 export function useMessageSubmission({
@@ -42,6 +43,7 @@ export function useMessageSubmission({
   currentPartsRef,
   generateNewConvId,
   isEmbedMode = false,
+  updateMessage,
 }: UseMessageSubmissionProps) {
   // Track if we're currently submitting to prevent double submissions
   const isSubmittingRef = useRef(false);
@@ -139,9 +141,20 @@ export function useMessageSubmission({
         let uploadedFiles: any[] | undefined = undefined;
 
         // Upload files FIRST if any are attached
+        let uploadProgressMessageId: string | null = null;
+
         if (options?.experimental_attachments && options.experimental_attachments.length > 0) {
           console.log("[Submit] Uploading", options.experimental_attachments.length, "files");
-          setUploadProgress(0);
+
+          // Create upload progress message
+          uploadProgressMessageId = `upload_progress_${Date.now()}`;
+          setMessages((prev) => [...prev, {
+            id: uploadProgressMessageId!,
+            role: "user",
+            content: "Uploading files...",
+            createdAt: new Date(),
+            uploadProgress: 0,
+          }]);
 
           try {
             const filesArray = Array.from(options.experimental_attachments);
@@ -154,15 +167,31 @@ export function useMessageSubmission({
               projectId,
               onProgress: (progress) => {
                 console.log("[Upload Progress]", progress.percentage + "%");
-                setUploadProgress(progress.percentage);
+                // Update the upload progress message
+                if (uploadProgressMessageId) {
+                  updateMessage(uploadProgressMessageId, {
+                    content: `Uploading files... ${progress.percentage}%`,
+                    uploadProgress: progress.percentage,
+                  });
+                }
               }
             });
 
             console.log("[Submit] Files uploaded successfully:", uploadedFiles);
-            setUploadProgress(null);
+
+            // Remove the upload progress message
+            setMessages((prev) => prev.filter((m) => m.id !== uploadProgressMessageId));
           } catch (uploadError) {
             console.error("[Submit] File upload failed:", uploadError);
-            setUploadProgress(null);
+
+            // Update the progress message to show error
+            if (uploadProgressMessageId) {
+              updateMessage(uploadProgressMessageId, {
+                content: "Upload failed",
+                uploadProgress: undefined,
+              });
+            }
+
             setError(uploadError instanceof Error ? uploadError.message : "File upload failed");
             // Restore the input since upload failed
             setInput(messageText);
@@ -235,6 +264,8 @@ export function useMessageSubmission({
       currentMessageRef,
       currentMessageIdRef,
       currentToolInvocationsRef,
+      updateMessage,
+      projectId,
     ]
   );
 

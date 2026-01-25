@@ -472,16 +472,26 @@ export class Conversation {
       // Add attachment information to message content so AI knows about files
       let messageContent = message;
       if (attachments && attachments.length > 0) {
-        const fileNames = attachments.map((a: any) => a.name).join(", ");
-        const attachmentInfo = `\n\n[Attached file${attachments.length > 1 ? 's' : ''}: ${fileNames}]`;
+        // Build detailed attachment info with descriptions
+        const attachmentDetails = attachments.map((a: any) => {
+          let detail = `- **${a.name}** (${(a.size / 1024).toFixed(2)} KB)`;
+          if (a.description) {
+            detail += `\n  - *Already analyzed*: ${a.description.substring(0, 200)}${a.description.length > 200 ? '...' : ''}`;
+          }
+          return detail;
+        }).join('\n');
+
+        const attachmentInfo = attachments.length === 1
+          ? `\n\n[File already analyzed and ready for your questions]`
+          : `\n\n[Files already analyzed and ready for your questions]`;
 
         // If message is empty, use a default message
         if (!messageContent || messageContent.trim() === "") {
-          messageContent = `I've uploaded ${attachments.length} file${attachments.length > 1 ? 's' : ''}: ${fileNames}.`;
+          messageContent = `I've uploaded ${attachments.length} file${attachments.length > 1 ? 's' : ''}. ${attachmentDetails}${attachmentInfo}`;
           console.log(`[Conversation] Empty message with attachments, using default: ${messageContent}`);
         } else {
           // Append attachment info to existing message
-          messageContent = messageContent + attachmentInfo;
+          messageContent = messageContent + `\n\n${attachmentDetails}${attachmentInfo}`;
           console.log(`[Conversation] Appended attachment info to message: ${attachmentInfo}`);
         }
       }

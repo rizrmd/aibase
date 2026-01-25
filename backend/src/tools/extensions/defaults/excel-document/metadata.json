@@ -1,0 +1,12 @@
+{
+  "id": "excel-document",
+  "name": "Excel Document",
+  "description": "Extract text content from Excel spreadsheets (.xlsx, .xls)",
+  "author": "AIBase",
+  "version": "1.0.0",
+  "category": "document-tools",
+  "enabled": false,
+  "isDefault": true,
+  "createdAt": 0,
+  "updatedAt": 0
+}
