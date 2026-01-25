@@ -29,6 +29,7 @@ interface FileInfo {
   sizeHuman?: string;
   modified?: string;
   scope?: 'user' | 'public';
+  description?: string;
 }
 
 /**
@@ -331,17 +332,26 @@ async function loadFiles(
       const fullPath = path.join(filesDir, entry.name);
       const stats = await fs.stat(fullPath);
 
-      // Load metadata to get scope info
+      // Load metadata to get scope and description
       let scope: 'user' | 'public' = 'user';
+      let description: string | undefined;
       const metaPath = path.join(filesDir, `.${entry.name}.meta.md`);
       try {
         const metaContent = await fs.readFile(metaPath, 'utf-8');
+
+        // Extract scope from frontmatter
         const frontmatterMatch = metaContent.match(/^---\n([\s\S]*?)\n---/);
         if (frontmatterMatch && frontmatterMatch[1]) {
           const scopeMatch = frontmatterMatch[1].match(/scope:\s*["']?(user|public)["']?/);
           if (scopeMatch) {
             scope = scopeMatch[1] as 'user' | 'public';
           }
+        }
+
+        // Extract description from body (everything after the second ---)
+        const bodyMatch = metaContent.match(/\n---\n([\s\S]*)$/);
+        if (bodyMatch) {
+          description = bodyMatch[1].trim();
         }
       } catch {
         // No metadata file, use default
@@ -355,6 +365,7 @@ async function loadFiles(
         sizeHuman: formatBytes(stats.size),
         modified: stats.mtime.toISOString(),
         scope,
+        description,  // Include description in file info
       });
     }
 
@@ -401,6 +412,10 @@ function formatFilesForContext(files: FileInfo[]): string {
     context += `\n\n[Public] - Visible to all users in this conversation:`;
     for (const file of publicFiles) {
       context += `\n  • ${file.name} (${file.sizeHuman}, type: .${file.type})`;
+      // Include description if available
+      if (file.description) {
+        context += `\n    Description: ${file.description.substring(0, 200)}${file.description.length > 200 ? '...' : ''}`;
+      }
     }
   }
 
@@ -408,6 +423,10 @@ function formatFilesForContext(files: FileInfo[]): string {
     context += `\n\n[User] - Only visible to you:`;
     for (const file of userFiles) {
       context += `\n  • ${file.name} (${file.sizeHuman}, type: .${file.type})`;
+      // Include description if available
+      if (file.description) {
+        context += `\n    Description: ${file.description.substring(0, 200)}${file.description.length > 200 ? '...' : ''}`;
+      }
     }
   }
 
