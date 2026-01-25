@@ -29,10 +29,9 @@ async function ensureExtensionsLoaded(projectId: string): Promise<void> {
 
   try {
     const extensionLoader = new ExtensionLoader();
-    const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
 
     // Load extensions (this registers hooks)
-    await extensionLoader.loadExtensions(projectId, useDefaults);
+    await extensionLoader.loadExtensions(projectId);
 
     // Mark as loaded
     loadedProjects.add(projectId);

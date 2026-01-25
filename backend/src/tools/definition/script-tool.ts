@@ -258,10 +258,9 @@ Example (multi-line):
     };
 
     try {
-      // Load project extensions (respect USE_DEFAULT_EXTENSIONS flag)
+      // Load extensions from defaults directory
       const extensionLoader = new ExtensionLoader();
-      const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
-      const extensions = await extensionLoader.loadExtensions(this.projectId, useDefaults);
+      const extensions = await extensionLoader.loadExtensions(this.projectId);
 
       // Create runtime with injected context and extensions
       const runtime = new ScriptRuntime({

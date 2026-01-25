@@ -1479,9 +1479,8 @@ Always be helpful and conversational.`;
     // Load extensions (this registers hooks like afterFileUpload)
     try {
       const extensionLoader = new ExtensionLoader();
-      // Use USE_DEFAULT_EXTENSIONS env var to load from defaults directory
-      const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
-      await extensionLoader.loadExtensions(projectId, useDefaults);
+      // Extensions are loaded from defaults directory by default
+      await extensionLoader.loadExtensions(projectId);
     } catch (error) {
       console.error(`[WSServer] Failed to load extensions for project ${projectId}:`, error);
     }
