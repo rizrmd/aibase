@@ -11,6 +11,82 @@
 const hookRegistry = typeof extensionHookRegistry !== 'undefined' ? extensionHookRegistry : null;
 
 /**
+ * Context documentation for the image-document extension
+ * This is exported and included in the AI's system prompt
+ */
+export const context = () => `
+### Image Document Extension
+
+**Available Functions:**
+
+#### extract(options)
+Extract description and analyze image content.
+\`\`\`typescript
+await imageDocument.extract({
+  filePath: "photo.png",           // Full path to image
+  fileId: "photo.png",              // Or use file ID (for uploaded files)
+  prompt: "Custom prompt here"      // Optional: custom prompt for analysis
+});
+\`\`\`
+
+#### extractText(options)
+Extract text from image using OCR (Optical Character Recognition).
+\`\`\`typescript
+await imageDocument.extractText({
+  filePath: "KTP.png",              // Full path to image
+  fileId: "KTP.png",                // Or use file ID (for uploaded files)
+  prompt: "What is the NIK number?" // Optional: custom prompt for specific info
+});
+\`\`\`
+
+#### read(options)
+Alias for extract() - read and analyze image.
+\`\`\`typescript
+await imageDocument.read({ fileId: "photo.png" });
+\`\`\`
+
+#### analyzeImage(options)
+Alias for extract() - analyze image content.
+\`\`\`typescript
+await imageDocument.analyzeImage({ filePath: "photo.png" });
+\`\`\`
+
+**Examples:**
+
+1. **Extract text from KTP (Indonesian ID card):**
+\`\`\`typescript
+const result = await imageDocument.extractText({
+  fileId: "KTP MAYLATUN SARI.png",
+  prompt: "What is the NIK (16-digit identification number) on this KTP card? Return only the number."
+});
+return { nik: result.description };
+\`\`\`
+
+2. **General image description:**
+\`\`\`typescript
+const desc = await imageDocument.extract({
+  filePath: "photo.jpg"
+});
+return { description: desc.description };
+\`\`\`
+
+3. **Extract specific information with custom prompt:**
+\`\`\`typescript
+const info = await imageDocument.extractText({
+  fileId: "document.png",
+  prompt: "Extract the name, date, and amount from this document. Format as JSON."
+});
+return { extracted: info.description };
+\`\`\`
+
+**Important Notes:**
+- Use \`extractText()\` for OCR on images with text (KTP, documents, screenshots, etc.)
+- Pass the user's question as the \`prompt\` parameter for targeted results
+- Use \`fileId\` for files uploaded to the conversation, \`filePath\` for full system paths
+- The extension requires OPENAI_API_KEY to be configured
+`;
+
+/**
  * Check if a file is an image based on its MIME type
  */
 function isImageFile(mimeType) {

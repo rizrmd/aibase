@@ -108,9 +108,25 @@ function extractExamplesFromJSDoc(code: string): ExampleEntry[] {
 export function generateExtensionContext(extension: Extension): string {
   const { metadata, code } = extension;
 
-  // Extract main export object name
-  const exportMatch = code.match(/export\s+default\s+(\w+)/);
-  const objectName = exportMatch ? exportMatch[1] : 'extension';
+  // Convert kebab-case ID to camelCase for valid JavaScript identifier
+  // This matches the namespace used in extension-loader.ts
+  const namespace = metadata.id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+
+  // Try to extract the exported context from the code
+  // Pattern: export const context = () => `...` (multi-line template literal)
+  const contextMatch = code.match(/export\s+const\s+context\s*=\s*\(\)\s*=>\s*`([\s\S]+?)`/);
+
+  if (contextMatch) {
+    // Extension has its own context - use it directly
+    const extractedContext = contextMatch[1];
+    if (extractedContext && extractedContext.trim()) {
+      console.log(`[ExtensionContext] Using exported context for ${metadata.id}`);
+      return extractedContext.trim();
+    }
+  }
+
+  // Fallback: Generate context from code analysis
+  console.log(`[ExtensionContext] No exported context found for ${metadata.id}, generating from code`);
 
   // Find all function definitions in the extension object
   // Pattern: functionName: async (params) => { or functionName: (params) => {
@@ -130,6 +146,7 @@ export function generateExtensionContext(extension: Extension): string {
   context += `**ID**: \`${metadata.id}\`\n`;
   context += `**Category**: ${metadata.category || 'Uncategorized'}\n`;
   context += `**Description**: ${metadata.description}\n\n`;
+  context += `**Script Namespace**: \`${namespace}\`\n\n`;
 
   if (uniqueFunctions.length === 0) {
     context += `**Available Functions**: No functions found\n`;
@@ -145,12 +162,12 @@ export function generateExtensionContext(extension: Extension): string {
     if (sig) {
       context += `**${funcName}**\n`;
       context += `\`\`\`typescript\n`;
-      context += `${objectName}.${funcName}(${sig.params})${sig.returnType ? `: ${sig.returnType}` : ''}\n`;
+      context += `${namespace}.${funcName}(${sig.params})${sig.returnType ? `: ${sig.returnType}` : ''}\n`;
       context += `\`\`\`\n\n`;
     } else {
       context += `**${funcName}**\n`;
       context += `\`\`\`typescript\n`;
-      context += `${objectName}.${funcName}(...)\n`;
+      context += `${namespace}.${funcName}(...)\n`;
       context += `\`\`\`\n\n`;
     }
   }
@@ -161,7 +178,7 @@ export function generateExtensionContext(extension: Extension): string {
   if (uniqueFunctions.length > 0) {
     const firstFunc = uniqueFunctions[0];
     context += `// Call the extension function\n`;
-    context += `const result = await ${objectName}.${firstFunc}({\n`;
+    context += `const result = await ${namespace}.${firstFunc}({\n`;
     context += `  // parameters here\n`;
     context += `});\n`;
     context += `return result;\n`;

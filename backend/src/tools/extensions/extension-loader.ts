@@ -136,10 +136,14 @@ export class ExtensionLoader {
       try {
         const exports = await this.evaluateExtension(extension);
 
-        // Merge extension exports into scope
-        Object.assign(scope, exports);
+        // Create a namespace for the extension using its metadata.id
+        // Convert kebab-case ID to camelCase for valid JavaScript identifier
+        const namespace = extension.metadata.id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
 
-        console.log(`[ExtensionLoader] Loaded extension '${extension.metadata.name}' with ${Object.keys(exports).length} exports`);
+        // Add extension under its namespace (e.g., imageDocument, pdfDocument, etc.)
+        scope[namespace] = exports;
+
+        console.log(`[ExtensionLoader] Loaded extension '${extension.metadata.name}' as ${namespace} with ${Object.keys(exports).length} exports`);
       } catch (error: any) {
         console.error(`[ExtensionLoader] Failed to load extension '${extension.metadata.name}':`, error);
         // Continue loading other extensions even if one fails

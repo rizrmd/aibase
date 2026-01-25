@@ -40,9 +40,7 @@ export const context = async () => {
  * - pdfReader(options) for extracting text from PDF files
  *   Options: { filePath?, buffer?, password?, maxPages?, debug? }
  *   Note: Passwords can be stored in memory for security
- * - imageDocument.extractText(options) for extracting text from images (OCR)
- *   Options: { filePath?, fileId?, prompt? }
- *   Use this for PNG/JPG images, NOT pdfReader
+ * - Project extensions (loaded dynamically) - see extension context for available functions
  * - convId, projectId, and CURRENT_UID for context
  * - console for debugging
  * - fetch for HTTP requests
@@ -51,9 +49,9 @@ export class ScriptTool extends Tool {
   name = "script";
 
   description = `Execute Bun TypeScript code with programmatic access to other tools.
-Use for batch operations, complex workflows, data transformations, SQL queries, database operations, PDF text extraction, and image OCR.
-Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), imageDocument.extractText(options), showChart(options), showTable(options), showMermaid(options), and all registered tools as async functions.
-IMPORTANT: Use imageDocument.extractText() for OCR on PNG/JPG images, NOT pdfReader (pdfReader is only for PDF files).
+Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
+Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), showMermaid(options), and project extensions (loaded dynamically with namespace matching extension ID).
+IMPORTANT: For images (PNG/JPG), use project extensions like imageDocument.extractText(), NOT pdfReader (pdfReader is only for PDF files).
 SECURITY REQUIREMENT: NEVER hardcode credentials (API keys, database URLs, passwords) directly in script code. ALWAYS store credentials in memory first using the memory tool, then access them using memory.read(category, key). This is a mandatory security practice - hardcoding credentials exposes secrets in code history and logs.
 Context variables: convId, projectId, CURRENT_UID (user ID from authentication token - will be empty string "" if not authenticated). Note: Bun is used instead of Node.js (Do not use require).`;
 
@@ -88,145 +86,7 @@ Example (multi-line):
     // process file...
   }
   return { processed: files.length };
-
-File write/read/peek examples (create, read, and paginate through files):
-  // Write content to a file
-  await file({ action: 'write', path: 'output.txt', content: 'Hello World' });
-  return { success: true };
-
-  // Write JSON data to a file
-  const data = { users: [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }] };
-  await file({ action: 'write', path: 'users.json', content: JSON.stringify(data, null, 2) });
-  return { written: data.users.length };
-
-  // Read file (returns up to 8000 chars ~2000 tokens)
-  const result = JSON.parse(await file({ action: 'read', path: 'data.json' }));
-  return { content: result.content, truncated: result.truncated };
-
-  // Peek at large file with pagination
-  const page1 = JSON.parse(await file({ action: 'peek', path: 'large.log', offset: 0, limit: 1000 }));
-  const page2 = JSON.parse(await file({ action: 'peek', path: 'large.log', offset: page1.nextOffset, limit: 1000 }));
-  return { page1: page1.content, page2: page2.content, hasMore: page2.hasMore };
-
-DuckDB query examples (read CSV/Excel/Parquet files):
-  // Query a CSV file
-  const data = await duckdb({
-    query: "SELECT * FROM 'data.csv' WHERE age > 25 LIMIT 10"
-  });
-  return { rows: data.rowCount, results: data.data };
-
-  // Read Excel with range (IMPORTANT: range required for multi-column files!)
-  const excel = await duckdb({
-    query: "SELECT * FROM read_xlsx('report.xlsx', header=true, all_varchar=true, range='A1:Z1000') WHERE revenue IS NOT NULL LIMIT 20"
-  });
-  return excel.data;
-
-  // Excel with aggregation (cast to numeric when needed)
-  const summary = await duckdb({
-    query: "SELECT category, SUM(CAST(amount AS DOUBLE)) as total FROM read_xlsx('sales.xlsx', header=true, all_varchar=true, range='A1:F500') GROUP BY category"
-  });
-  return summary.data;
-
-  // Join multiple files
-  const result = await duckdb({
-    query: "SELECT a.name, b.score FROM 'users.csv' a JOIN 'scores.parquet' b ON a.id = b.user_id"
-  });
-  return result.data;
-
-PostgreSQL query examples (RECOMMENDED: store credentials in memory):
-  // FIRST TIME: Store credentials in memory (do this once):
-  await memory({
-    action: 'set',
-    category: 'database',
-    key: 'postgresql_url',
-    value: 'postgresql://user:pass@localhost:5432/mydb'
-  });
-
-  // Then use memory.read() to get the credential (CLEAR and type-safe):
-  const users = await postgresql({
-    query: "SELECT * FROM users WHERE active = true LIMIT 10",
-    connectionUrl: memory.read('database', 'postgresql_url')  // Function call - type-safe!
-  });
-  progress(\`Found \${users.rowCount} users\`);
-  return users.data;
-
-  // Query with aggregation (using memory.read())
-  const stats = await postgresql({
-    query: "SELECT status, COUNT(*) as count FROM orders GROUP BY status",
-    connectionUrl: memory.read('database', 'postgresql_url')
-  });
-  return stats.data;
-
-  // Query with timeout (using memory.read())
-  const large = await postgresql({
-    query: "SELECT * FROM large_table",
-    connectionUrl: memory.read('database', 'postgresql_url'),
-    timeout: 60000 // 60 seconds
-  });
-  return { rowCount: large.rowCount, executionTime: large.executionTime };
-
-PDF reader examples (extract text from PDF files):
-  // Read entire PDF
-  const pdf = await pdfReader({
-    filePath: "document.pdf"
-  });
-  progress(\`Extracted \${pdf.totalPages} pages\`);
-  return { text: pdf.text, pages: pdf.totalPages };
-
-  // RECOMMENDED: For password-protected PDFs, store password in memory (do this once):
-  await memory({
-    action: 'set',
-    category: 'credentials',
-    key: 'pdf_password',
-    value: 'secret123'
-  });
-
-  // Then use memory.read() to get the password (CLEAR and type-safe):
-  const secure = await pdfReader({
-    filePath: "secure.pdf",
-    password: memory.read('credentials', 'pdf_password')  // Function call - type-safe!
-  });
-  return secure.text;
-
-  // Read first 5 pages only
-  const preview = await pdfReader({
-    filePath: "long-document.pdf",
-    maxPages: 5
-  });
-  return { preview: preview.text, totalPages: preview.totalPages };
-
-  // Process multiple PDFs
-  const files = await file({ action: 'list' });
-  const pdfFiles = files.filter(f => f.name.endsWith('.pdf'));
-  const results = [];
-  for (const pdf of pdfFiles) {
-    progress(\`Processing \${pdf.name}\`);
-    const content = await pdfReader({ filePath: pdf.name });
-    results.push({ file: pdf.name, pages: content.totalPages, text: content.text });
-  }
-  return results;
-
-Image OCR examples (extract text from PNG/JPG images):
-  // Extract text from image using OCR
-  const result = await imageDocument.extractText({
-    filePath: "KTP MAYLATUN SARI.png"
-  });
-  progress(\`Extracted text from image\`);
-  return { text: result.description };
-
-  // Extract text by file ID (for uploaded files)
-  const ocr = await imageDocument.extractText({
-    fileId: "KTP MAYLATUN SARI.png"
-  });
-  return { description: ocr.description };
-
-  // Extract specific information with custom prompt (recommended!)
-  // Use the user's question as the prompt for targeted results
-  const nik = await imageDocument.extractText({
-    fileId: "KTP MAYLATUN SARI.png",
-    prompt: "What is the NIK (16-digit identification number) on this KTP card? Return only the number."
-  });
-  return { nik: nik.description };`,
+`,
       },
     },
     required: ["purpose", "code"],
