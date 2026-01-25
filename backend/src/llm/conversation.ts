@@ -484,7 +484,7 @@ export class Conversation {
           let detail = `- **${a.name}** (${(a.size / 1024).toFixed(2)} KB)`;
           if (a.description) {
             // Include more of the description (500 chars instead of 200) for better context
-            detail += `\n${a.description}`;
+            detail += `\n  - ${a.description}`;
           }
           return detail;
         }).join('\n');
@@ -505,6 +505,7 @@ export class Conversation {
       }
 
       // Add user message to history
+      // Store the enhanced content (with attachment template) for the LLM
       const userMessage: ChatCompletionMessageParam & { _attachments?: any[] } = {
         role: "user",
         content: messageContent,

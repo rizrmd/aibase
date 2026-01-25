@@ -9,6 +9,23 @@ import * as path from 'path';
 import { extractTextFromDocx, isDocxFile } from '../../../../utils/document-extractor';
 import { getConversationFilesDir } from '../../../../config/paths';
 
+// Type definitions
+interface ExtractOptions {
+  filePath?: string;
+  fileId?: string;
+}
+
+interface ExtractResult {
+  text: string;
+}
+
+// Extend globalThis for extension context
+declare global {
+  var convId: string | undefined;
+  var projectId: string | undefined;
+  var tenantId: string | undefined;
+}
+
 /**
  * Context documentation for the Word Document extension
  */
@@ -77,14 +94,12 @@ const wordDocumentExtension = {
   /**
    * Extract text from Word document
    *
-   * @param filePath - Full path to the DOCX file
-   * @param fileId - File ID in conversation storage (alternative to filePath)
+   * @param options - Extraction options
+   * @param options.filePath - Full path to the DOCX file
+   * @param options.fileId - File ID in conversation storage (alternative to filePath)
    * @returns Extracted text content
    */
-  extract: async (options: {
-    filePath?: string;
-    fileId?: string;
-  }) => {
+  extract: async (options: ExtractOptions) => {
     if (!options || typeof options !== "object") {
       throw new Error("extractDOCX requires an options object");
     }
@@ -97,9 +112,9 @@ const wordDocumentExtension = {
 
     // If fileId is provided, resolve to actual file path
     if (options.fileId) {
-      const convId = (globalThis as any).convId || '';
-      const projectId = (globalThis as any).projectId || '';
-      const tenantId = (globalThis as any).tenantId || 'default';
+      const convId = globalThis.convId || '';
+      const projectId = globalThis.projectId || '';
+      const tenantId = globalThis.tenantId || 'default';
       const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
       filePath = path.join(convFilesDir, options.fileId);
 
@@ -121,32 +136,33 @@ const wordDocumentExtension = {
 
     try {
       const text = await extractTextFromDocx(filePath);
-      return { text };
-    } catch (error: any) {
-      throw new Error(`DOCX extraction failed: ${error.message}`);
+      return { text } as ExtractResult;
+    } catch (error: unknown) {
+      throw new Error(`DOCX extraction failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
   /**
    * Read Word document - alias for extract()
    */
-  read: async (options: { filePath?: string; fileId?: string }) => {
+  read: async (options: ExtractOptions) => {
     return wordDocumentExtension.extract(options);
   },
 
   /**
    * Convenience method - alias for extract()
    */
-  extractDOCX: async (options: { filePath?: string; fileId?: string }) => {
+  extractDOCX: async (options: ExtractOptions) => {
     return wordDocumentExtension.extract(options);
   },
 
   /**
    * Convenience method - alias for read()
    */
-  docxReader: async (options: { filePath?: string; fileId?: string }) => {
+  docxReader: async (options: ExtractOptions) => {
     return wordDocumentExtension.read(options);
   },
 };
 
-export default wordDocumentExtension;
+// @ts-expect-error - Extension loader wraps this code in an async function
+return wordDocumentExtension;

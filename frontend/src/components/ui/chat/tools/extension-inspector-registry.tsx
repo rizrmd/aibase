@@ -6,7 +6,7 @@
  * detailed information in the script details dialog
  */
 
-import { ComponentType } from "react";
+import type { ComponentType } from "react";
 
 export interface InspectorComponentProps {
   data: any;

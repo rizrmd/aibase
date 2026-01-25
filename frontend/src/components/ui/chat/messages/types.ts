@@ -56,6 +56,8 @@ export interface UploadedFileAttachment {
   uploadedAt: number;
   description?: string;
   thumbnailUrl?: string;
+  processingStatus?: string; // Processing status for this file (e.g., "Uploading...", "Analyzing...")
+  timeElapsed?: number; // Time elapsed since processing started in seconds (e.g., 3, 5, 10)
 }
 
 export interface Message {

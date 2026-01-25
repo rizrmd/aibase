@@ -6,7 +6,7 @@
 import { FileStorage, FileScope } from '../storage/file-storage';
 import { ProjectStorage } from '../storage/project-storage';
 import { createLogger } from '../utils/logger';
-import * as sharp from 'sharp';
+import sharp from 'sharp';
 import * as path from 'path';
 import { extensionHookRegistry } from '../tools/extensions/extension-hooks';
 import { ExtensionLoader } from '../tools/extensions/extension-loader';

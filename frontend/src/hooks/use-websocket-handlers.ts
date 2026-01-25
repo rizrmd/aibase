@@ -563,7 +563,13 @@ export function useWebSocketHandlers({
                   // Preserve toolInvocations for backward compatibility
                   ...(mergedToolInvocations.length > 0 && { toolInvocations: mergedToolInvocations }),
                   // Preserve attachments field to maintain file UI after completion
-                  ...(msg.attachments && { attachments: msg.attachments }),
+                  ...(msg.attachments && {
+                    attachments: msg.attachments.map(f => ({
+                      ...f,
+                      processingStatus: undefined, // Clear processing status on completion
+                      timeElapsed: undefined, // Clear time elapsed on completion
+                    }))
+                  }),
                   ...(msg.experimental_attachments && { experimental_attachments: msg.experimental_attachments }),
                 };
                 console.log(`[Complete] Updated message: content=${fullText.length} chars, parts=${finalParts?.length || 0}, tools=${mergedToolInvocations.length}, attachments=${msg.attachments?.length || 0}`);
@@ -622,6 +628,14 @@ export function useWebSocketHandlers({
       currentPartsRef.current = []; // Clear parts for next message
       setIsLoading(false);
 
+      // Clear analysis state when LLM completes
+      const { setAnalysisStartTime, setUploadingMessageId, uploadingMessageId } = useChatStore.getState();
+      if (uploadingMessageId) {
+        console.log("[Complete] Clearing analysis state for:", uploadingMessageId);
+        setAnalysisStartTime(null);
+        setUploadingMessageId(null);
+      }
+
       console.log("Completion handling complete");
     };
 
@@ -658,7 +672,8 @@ export function useWebSocketHandlers({
 
       // Processing-related status (file uploads, extension processing, etc.)
       if (data.status === 'processing' || data.status === 'complete') {
-        const { setUploadingMessageId, setProcessingStatus } = useChatStore.getState();
+        const { setUploadingMessageId, uploadingMessageId } = useChatStore.getState();
+        console.log('[handleStatus] Processing status:', data.status, 'message:', data.message, 'uploadingMessageId:', uploadingMessageId);
 
         // Check if this is an extension analysis status (Analyzing...)
         const isAnalyzing = data.message && (
@@ -668,44 +683,67 @@ export function useWebSocketHandlers({
         );
 
         if (isAnalyzing && data.status === 'processing') {
-          // Update the upload progress message to show analysis status
-          const { uploadingMessageId } = useChatStore.getState();
+          // Update the file attachments in the user message to show analysis status
           if (uploadingMessageId) {
-            const { updateMessage } = useChatStore.getState();
+            const { updateMessage, analysisStartTime, setAnalysisStartTime } = useChatStore.getState();
+
+            // Track analysis start time if not already tracking
+            if (!analysisStartTime) {
+              setAnalysisStartTime(Date.now());
+              console.log('[handleStatus] Analysis started at:', Date.now());
+            }
+
+            // Calculate elapsed time in seconds
+            const elapsed = analysisStartTime ? Math.ceil((Date.now() - analysisStartTime) / 1000) : 0;
+
             updateMessage(uploadingMessageId, {
-              content: data.message || 'Processing...',
-              uploadProgress: 100, // Keep at 100% to show it's still working
+              attachments: (useChatStore.getState().messages.find(m => m.id === uploadingMessageId)?.attachments || []).map(f => ({
+                ...f,
+                processingStatus: data.message || 'Processing...',
+                timeElapsed: elapsed,
+              })),
             });
-            console.log('[handleStatus] Updated upload progress message to:', data.message);
+            console.log('[handleStatus] Updated file attachment processing status to:', data.message, 'timeElapsed:', elapsed);
           }
         } else if (data.status === 'complete') {
-          // Upload complete - keep message briefly, then remove
-          const { uploadingMessageId } = useChatStore.getState();
+          // Upload/analysis complete - clear processing status from file attachments
+          console.log('[handleStatus] Complete status received, clearing processing status for:', uploadingMessageId);
           if (uploadingMessageId) {
-            const { updateMessage } = useChatStore.getState();
+            const { updateMessage, setAnalysisStartTime } = useChatStore.getState();
             updateMessage(uploadingMessageId, {
-              content: 'Upload complete',
-              uploadProgress: undefined,
+              attachments: (useChatStore.getState().messages.find(m => m.id === uploadingMessageId)?.attachments || []).map(f => ({
+                ...f,
+                processingStatus: undefined, // Clear processing status
+                timeElapsed: undefined, // Clear time elapsed
+              })),
             });
+            console.log('[handleStatus] Cleared processing status for attachments');
 
-            // Auto-remove after 2 seconds
-            const timeoutId = setTimeout(() => {
-              const { setMessages, uploadingMessageId: currentId } = useChatStore.getState();
+            // Clear analysis start time
+            setAnalysisStartTime(null);
+
+            // Clear the tracking ID after a short delay
+            setTimeout(() => {
+              const { uploadingMessageId: currentId } = useChatStore.getState();
               if (uploadingMessageId === currentId) {
-                // Only remove if it still exists (hasn't been replaced)
-                setMessages((prev) => prev.filter((m) => m.id !== uploadingMessageId));
                 setUploadingMessageId(null);
               }
-              clearTimeout(timeoutId);
-            }, 2000);
-
-            // Store timeout ID for cleanup (in case user sends message before timeout)
-            (uploadProgressMessageId as any)._removeTimeoutId = timeoutId;
+            }, 500);
+          } else {
+            console.log('[handleStatus] Complete status but no uploadingMessageId to update');
           }
         } else {
-          // Regular processing status (upload progress, etc.)
-          setProcessingStatus(data.message || null);
-          console.log('[handleStatus] Processing status updated:', data.message);
+          // Regular processing status - update file attachments if we have an uploading message
+          if (uploadingMessageId && data.message) {
+            const { updateMessage } = useChatStore.getState();
+            updateMessage(uploadingMessageId, {
+              attachments: (useChatStore.getState().messages.find(m => m.id === uploadingMessageId)?.attachments || []).map(f => ({
+                ...f,
+                processingStatus: data.message,
+              })),
+            });
+            console.log('[handleStatus] Updated file attachment processing status to:', data.message);
+          }
         }
       }
 
@@ -715,9 +753,9 @@ export function useWebSocketHandlers({
           const update = JSON.parse(data.message || '{}');
           const { setFiles } = useFileStore.getState();
           setFiles((prevFiles) =>
-            prevFiles.map((f) =>
+            prevFiles ? prevFiles.map((f) =>
               f.name === update.fileName ? { ...f, description: update.description } : f
-            )
+            ) : prevFiles
           );
         } catch (e) {
           console.error('[handleStatus] Failed to parse file update:', data.message);
@@ -1212,6 +1250,7 @@ export function useWebSocketHandlers({
         error: data.error,
         timestamp,
         duration,
+        inspectionData: existingInvocation?.inspectionData,
       };
       currentToolInvocationsRef.current.set(data.toolCallId, toolInvocation);
 
@@ -1557,9 +1596,34 @@ export function useWebSocketHandlers({
     // Connect to WebSocket (connection manager handles multiple calls gracefully)
     wsClient.connect().catch(handleError);
 
+    // Set up interval to update elapsed time during analysis
+    const timeUpdateInterval = setInterval(() => {
+      const { uploadingMessageId, analysisStartTime } = useChatStore.getState();
+      if (uploadingMessageId && analysisStartTime) {
+        const { updateMessage } = useChatStore.getState();
+        const message = useChatStore.getState().messages.find(m => m.id === uploadingMessageId);
+        const attachment = message?.attachments?.[0];
+
+        // Only update if attachment has processing status (still analyzing)
+        if (attachment?.processingStatus && message) {
+          const elapsed = Math.ceil((Date.now() - analysisStartTime) / 1000);
+
+          updateMessage(uploadingMessageId, {
+            attachments: message.attachments?.map(f => ({
+              ...f,
+              timeElapsed: elapsed,
+            })),
+          });
+        }
+      }
+    }, 1000); // Update every second
+
     // Cleanup function - just remove event listeners, connection manager handles disconnection
     return () => {
       console.log("[Setup] Cleaning up event handlers for convId:", convId);
+
+      // Clear the time update interval
+      clearInterval(timeUpdateInterval);
 
       // Unregister this tab
       activeTabManager.unregisterTab(componentRef.current, convId);

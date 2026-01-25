@@ -52,7 +52,6 @@ export function MainChat({
     isHistoryLoading,
     error,
     todos,
-    processingStatus,
     setMessages,
     setInput,
     setIsLoading,
@@ -70,7 +69,6 @@ export function MainChat({
       isHistoryLoading: state.isHistoryLoading,
       error: state.error,
       todos: state.todos,
-      processingStatus: state.processingStatus,
       setMessages: state.setMessages,
       setInput: state.setInput,
       setIsLoading: state.setIsLoading,
@@ -336,7 +334,6 @@ export function MainChat({
           stop={abort}
           setMessages={setMessages}
           className="h-full"
-          processingStatus={processingStatus}
           welcomeMessage={welcomeMessage}
         />
       </div>

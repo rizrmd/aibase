@@ -32,7 +32,6 @@ interface ChatPropsBase {
   ) => void;
   setMessages?: (messages: any[]) => void;
   transcribeAudio?: (blob: Blob) => Promise<string>;
-  processingStatus?: string | null;
   welcomeMessage?: string | null;
 }
 
@@ -50,7 +49,6 @@ export function Chat({
   onRateResponse,
   setMessages,
   transcribeAudio,
-  processingStatus,
   welcomeMessage,
 }: ChatProps) {
   const isEmpty = messages.length === 0;
@@ -220,16 +218,6 @@ export function Chat({
           />
         </ChatMessages>
       ) : null}
-
-      {/* Processing status indicator */}
-      {processingStatus && (
-        <div className="mx-auto md:max-w-[650px] w-full px-4 mb-2">
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-900 dark:text-blue-100 shadow-sm animate-in fade-in-0 slide-in-from-top-2">
-            <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
-            <span className="font-medium">{processingStatus}</span>
-          </div>
-        </div>
-      )}
 
       <ChatForm
         className="mt-auto mx-auto w-full md:max-w-[650px]"

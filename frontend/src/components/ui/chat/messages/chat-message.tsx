@@ -66,7 +66,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   // If this is an upload progress message, show progress bar
   if (uploadProgress !== undefined) {
     return (
-      <div className={cn("flex flex-col", isUser ? "items-end" : "items-start")}>
+      <div
+        className={cn("flex flex-col", isUser ? "items-end" : "items-start")}
+      >
         <div className={cn(chatBubbleVariants({ isUser, animation }))}>
           <div className="flex items-center gap-3 min-w-[200px]">
             <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
@@ -85,7 +87,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             className={cn(
               "t1",
               "mt-1 block px-1 text-xs opacity-50",
-              animation !== "none" && "duration-500 animate-in fade-in-0"
+              animation !== "none" && "duration-500 animate-in fade-in-0",
             )}
           >
             {formattedTime}
@@ -115,11 +117,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         )}
 
         {/* Only show message bubble if there's actual content */}
-        {content && content.trim() && (
-          <div className={cn(chatBubbleVariants({ isUser, animation }))}>
-            <MarkdownRenderer>{content}</MarkdownRenderer>
-          </div>
-        )}
+        {content &&
+          content.trim() &&
+          !(attachments && attachments.length > 0) && (
+            <div className={cn(chatBubbleVariants({ isUser, animation }))}>
+              <MarkdownRenderer>{content}</MarkdownRenderer>
+            </div>
+          )}
 
         {showTimeStamp && createdAt ? (
           <time
@@ -127,7 +131,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             className={cn(
               "t1",
               "mt-1 block px-1 text-xs opacity-50",
-              animation !== "none" && "duration-500 animate-in fade-in-0"
+              animation !== "none" && "duration-500 animate-in fade-in-0",
             )}
           >
             {formattedTime}
@@ -153,7 +157,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           groupedParts.push(
             currentFileParts.length === 1
               ? currentFileParts[0]
-              : currentFileParts
+              : currentFileParts,
           );
           currentFileParts = [];
         }
@@ -167,7 +171,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           groupedParts.push(
             currentMemoryParts.length === 1
               ? currentMemoryParts[0]
-              : currentMemoryParts
+              : currentMemoryParts,
           );
           currentMemoryParts = [];
         }
@@ -178,7 +182,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           groupedParts.push(
             currentMemoryParts.length === 1
               ? currentMemoryParts[0]
-              : currentMemoryParts
+              : currentMemoryParts,
           );
           currentMemoryParts = [];
         }
@@ -187,7 +191,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           groupedParts.push(
             currentFileParts.length === 1
               ? currentFileParts[0]
-              : currentFileParts
+              : currentFileParts,
           );
           currentFileParts = [];
         }
@@ -201,12 +205,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       groupedParts.push(
         currentMemoryParts.length === 1
           ? currentMemoryParts[0]
-          : currentMemoryParts
+          : currentMemoryParts,
       );
     }
     if (currentFileParts.length > 0) {
       groupedParts.push(
-        currentFileParts.length === 1 ? currentFileParts[0] : currentFileParts
+        currentFileParts.length === 1 ? currentFileParts[0] : currentFileParts,
       );
     }
 
@@ -252,12 +256,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               <div
                 className={cn(
                   "flex flex-col",
-                  isUser ? "items-end" : "items-start"
+                  isUser ? "items-end" : "items-start",
                 )}
                 key={`text-${index}`}
               >
                 <div
-                  className={cn("mo", chatBubbleVariants({ isUser, animation }))}
+                  className={cn(
+                    "mo",
+                    chatBubbleVariants({ isUser, animation }),
+                  )}
                 >
                   <MarkdownRenderer>{part.text}</MarkdownRenderer>
                   {actions ? (
@@ -288,7 +295,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             className={cn(
               "t2-summary",
               "mt-1 block px-1 text-xs opacity-50",
-              animation !== "none" && "duration-500 animate-in fade-in-0"
+              animation !== "none" && "duration-500 animate-in fade-in-0",
             )}
           >
             {formattedTime}
@@ -347,7 +354,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     <div
       className={cn(
         "flex flex-col gap-2",
-        isUser ? "items-end" : "items-start"
+        isUser ? "items-end" : "items-start",
       )}
     >
       {/* Render content before tools */}
@@ -383,13 +390,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           className={cn(
             "t3",
             "mt-1 block px-1 text-xs opacity-50",
-            animation !== "none" && "duration-500 animate-in fade-in-0"
+            animation !== "none" && "duration-500 animate-in fade-in-0",
           )}
         >
           {formattedTime}
-          {!isUser && completionTime !== undefined && (
-            <> • {completionTime}s</>
-          )}
+          {!isUser && completionTime !== undefined && <> • {completionTime}s</>}
           {!isUser && aborted && (
             <>
               {" "}

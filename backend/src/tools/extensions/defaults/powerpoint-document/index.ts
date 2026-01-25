@@ -9,6 +9,23 @@ import * as path from 'path';
 import { extractTextFromPowerPoint, isPowerPointFile } from '../../../../utils/document-extractor';
 import { getConversationFilesDir } from '../../../../config/paths';
 
+// Type definitions
+interface ExtractOptions {
+  filePath?: string;
+  fileId?: string;
+}
+
+interface ExtractResult {
+  text: string;
+}
+
+// Extend globalThis for extension context
+declare global {
+  var convId: string | undefined;
+  var projectId: string | undefined;
+  var tenantId: string | undefined;
+}
+
 /**
  * Context documentation for the PowerPoint Document extension
  */
@@ -76,14 +93,12 @@ const powerpointDocumentExtension = {
   /**
    * Extract text from PowerPoint presentation
    *
-   * @param filePath - Full path to the PPTX file
-   * @param fileId - File ID in conversation storage (alternative to filePath)
+   * @param options - Extraction options
+   * @param options.filePath - Full path to the PPTX file
+   * @param options.fileId - File ID in conversation storage (alternative to filePath)
    * @returns Extracted text content from all slides
    */
-  extract: async (options: {
-    filePath?: string;
-    fileId?: string;
-  }) => {
+  extract: async (options: ExtractOptions) => {
     if (!options || typeof options !== "object") {
       throw new Error("extractPowerPoint requires an options object");
     }
@@ -96,9 +111,9 @@ const powerpointDocumentExtension = {
 
     // If fileId is provided, resolve to actual file path
     if (options.fileId) {
-      const convId = (globalThis as any).convId || '';
-      const projectId = (globalThis as any).projectId || '';
-      const tenantId = (globalThis as any).tenantId || 'default';
+      const convId = globalThis.convId || '';
+      const projectId = globalThis.projectId || '';
+      const tenantId = globalThis.tenantId || 'default';
       const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
       filePath = path.join(convFilesDir, options.fileId);
 
@@ -120,32 +135,33 @@ const powerpointDocumentExtension = {
 
     try {
       const text = await extractTextFromPowerPoint(filePath);
-      return { text };
-    } catch (error: any) {
-      throw new Error(`PowerPoint extraction failed: ${error.message}`);
+      return { text } as ExtractResult;
+    } catch (error: unknown) {
+      throw new Error(`PowerPoint extraction failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
   /**
    * Read PowerPoint presentation - alias for extract()
    */
-  read: async (options: { filePath?: string; fileId?: string }) => {
+  read: async (options: ExtractOptions) => {
     return powerpointDocumentExtension.extract(options);
   },
 
   /**
    * Convenience method - alias for extract()
    */
-  extractPPTX: async (options: { filePath?: string; fileId?: string }) => {
+  extractPPTX: async (options: ExtractOptions) => {
     return powerpointDocumentExtension.extract(options);
   },
 
   /**
    * Convenience method - alias for read()
    */
-  pptxReader: async (options: { filePath?: string; fileId?: string }) => {
+  pptxReader: async (options: ExtractOptions) => {
     return powerpointDocumentExtension.read(options);
   },
 };
 
-export default powerpointDocumentExtension;
+// @ts-expect-error - Extension loader wraps this code in an async function
+return powerpointDocumentExtension;

@@ -3,6 +3,47 @@
  * Search for images using Brave Search API
  */
 
+// Type definitions
+interface ImageSearchOptions {
+  search_query: string;
+  count?: number;
+  country?: string;
+  safesearch?: "off" | "moderate" | "strict";
+  spellcheck?: boolean;
+}
+
+interface BraveImageResult {
+  title?: string;
+  properties?: {
+    url?: string;
+    width?: number;
+    height?: number;
+  };
+  url?: string;
+  thumbnail?: {
+    src?: string;
+  };
+  source?: string;
+}
+
+interface BraveImageSearchResponse {
+  results?: BraveImageResult[];
+}
+
+interface TransformedImageResult {
+  title: string;
+  url: string;
+  thumbnail: string;
+  source: string;
+  width?: number;
+  height?: number;
+}
+
+interface ImageSearchResult {
+  results: TransformedImageResult[];
+  total: number;
+}
+
 /**
  * Context documentation for the image-search extension
  */
@@ -99,20 +140,15 @@ function getBraveApiKey(): string {
 /**
  * Image search extension
  */
-export default {
+// @ts-expect-error - Extension loader wraps this code in an async function
+return {
   /**
    * Search for images
    *
    * Usage:
    * const images = await imageSearch({ search_query: 'cute cats', count: 10 });
    */
-  imageSearch: async (options: {
-    search_query: string;
-    count?: number;
-    country?: string;
-    safesearch?: "off" | "moderate" | "strict";
-    spellcheck?: boolean;
-  }) {
+  imageSearch: async (options: ImageSearchOptions) => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "imageSearch requires an options object. Usage: await imageSearch({ search_query: 'your query' })"
@@ -161,10 +197,10 @@ export default {
         );
       }
 
-      const data = await response.json() as any;
+      const data = await response.json() as BraveImageSearchResponse;
 
       const imageResults = data.results || [];
-      const transformedResults = imageResults.map((item: any) => ({
+      const transformedResults = imageResults.map((item: BraveImageResult): TransformedImageResult => ({
         title: item.title || "",
         url: item.properties?.url || item.url || "",
         thumbnail: item.thumbnail?.src || "",
@@ -177,8 +213,8 @@ export default {
         results: transformedResults,
         total: transformedResults.length,
       };
-    } catch (error: any) {
-      throw new Error(`Image search failed: ${error.message}`);
+    } catch (error: unknown) {
+      throw new Error(`Image search failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 };

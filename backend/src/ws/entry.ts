@@ -1128,8 +1128,12 @@ export class WSServer extends WSEventEmitter {
             connectionInfo.userId
           );
 
-          // Filter out system messages - they should never be sent to client
-          const clientHistory = history.filter((msg) => msg.role !== "system");
+          // Filter out system messages and user messages with _shouldHide flag
+          // _shouldHide is set for messages where we added attachment template content
+          // Frontend already shows the original message locally, so we don't send these from history
+          const clientHistory = history.filter((msg: any) =>
+            msg.role !== "system" && !msg._shouldHide
+          );
 
           console.log(`Backend: Retrieved history:`, {
             hasHistory: !!history,

@@ -5,18 +5,27 @@
 
 import { retrieveOutput, getOutputMetadata } from "../../../script-runtime/output-storage";
 
+// Type definitions
+interface OutputMetadata {
+  size: number;
+  dataType: string;
+  rowCount?: number;
+}
+
+interface PeekMetadata {
+  totalSize: number;
+  dataType: string;
+  rowCount?: number;
+  requestedOffset: number;
+  requestedLimit: number;
+  actualReturned: number;
+  hasMore: boolean;
+}
+
 export interface PeekResult {
   outputId: string;
-  data: any;
-  metadata: {
-    totalSize: number;
-    dataType: string;
-    rowCount?: number;
-    requestedOffset: number;
-    requestedLimit: number;
-    actualReturned: number;
-    hasMore: boolean;
-  };
+  data: unknown[] | string | Record<string, unknown>;
+  metadata: PeekMetadata;
 }
 
 /**
@@ -55,7 +64,7 @@ const context = () =>
   '`' + '`' + '`' + 'typescript' +
   '{' +
   '  outputId: string,' +
-  '  data: Array<any> | string,  // The paginated data' +
+  '  data: Array<unknown> | string | Record<string, unknown>,  // The paginated data' +
   '  metadata: {' +
   '    totalSize: number,         // Total size in bytes' +
   '    dataType: string,          // "array" or "string"' +
@@ -119,7 +128,8 @@ const context = () =>
 /**
  * Peek extension
  */
-export default {
+// @ts-expect-error - Extension loader wraps this code in an async function
+return {
   /**
    * Paginated access to stored output
    *
@@ -138,14 +148,14 @@ export default {
       throw new Error("Limit must be positive");
     }
 
-    const metadata = getOutputMetadata(outputId);
+    const metadata = getOutputMetadata(outputId) as OutputMetadata;
     if (!metadata) {
       throw new Error(`Output not found: ${outputId}`);
     }
 
     const fullOutput = await retrieveOutput(outputId);
 
-    let data: any;
+    let data: unknown[] | string | Record<string, unknown>;
     let actualReturned: number;
     let hasMore: boolean;
 
@@ -165,7 +175,7 @@ export default {
       const selectedKeys = keys.slice(offset, end);
       data = {};
       for (const key of selectedKeys) {
-        data[key] = fullOutput[key];
+        (data as Record<string, unknown>)[key] = fullOutput[key];
       }
       actualReturned = selectedKeys.length;
       hasMore = end < keys.length;
@@ -193,8 +203,8 @@ export default {
   /**
    * Get output metadata without retrieving data
    */
-  peekInfo: async (outputId: string) => {
-    const metadata = getOutputMetadata(outputId);
+  peekInfo: async (outputId: string): Promise<OutputMetadata> => {
+    const metadata = getOutputMetadata(outputId) as OutputMetadata;
     if (!metadata) {
       throw new Error(`Output not found: ${outputId}`);
     }

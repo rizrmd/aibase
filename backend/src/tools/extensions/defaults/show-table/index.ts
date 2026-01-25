@@ -3,6 +3,26 @@
  * Display tabular data in the frontend
  */
 
+// Type definitions
+interface TableColumn {
+  key: string;
+  label: string;
+}
+
+interface ShowTableOptions {
+  title: string;
+  columns: TableColumn[];
+  data: Record<string, unknown>[];
+}
+
+interface ShowTableResult {
+  __visualization: {
+    type: string;
+    toolCallId: string;
+    args: ShowTableOptions;
+  };
+}
+
 /**
  * Context documentation for the show-table extension
  */
@@ -106,7 +126,7 @@ const showTableExtension = {
    *   data: [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }]
    * });
    */
-  showTable: async (args) => {
+  showTable: async (args: ShowTableOptions): Promise<ShowTableResult> => {
     const toolCallId = `call_${Date.now()}_table`;
 
     return {

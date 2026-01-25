@@ -9,6 +9,36 @@ import * as path from 'path';
 import { extractTextFromPdf, isPdfFile } from '../../../../utils/document-extractor';
 import { getConversationFilesDir } from '../../../../config/paths';
 
+// Type definitions
+interface ExtractPDFOptions {
+  filePath?: string;
+  fileId?: string;
+}
+
+interface ReadPDFOptions {
+  filePath?: string;
+  fileId?: string;
+  buffer?: Buffer;
+  password?: string;
+  maxPages?: number;
+}
+
+interface ExtractPDFResult {
+  text: string;
+}
+
+interface ReadPDFResult {
+  text: string;
+  totalPages: number;
+}
+
+// Extend globalThis for extension context
+declare global {
+  var convId: string | undefined;
+  var projectId: string | undefined;
+  var tenantId: string | undefined;
+}
+
 /**
  * Context documentation for the PDF Document extension
  */
@@ -81,10 +111,7 @@ const pdfDocumentExtension = {
    * @param fileId - File ID in conversation storage (alternative to filePath)
    * @returns Extracted text content
    */
-  extract: async (options: {
-    filePath?: string;
-    fileId?: string;
-  }) => {
+  extract: async (options: ExtractPDFOptions) => {
     if (!options || typeof options !== "object") {
       throw new Error("extractPDF requires an options object");
     }
@@ -98,9 +125,9 @@ const pdfDocumentExtension = {
     // If fileId is provided, resolve to actual file path
     if (options.fileId) {
       // Access conversation files from storage
-      const convId = (globalThis as any).convId || '';
-      const projectId = (globalThis as any).projectId || '';
-      const tenantId = (globalThis as any).tenantId || 'default';
+      const convId = globalThis.convId || '';
+      const projectId = globalThis.projectId || '';
+      const tenantId = globalThis.tenantId || 'default';
       const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
       filePath = path.join(convFilesDir, options.fileId);
 
@@ -124,9 +151,9 @@ const pdfDocumentExtension = {
 
     try {
       const text = await extractTextFromPdf(filePath);
-      return { text };
-    } catch (error: any) {
-      throw new Error(`PDF extraction failed: ${error.message}`);
+      return { text } as ExtractPDFResult;
+    } catch (error: unknown) {
+      throw new Error(`PDF extraction failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
@@ -143,13 +170,7 @@ const pdfDocumentExtension = {
    * @param maxPages - Maximum pages to extract (optional)
    * @returns Extracted text with page count
    */
-  read: async (options: {
-    filePath?: string;
-    fileId?: string;
-    buffer?: Buffer;
-    password?: string;
-    maxPages?: number;
-  }) => {
+  read: async (options: ReadPDFOptions) => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "read requires an options object. Usage: await read({ filePath: 'document.pdf' })"
@@ -172,9 +193,9 @@ const pdfDocumentExtension = {
 
         // If fileId is provided, resolve to actual file path
         if (options.fileId) {
-          const convId = (globalThis as any).convId || '';
-          const projectId = (globalThis as any).projectId || '';
-          const tenantId = (globalThis as any).tenantId || 'default';
+          const convId = globalThis.convId || '';
+          const projectId = globalThis.projectId || '';
+          const tenantId = globalThis.tenantId || 'default';
           const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
           filePath = path.join(convFilesDir, options.fileId);
 
@@ -218,31 +239,26 @@ const pdfDocumentExtension = {
       return {
         text: cleanedText,
         totalPages: totalPages,
-      };
-    } catch (error: any) {
-      throw new Error(`PDF reading failed: ${error.message}`);
+      } as ReadPDFResult;
+    } catch (error: unknown) {
+      throw new Error(`PDF reading failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
   /**
    * Convenience method - alias for extract()
    */
-  extractPDF: async (options: { filePath?: string; fileId?: string }) => {
+  extractPDF: async (options: ExtractPDFOptions) => {
     return pdfDocumentExtension.extract(options);
   },
 
   /**
    * Convenience method - alias for read()
    */
-  pdfReader: async (options: {
-    filePath?: string;
-    fileId?: string;
-    buffer?: Buffer;
-    password?: string;
-    maxPages?: number;
-  }) => {
+  pdfReader: async (options: ReadPDFOptions) => {
     return pdfDocumentExtension.read(options);
   },
 };
 
-export default pdfDocumentExtension;
+// @ts-expect-error - Extension loader wraps this code in an async function
+return pdfDocumentExtension;

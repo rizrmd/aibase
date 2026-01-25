@@ -3,6 +3,20 @@
  * Display Mermaid diagrams in the frontend
  */
 
+// Type definitions
+interface ShowMermaidOptions {
+  title: string;
+  code: string;
+}
+
+interface ShowMermaidResult {
+  __visualization: {
+    type: string;
+    toolCallId: string;
+    args: ShowMermaidOptions;
+  };
+}
+
 /**
  * Context documentation for the show-mermaid extension
  */
@@ -99,7 +113,7 @@ const showMermaidExtension = {
    *   code: 'graph TD\n    A[Start] --> B[End]'
    * });
    */
-  showMermaid: async (args) => {
+  showMermaid: async (args: ShowMermaidOptions): Promise<ShowMermaidResult> => {
     const toolCallId = `call_${Date.now()}_mermaid`;
 
     return {

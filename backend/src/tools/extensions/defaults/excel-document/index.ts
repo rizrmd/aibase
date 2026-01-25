@@ -9,6 +9,23 @@ import * as path from 'path';
 import { extractTextFromExcel, isExcelFile } from '../../../../utils/document-extractor';
 import { getConversationFilesDir } from '../../../../config/paths';
 
+// Type definitions
+interface ExtractExcelOptions {
+  filePath?: string;
+  fileId?: string;
+}
+
+interface ExtractExcelResult {
+  text: string;
+}
+
+// Extend globalThis for extension context
+declare global {
+  var convId: string | undefined;
+  var projectId: string | undefined;
+  var tenantId: string | undefined;
+}
+
 /**
  * Context documentation for the Excel Document extension
  */
@@ -81,10 +98,7 @@ const excelDocumentExtension = {
    * @param fileId - File ID in conversation storage (alternative to filePath)
    * @returns Extracted text content from all sheets
    */
-  extract: async (options: {
-    filePath?: string;
-    fileId?: string;
-  }) => {
+  extract: async (options: ExtractExcelOptions) => {
     if (!options || typeof options !== "object") {
       throw new Error("extractExcel requires an options object");
     }
@@ -97,9 +111,9 @@ const excelDocumentExtension = {
 
     // If fileId is provided, resolve to actual file path
     if (options.fileId) {
-      const convId = (globalThis as any).convId || '';
-      const projectId = (globalThis as any).projectId || '';
-      const tenantId = (globalThis as any).tenantId || 'default';
+      const convId = globalThis.convId || '';
+      const projectId = globalThis.projectId || '';
+      const tenantId = globalThis.tenantId || 'default';
       const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
       filePath = path.join(convFilesDir, options.fileId);
 
@@ -121,32 +135,33 @@ const excelDocumentExtension = {
 
     try {
       const text = await extractTextFromExcel(filePath);
-      return { text };
-    } catch (error: any) {
-      throw new Error(`Excel extraction failed: ${error.message}`);
+      return { text } as ExtractExcelResult;
+    } catch (error: unknown) {
+      throw new Error(`Excel extraction failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
   /**
    * Read Excel spreadsheet - alias for extract()
    */
-  read: async (options: { filePath?: string; fileId?: string }) => {
+  read: async (options: ExtractExcelOptions) => {
     return excelDocumentExtension.extract(options);
   },
 
   /**
    * Convenience method - alias for extract()
    */
-  extractXLSX: async (options: { filePath?: string; fileId?: string }) => {
+  extractXLSX: async (options: ExtractExcelOptions) => {
     return excelDocumentExtension.extract(options);
   },
 
   /**
    * Convenience method - alias for read()
    */
-  xlsxReader: async (options: { filePath?: string; fileId?: string }) => {
+  xlsxReader: async (options: ExtractExcelOptions) => {
     return excelDocumentExtension.read(options);
   },
 };
 
-export default excelDocumentExtension;
+// @ts-expect-error - Extension loader wraps this code in an async function
+return excelDocumentExtension;

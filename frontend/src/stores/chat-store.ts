@@ -17,6 +17,7 @@ interface ChatStore {
 
   // Upload progress message tracking
   uploadingMessageId: string | null;
+  analysisStartTime: number | null; // Track when analysis started for time remaining calculation
 
   // Todos from backend
   todos: any;
@@ -53,6 +54,10 @@ interface ChatStore {
   // Actions for processing
   setProcessingStatus: (status: string | null) => void;
 
+  // Upload progress message tracking
+  setUploadingMessageId: (id: string | null) => void;
+  setAnalysisStartTime: (time: number | null) => void;
+
   // Actions for todos
   setTodos: (todos: any) => void;
 
@@ -72,6 +77,8 @@ export const useChatStore = create<ChatStore>((set) => ({
   error: null,
   connectionStatus: "disconnected",
   processingStatus: null,
+  uploadingMessageId: null,
+  analysisStartTime: null,
   todos: null,
   maxTokens: null,
   tokenUsage: null,
@@ -107,6 +114,7 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   // Upload progress message tracking
   setUploadingMessageId: (id: string | null) => set({ uploadingMessageId: id }),
+  setAnalysisStartTime: (time: number | null) => set({ analysisStartTime: time }),
 
   // Todo actions
   setTodos: (todos) => set({ todos }),

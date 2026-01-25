@@ -3,6 +3,50 @@
  * Query ClickHouse columnar databases for fast analytics
  */
 
+// Type definitions
+interface ClickHouseOptions {
+  query: string;
+  serverUrl: string;
+  database?: string;
+  username?: string;
+  password?: string;
+  format?: "json" | "raw" | "csv" | "tsv";
+  timeout?: number;
+  params?: Record<string, string | number | boolean>;
+}
+
+interface ClickHouseJSONResult {
+  data: Array<Record<string, unknown>>;
+  rowCount: number;
+  executionTime: number;
+  query: string;
+  stats?: ClickHouseStats;
+}
+
+interface ClickHouseRawResult {
+  raw: string;
+  rowCount: number;
+  executionTime: number;
+  query: string;
+}
+
+interface ClickHouseStats {
+  rows_read?: number;
+  bytes_read?: number;
+  elapsed?: number;
+}
+
+interface ClickHouseSummary {
+  read_rows?: number;
+  read_bytes?: number;
+  elapsed?: number;
+}
+
+// Extend globalThis for inspection broadcasting
+declare global {
+  var __broadcastInspection: ((extension: string, data: Record<string, unknown>) => void) | undefined;
+}
+
 /**
  * Context documentation for the ClickHouse extension
  */
@@ -140,16 +184,7 @@ const clickhouseExtension = {
    *   serverUrl: memory.read('database', 'clickhouse_url')
    * });
    */
-  clickhouse: async (options: {
-    query: string;
-    serverUrl: string;
-    database?: string;
-    username?: string;
-    password?: string;
-    format?: "json" | "raw" | "csv" | "tsv";
-    timeout?: number;
-    params?: Record<string, any>;
-  }) {
+  clickhouse: async (options: ClickHouseOptions): Promise<ClickHouseJSONResult | ClickHouseRawResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "clickhouse requires an options object. Usage: await clickhouse({ query: 'SELECT * FROM table', serverUrl: '...' })"
@@ -229,14 +264,14 @@ const clickhouseExtension = {
 
         if (format === "json") {
           const text = await response.text();
-          const dataArray: any[] = [];
+          const dataArray: Array<Record<string, unknown>> = [];
 
           if (text.trim()) {
             const lines = text.trim().split("\n");
             for (const line of lines) {
               if (line.trim()) {
                 try {
-                  dataArray.push(JSON.parse(line));
+                  dataArray.push(JSON.parse(line) as Record<string, unknown>);
                 } catch (e) {
                   // Skip invalid JSON lines
                 }
@@ -244,11 +279,11 @@ const clickhouseExtension = {
             }
           }
 
-          const stats: any = {};
+          const stats: ClickHouseStats = {};
           const rowsRead = response.headers.get("X-ClickHouse-Summary");
           if (rowsRead) {
             try {
-              const summary = JSON.parse(rowsRead);
+              const summary = JSON.parse(rowsRead) as ClickHouseSummary;
               stats.rows_read = summary.read_rows;
               stats.bytes_read = summary.read_bytes;
               stats.elapsed = summary.elapsed;
@@ -289,25 +324,25 @@ const clickhouseExtension = {
             query: options.query,
           };
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         clearTimeout(timeoutId);
 
-        if (error.name === "AbortError") {
+        if (error instanceof Error && error.name === "AbortError") {
           throw new Error(`Query timeout after ${timeout}ms`);
         }
 
         throw error;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const executionTime = Date.now() - startTime;
 
-      if (error.message?.includes("fetch failed") || error.message?.includes("ECONNREFUSED")) {
+      if (error instanceof Error && (error.message?.includes("fetch failed") || error.message?.includes("ECONNREFUSED"))) {
         throw new Error(
           `ClickHouse connection failed: Unable to connect to server at ${options.serverUrl}. ${error.message}`
         );
       }
 
-      throw new Error(`ClickHouse query failed (${executionTime}ms): ${error.message}`);
+      throw new Error(`ClickHouse query failed (${executionTime}ms): ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 
@@ -332,13 +367,14 @@ const clickhouseExtension = {
         connected: true,
         version: result.data?.[0]?.["version()"],
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         connected: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   },
 };
 
-export default clickhouseExtension;
+// @ts-expect-error - Extension loader wraps this code in an async function
+return clickhouseExtension;

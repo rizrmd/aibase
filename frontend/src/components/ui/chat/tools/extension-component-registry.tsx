@@ -6,7 +6,8 @@
  * that will be rendered in the chat when __visualizations are returned
  */
 
-import { lazy, ComponentType } from "react";
+import { lazy } from "react";
+import type { ComponentType } from "react";
 import type { ToolInvocation } from "./types";
 
 export interface VisualizationComponentProps {

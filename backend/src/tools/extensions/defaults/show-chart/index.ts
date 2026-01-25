@@ -3,6 +3,28 @@
  * Display interactive charts in the frontend
  */
 
+// Type definitions
+interface ChartSeries {
+  name: string;
+  data: number[] | number;
+}
+
+interface ShowChartOptions {
+  title: string;
+  chartType: 'bar' | 'line' | 'pie' | 'scatter';
+  xAxis?: string[];
+  yAxis?: string;
+  series: ChartSeries[];
+}
+
+interface ChartVisualizationResult {
+  __visualization: {
+    type: string;
+    toolCallId: string;
+    args: ShowChartOptions;
+  };
+}
+
 /**
  * Context documentation for the show-chart extension
  */
@@ -106,7 +128,7 @@ const showChartExtension = {
    *   }
    * });
    */
-  showChart: async (args) => {
+  showChart: async (args: ShowChartOptions): Promise<ChartVisualizationResult> => {
     const toolCallId = `call_${Date.now()}_chart`;
 
     return {

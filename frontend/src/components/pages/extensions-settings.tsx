@@ -4,8 +4,6 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -14,39 +12,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useProjectStore } from "@/stores/project-store";
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  getExtensions,
-  toggleExtension,
-  deleteExtension,
-  updateExtension,
-  resetExtensionsToDefaults,
-} from "@/lib/api/extensions";
-import {
-  getCategories,
   createCategory,
-  updateCategory,
   deleteCategory as deleteCategoryApi,
+  getCategories,
+  updateCategory,
 } from "@/lib/api/categories";
-import type { Extension } from "@/types/extension";
-import type { Category } from "@/types/category";
 import {
-  Trash2,
-  PowerIcon,
-  RefreshCw,
-  Code,
+  deleteExtension,
+  getExtensions,
+  resetExtensionsToDefaults,
+  toggleExtension,
+  updateExtension,
+} from "@/lib/api/extensions";
+import { useProjectStore } from "@/stores/project-store";
+import type { Category } from "@/types/category";
+import type { Extension } from "@/types/extension";
+import {
+  ArrowUpDown,
   ChevronDown,
   ChevronRight,
-  Settings,
-  Wand2,
   FolderOpen,
-  Check,
-  X,
-  ArrowUpDown,
+  PowerIcon,
+  RefreshCw,
+  Settings,
+  Trash2,
+  Wand2
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 interface CategoryGroup {
   category: Category;

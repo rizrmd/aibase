@@ -3,6 +3,49 @@
  * Search the web using Brave Search API
  */
 
+// Type definitions
+interface WebSearchOptions {
+  search_query: string;
+  count?: number;
+  country?: string;
+  search_lang?: string;
+  safesearch?: "off" | "moderate" | "strict";
+  freshness?: "pd" | "pw" | "pm" | "py" | "pn";
+  text_decorrelation?: boolean;
+}
+
+interface BraveWebResult {
+  title?: string;
+  url?: string;
+  description?: string;
+  age?: string;
+  page_age?: string;
+  language?: string;
+  meta_url?: {
+    favicon?: string;
+  };
+}
+
+interface BraveWebSearchResponse {
+  web?: {
+    results?: BraveWebResult[];
+  };
+}
+
+interface TransformedWebResult {
+  title: string;
+  url: string;
+  description: string;
+  age?: string;
+  language?: string;
+  favicon?: string;
+}
+
+interface WebSearchResult {
+  results: TransformedWebResult[];
+  total: number;
+}
+
 /**
  * Context documentation for the web-search extension
  */
@@ -127,7 +170,7 @@ const webSearchExtension = {
    * Usage:
    * const results = await webSearch({ search_query: 'latest AI news', count: 5 });
    */
-  webSearch: async (options) => {
+  webSearch: async (options: WebSearchOptions) => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "webSearch requires an options object. Usage: await webSearch({ search_query: 'your query' })"
@@ -178,10 +221,10 @@ const webSearchExtension = {
         );
       }
 
-      const data = await response.json();
+      const data = await response.json() as BraveWebSearchResponse;
 
       const webResults = data.web?.results || [];
-      const transformedResults = webResults.map((item) => ({
+      const transformedResults = webResults.map((item: BraveWebResult): TransformedWebResult => ({
         title: item.title || "",
         url: item.url || "",
         description: item.description || "",
@@ -194,8 +237,8 @@ const webSearchExtension = {
         results: transformedResults,
         total: transformedResults.length,
       };
-    } catch (error) {
-      throw new Error(`Web search failed: ${error.message}`);
+    } catch (error: unknown) {
+      throw new Error(`Web search failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 };

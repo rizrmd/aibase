@@ -3,6 +3,32 @@
  * Query PostgreSQL databases with secure connection management
  */
 
+// Type definitions
+interface PostgreSQLOptions {
+  query: string;
+  connectionUrl: string;
+  format?: "json" | "raw";
+  timeout?: number;
+}
+
+interface PostgreSQLJSONResult {
+  data: Array<Record<string, unknown>>;
+  rowCount: number;
+  executionTime: number;
+  query: string;
+}
+
+interface PostgreSQLRawResult {
+  raw: unknown;
+  executionTime: number;
+  query: string;
+}
+
+// Extend globalThis for inspection broadcasting
+declare global {
+  var __broadcastInspection: ((extension: string, data: Record<string, unknown>) => void) | undefined;
+}
+
 /**
  * Context documentation for the PostgreSQL extension
  */
@@ -103,7 +129,7 @@ const postgresqlExtension = {
    *   connectionUrl: memory.read('database', 'postgresql_url')
    * });
    */
-  postgresql: async (options) => {
+  postgresql: async (options: PostgreSQLOptions): Promise<PostgreSQLJSONResult | PostgreSQLRawResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "postgresql requires an options object. Usage: await postgresql({ query: 'SELECT * FROM users', connectionUrl: '...' })"
@@ -186,8 +212,8 @@ const postgresqlExtension = {
 
         return extensionResult;
       }
-    } catch (error) {
-      throw new Error(`PostgreSQL query failed: ${error.message}`);
+    } catch (error: unknown) {
+      throw new Error(`PostgreSQL query failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   },
 };

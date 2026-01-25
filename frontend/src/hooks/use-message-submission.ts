@@ -3,6 +3,7 @@ import type { Message } from "@/components/ui/chat";
 import type { WSClient } from "@/lib/ws/ws-connection-manager";
 import { uploadFilesWithProgress } from "@/lib/file-upload";
 import { createNewChat } from "@/lib/embed-api";
+import { useChatStore } from "@/stores/chat-store";
 
 interface UseMessageSubmissionProps {
   wsClient: WSClient | null;
@@ -141,24 +142,35 @@ export function useMessageSubmission({
         let uploadedFiles: any[] | undefined = undefined;
 
         // Upload files FIRST if any are attached
-        let uploadProgressMessageId: string | null = null;
+        let userMessageWithFiles: Message | null = null;
 
         if (options?.experimental_attachments && options.experimental_attachments.length > 0) {
           console.log("[Submit] Uploading", options.experimental_attachments.length, "files");
 
-          // Create upload progress message
-          uploadProgressMessageId = `upload_progress_${Date.now()}`;
-          setMessages((prev) => [...prev, {
-            id: uploadProgressMessageId!,
+          // Create user message with file attachments that have processing status
+          // We'll update the processing status as the upload progresses
+          userMessageWithFiles = {
+            id: `msg_${Date.now()}_user`,
             role: "user",
-            content: "Uploading files...",
+            content: messageText,
             createdAt: new Date(),
-            uploadProgress: 0,
-          }]);
+            attachments: Array.from(options.experimental_attachments).map(file => ({
+              id: `pending_${Date.now()}_${file.name}`,
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              url: "", // Will be filled after upload
+              uploadedAt: Date.now(),
+              processingStatus: "Uploading...",
+            })),
+          };
+
+          // Add the user message to the UI immediately
+          setMessages((prev) => [...prev, userMessageWithFiles!]);
 
           // Store the message ID in chat store for status updates
           const { setUploadingMessageId } = useChatStore.getState();
-          setUploadingMessageId(uploadProgressMessageId!);
+          setUploadingMessageId(userMessageWithFiles.id);
 
           try {
             const filesArray = Array.from(options.experimental_attachments);
@@ -167,33 +179,66 @@ export function useMessageSubmission({
               throw new Error("Project ID is required for file uploads");
             }
 
+            let uploadComplete = false;
             uploadedFiles = await uploadFilesWithProgress(filesArray, {
               projectId,
               onProgress: (progress) => {
                 console.log("[Upload Progress]", progress.percentage + "%");
-                // Update the upload progress message
-                if (uploadProgressMessageId) {
-                  updateMessage(uploadProgressMessageId, {
-                    content: `Uploading files... ${progress.percentage}%`,
-                    uploadProgress: progress.percentage,
-                  });
+                // Stop updating if upload is complete (prevents race condition with "Analyzing..." status)
+                if (uploadComplete) return;
+
+                // Update the processing status on the user message's file attachments
+                if (userMessageWithFiles) {
+                  const messageId = userMessageWithFiles.id;
+                  const { messages } = useChatStore.getState();
+                  const currentMessage = messages.find(m => m.id === messageId);
+                  if (currentMessage?.attachments) {
+                    updateMessage(messageId, {
+                      attachments: currentMessage.attachments.map(f => ({
+                        ...f,
+                        processingStatus: progress.percentage < 100 ? `Uploading ${progress.percentage}%` : 'Processing...',
+                      })),
+                    });
+                  }
                 }
               }
             });
 
             console.log("[Submit] Files uploaded successfully:", uploadedFiles);
 
-            // Keep the upload progress message - it will be updated with analysis status
-            // and removed after the user sends their message or after analysis completes
-            // The message will be updated by the "Analyzing..." status from the backend
+            // Mark upload as complete to prevent further progress updates
+            uploadComplete = true;
+
+            // Update the user message with the actual uploaded file data
+            // CRITICAL: Get current attachments before replacing to preserve processing status
+            if (userMessageWithFiles) {
+              const messageId = userMessageWithFiles.id;
+              const { messages } = useChatStore.getState();
+              const currentMessage = messages.find(m => m.id === messageId);
+              const currentAttachments = currentMessage?.attachments || [];
+
+              updateMessage(messageId, {
+                attachments: uploadedFiles.map((f, index) => {
+                  // Preserve processing status from current attachment if it exists
+                  // This ensures the "complete" WebSocket message can properly clear it
+                  const currentStatus = currentAttachments[index]?.processingStatus;
+                  return {
+                    ...f,
+                    ...(currentStatus && { processingStatus: currentStatus }),
+                  };
+                }),
+              });
+            }
           } catch (uploadError) {
             console.error("[Submit] File upload failed:", uploadError);
 
-            // Update the progress message to show error
-            if (uploadProgressMessageId) {
-              updateMessage(uploadProgressMessageId, {
-                content: "Upload failed",
-                uploadProgress: undefined,
+            // Update the attachments to show error
+            if (userMessageWithFiles) {
+              updateMessage(userMessageWithFiles.id, {
+                attachments: userMessageWithFiles.attachments?.map(f => ({
+                  ...f,
+                  processingStatus: "Upload failed",
+                })),
               });
               // Clear the tracking ID on error
               const { setUploadingMessageId } = useChatStore.getState();
@@ -209,12 +254,12 @@ export function useMessageSubmission({
         }
 
         // Create user message AFTER successful upload with file metadata
-        const userMessage: Message = {
+        // (Only if we didn't already create it during file upload)
+        const userMessage: Message = userMessageWithFiles || {
           id: `msg_${Date.now()}_user`,
           role: "user",
           content: messageText,
           createdAt: new Date(),
-          ...(uploadedFiles && uploadedFiles.length > 0 && { attachments: uploadedFiles }),
         };
 
         const thinkingMessage: Message = {
@@ -228,22 +273,14 @@ export function useMessageSubmission({
         // Set thinking start time for interval updates
         thinkingStartTimeRef.current = Date.now();
 
-        // Remove the upload progress message when user sends their actual message
-        if (uploadProgressMessageId) {
-          // Clear any pending auto-remove timeout
-          if ((uploadProgressMessageId as any)._removeTimeoutId) {
-            clearTimeout((uploadProgressMessageId as any)._removeTimeoutId);
-            delete (uploadProgressMessageId as any)._removeTimeoutId;
-          }
-
-          setMessages((prev) => prev.filter((m) => m.id !== uploadProgressMessageId));
-          // Clear the tracking ID
-          const { setUploadingMessageId } = useChatStore.getState();
-          setUploadingMessageId(null);
+        // Add messages to UI
+        // If we already added the user message with files, only add thinking message
+        if (!userMessageWithFiles) {
+          setMessages((prev) => [...prev, userMessage, thinkingMessage]);
+        } else {
+          setMessages((prev) => [...prev, thinkingMessage]);
         }
 
-        // Add messages to UI
-        setMessages((prev) => [...prev, userMessage, thinkingMessage]);
         setIsLoading(true);
 
         console.log(

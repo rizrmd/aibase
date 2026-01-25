@@ -4,7 +4,6 @@
  */
 
 import { getInspector } from "./extension-inspector-registry";
-import type { InspectorComponentProps } from "./extension-inspector-registry";
 
 interface ExtensionInspectorProps {
   extensionId: string;

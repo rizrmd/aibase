@@ -5,6 +5,7 @@ export interface PartialToolCall {
   toolCallId?: string;
   timestamp?: number;
   duration?: number;
+  inspectionData?: Record<string, any>;
 }
 
 export interface ToolCall {
@@ -14,6 +15,7 @@ export interface ToolCall {
   toolCallId?: string;
   timestamp?: number;
   duration?: number;
+  inspectionData?: Record<string, any>;
 }
 
 export interface ToolExecuting {
@@ -28,6 +30,7 @@ export interface ToolExecuting {
   toolCallId?: string;
   timestamp?: number;
   duration?: number;
+  inspectionData?: Record<string, any>;
 }
 
 export interface ToolProgress {
@@ -41,6 +44,7 @@ export interface ToolProgress {
   toolCallId?: string;
   timestamp?: number;
   duration?: number;
+  inspectionData?: Record<string, any>;
 }
 
 export interface ToolResult {
@@ -54,6 +58,7 @@ export interface ToolResult {
   toolCallId?: string;
   timestamp?: number;
   duration?: number;
+  inspectionData?: Record<string, any>;
 }
 
 export interface ToolError {
@@ -65,6 +70,7 @@ export interface ToolError {
   toolCallId?: string;
   timestamp?: number;
   duration?: number;
+  inspectionData?: Record<string, any>;
 }
 
 export type ToolInvocation =

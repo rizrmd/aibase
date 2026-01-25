@@ -20,7 +20,6 @@ export interface UseChatReturn {
   handleSubmit: (e?: React.FormEvent, options?: { experimental_attachments?: FileList }) => Promise<void>;
   isLoading: boolean;
   connectionStatus: string;
-  processingStatus: string | null;
   error: string | null;
   clearHistory: () => void;
   abort: () => void;
@@ -34,13 +33,11 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
     input,
     isLoading,
     connectionStatus,
-    processingStatus,
     error,
     setMessages,
     setInput,
     setIsLoading,
     setConnectionStatus,
-    setProcessingStatus,
     setError,
   } = useChatStore();
 
@@ -160,28 +157,15 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
         onStatusChange?.(data.status);
       }
 
-      // Processing-related status (file uploads, extension processing, etc.)
-      if (data.status === 'processing' || data.status === 'complete') {
-        const { setProcessingStatus } = useChatStore.getState();
-        setProcessingStatus(data.message || null);
-
-        // Auto-clear processing status after 5 seconds if it's 'complete'
-        if (data.status === 'complete') {
-          setTimeout(() => {
-            setProcessingStatus(null);
-          }, 5000);
-        }
-      }
-
       // File update status - when an extension finishes processing a file
       if (data.status === 'file_updated') {
         try {
           const update = JSON.parse(data.message);
           const { setFiles } = useFileStore.getState();
           setFiles((prevFiles) =>
-            prevFiles.map((f) =>
+            prevFiles ? prevFiles.map((f) =>
               f.name === update.fileName ? { ...f, description: update.description } : f
-            )
+            ) : prevFiles
           );
         } catch (e) {
           console.error('[useChat] Failed to parse file update:', data.message);
@@ -282,7 +266,6 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
     handleSubmit,
     isLoading,
     connectionStatus,
-    processingStatus,
     error,
     clearHistory,
     abort,

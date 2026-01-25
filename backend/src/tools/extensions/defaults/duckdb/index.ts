@@ -3,6 +3,25 @@
  * Query CSV, Excel, Parquet, and JSON files using SQL
  */
 
+// Type definitions
+interface DuckDBOptions {
+  query: string;
+  format?: "json" | "csv" | "markdown" | "table";
+  readonly?: boolean;
+  database?: string;
+}
+
+interface DuckDBResult {
+  data: Record<string, unknown>[];
+  rowCount: number;
+  executionTime: number;
+}
+
+interface DuckDBRawResult {
+  output: string;
+  executionTime: number;
+}
+
 /**
  * Context documentation for the DuckDB extension
  */
@@ -126,7 +145,7 @@ const duckdbExtension = {
   /**
    * Query data files using DuckDB SQL
    */
-  duckdb: async (options) => {
+  duckdb: async (options: DuckDBOptions): Promise<DuckDBResult | DuckDBRawResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "duckdb requires an options object. Usage: await duckdb({ query: 'SELECT * FROM data.csv' })"
@@ -221,8 +240,9 @@ const duckdbExtension = {
           executionTime,
         };
       }
-    } catch (error) {
-      throw new Error(`DuckDB query failed: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`DuckDB query failed: ${errorMessage}`);
     }
   },
 };

@@ -3,6 +3,75 @@
  * Execute distributed SQL queries via Trino
  */
 
+// Type definitions
+interface TrinoOptions {
+  query: string;
+  serverUrl: string;
+  catalog?: string;
+  schema?: string;
+  username?: string;
+  password?: string;
+  format?: "json" | "raw";
+  timeout?: number;
+}
+
+interface TrinoColumn {
+  name: string;
+  type?: string;
+}
+
+interface TrinoStats {
+  state?: string;
+  scheduled?: boolean;
+  nodes?: number;
+  totalSplits?: number;
+  queuedSplits?: number;
+  runningSplits?: number;
+  completedSplits?: number;
+}
+
+interface TrinoAPIResponse {
+  data?: unknown[][];
+  columns?: TrinoColumn[];
+  nextUri?: string;
+  error?: {
+    message?: string;
+    [key: string]: unknown;
+  };
+  stats?: TrinoStats;
+  id?: string;
+  infoUri?: string;
+}
+
+interface TrinoResult {
+  data: Record<string, unknown>[];
+  rowCount: number;
+  executionTime: number;
+  query: string;
+  stats?: TrinoStats;
+}
+
+interface TrinoRawResult {
+  raw: TrinoAPIResponse;
+  rowCount?: number;
+  executionTime: number;
+  query: string;
+  stats?: TrinoStats;
+}
+
+interface TestConnectionOptions {
+  catalog?: string;
+  schema?: string;
+  username?: string;
+  password?: string;
+}
+
+interface TestConnectionResult {
+  connected: boolean;
+  version?: string;
+  error?: string;
+}
+
 /**
  * Context documentation for the Trino extension
  */
@@ -123,16 +192,7 @@ const trinoExtension = {
    *   serverUrl: memory.read('database', 'trino_url')
    * });
    */
-  trino: async (options: {
-    query: string;
-    serverUrl: string;
-    catalog?: string;
-    schema?: string;
-    username?: string;
-    password?: string;
-    format?: "json" | "raw";
-    timeout?: number;
-  }) {
+  trino: async (options: TrinoOptions): Promise<TrinoResult | TrinoRawResult> => {
     if (!options || typeof options !== "object") {
       throw new Error(
         "trino requires an options object. Usage: await trino({ query: 'SELECT * FROM table', serverUrl: '...' })"
@@ -197,7 +257,7 @@ const trinoExtension = {
           );
         }
 
-        let result = await response.json();
+        let result = await response.json() as TrinoAPIResponse;
 
         while (result.nextUri) {
           const pollTimeout = setTimeout(() => controller.abort(), timeout);
@@ -219,7 +279,7 @@ const trinoExtension = {
             );
           }
 
-          result = await nextResponse.json();
+          result = await nextResponse.json() as TrinoAPIResponse;
 
           if (result.error) {
             throw new Error(
@@ -235,14 +295,14 @@ const trinoExtension = {
         const executionTime = Date.now() - startTime;
 
         if (format === "json") {
-          const dataArray: any[] = [];
+          const dataArray: Record<string, unknown>[] = [];
 
           if (result.data) {
             const columns = result.columns || [];
-            const columnNames = columns.map((col: any) => col.name);
+            const columnNames = columns.map((col: TrinoColumn) => col.name);
 
             for (const row of result.data) {
-              const obj: any = {};
+              const obj: Record<string, unknown> = {};
               columnNames.forEach((name: string, index: number) => {
                 obj[name] = row[index];
               });
@@ -293,37 +353,33 @@ const trinoExtension = {
             stats: result.stats,
           };
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         clearTimeout(timeoutId);
 
-        if (error.name === "AbortError") {
+        if (error instanceof Error && error.name === "AbortError") {
           throw new Error(`Query timeout after ${timeout}ms`);
         }
 
         throw error;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const executionTime = Date.now() - startTime;
 
-      if (error.message?.includes("fetch failed") || error.message?.includes("ECONNREFUSED")) {
+      if (error instanceof Error && (error.message?.includes("fetch failed") || error.message?.includes("ECONNREFUSED"))) {
         throw new Error(
           `Trino connection failed: Unable to connect to server at ${options.serverUrl}. ${error.message}`
         );
       }
 
-      throw new Error(`Trino query failed (${executionTime}ms): ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Trino query failed (${executionTime}ms): ${errorMessage}`);
     }
   },
 
   /**
    * Test Trino connection
    */
-  testConnection: async (serverUrl: string, options?: {
-    catalog?: string;
-    schema?: string;
-    username?: string;
-    password?: string;
-  }): Promise<{ connected: boolean; version?: string; error?: string }> {
+  testConnection: async (serverUrl: string, options?: TestConnectionOptions): Promise<TestConnectionResult> => {
     try {
       const result = await trinoExtension.trino({
         query: "SELECT version()",
@@ -336,15 +392,16 @@ const trinoExtension = {
 
       return {
         connected: true,
-        version: result.data?.[0]?.version,
+        version: (result.data?.[0] as Record<string, unknown> | undefined)?.version as string | undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         connected: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   },
 };
 
-export default trinoExtension;
+// @ts-expect-error - Extension loader wraps this code in an async function
+return trinoExtension;

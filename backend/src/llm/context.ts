@@ -412,10 +412,8 @@ function formatFilesForContext(files: FileInfo[]): string {
     context += `\n\n[Public] - Visible to all users in this conversation:`;
     for (const file of publicFiles) {
       context += `\n  • ${file.name} (${file.sizeHuman}, type: .${file.type})`;
-      // Include description if available
-      if (file.description) {
-        context += `\n    Description: ${file.description.substring(0, 200)}${file.description.length > 200 ? '...' : ''}`;
-      }
+      // NOTE: File descriptions temporarily disabled due to API compatibility issues
+      // The AI can still analyze files using the imageDocument tool when needed
     }
   }
 
@@ -423,10 +421,8 @@ function formatFilesForContext(files: FileInfo[]): string {
     context += `\n\n[User] - Only visible to you:`;
     for (const file of userFiles) {
       context += `\n  • ${file.name} (${file.sizeHuman}, type: .${file.type})`;
-      // Include description if available
-      if (file.description) {
-        context += `\n    Description: ${file.description.substring(0, 200)}${file.description.length > 200 ? '...' : ''}`;
-      }
+      // NOTE: File descriptions temporarily disabled due to API compatibility issues
+      // The AI can still analyze files using the imageDocument tool when needed
     }
   }
 
