@@ -321,7 +321,7 @@ export function FilesManagerPage() {
         {files.length > 0 && (
           <>
             {/* Search and Filter Bar */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mx-4 mt-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
