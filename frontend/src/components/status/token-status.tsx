@@ -3,8 +3,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Info } from "lucide-react";
+import { Info, Copy, Check, FileJson } from "lucide-react";
 import { useChatStore } from "@/stores/chat-store";
+import { useState } from "react";
+import type { Message } from "@/components/ui/chat/messages/types";
 
 interface TokenStatusProps {
   convId: string;
@@ -14,12 +16,138 @@ export function TokenStatus({ convId }: TokenStatusProps) {
   // Get token usage and maxTokens from store (comes directly from OpenAI API via backend)
   const tokenUsage = useChatStore((state) => state.tokenUsage);
   const maxTokens = useChatStore((state) => state.maxTokens) || 200000;
+  const messages = useChatStore((state) => state.messages);
+  const [copiedFormat, setCopiedFormat] = useState<"markdown" | "json" | null>(null);
 
   const tokenStats = {
     totalTokens: tokenUsage?.totalTokens || 0,
     promptTokens: tokenUsage?.promptTokens || 0,
     completionTokens: tokenUsage?.completionTokens || 0,
     messageCount: tokenUsage?.messageCount || 0,
+  };
+
+  // Format the transcript including tool usage
+  const formatTranscript = (msgs: Message[]): string => {
+    const lines: string[] = [];
+    lines.push(`# Conversation Transcript`);
+    lines.push(`Conversation ID: ${convId}`);
+    lines.push(`Generated: ${new Date().toISOString()}`);
+    lines.push("");
+
+    for (const msg of msgs) {
+      if (msg.isThinking) continue; // Skip thinking indicators
+
+      const role = msg.role.toUpperCase();
+      lines.push(`## ${role}`);
+      if (msg.createdAt) {
+        lines.push(`Time: ${msg.createdAt.toLocaleString()}`);
+      }
+      lines.push("");
+
+      // Add file attachments
+      if (msg.attachments && msg.attachments.length > 0) {
+        lines.push(`### Attached Files (${msg.attachments.length}):`);
+        lines.push("");
+        for (const file of msg.attachments) {
+          lines.push(`- **${file.name}** (${(file.size / 1024).toFixed(2)} KB)`);
+          lines.push(`  - Type: ${file.type}`);
+          lines.push(`  - URL: ${file.url}`);
+        }
+        lines.push("");
+      }
+
+      if (msg.content) {
+        lines.push(msg.content);
+        lines.push("");
+      }
+
+      // Add tool invocations
+      if (msg.toolInvocations && msg.toolInvocations.length > 0) {
+        lines.push(`### Tool Calls (${msg.toolInvocations.length}):`);
+        lines.push("");
+        for (const tool of msg.toolInvocations) {
+          lines.push(`**Tool:** ${tool.toolName}`);
+          if (tool.args) {
+            lines.push(`**Args:** ${JSON.stringify(tool.args, null, 2)}`);
+          }
+          if (tool.state === "result" && "result" in tool) {
+            const result = tool.result;
+            const preview = typeof result === "string"
+              ? result
+              : JSON.stringify(result, null, 2);
+            // Truncate long results
+            const truncated = preview.length > 1000
+              ? preview.substring(0, 1000) + "\n... (truncated)"
+              : preview;
+            lines.push(`**Result:** ${truncated}`);
+          }
+          if (tool.state === "error" && "error" in tool) {
+            lines.push(`**Error:** ${tool.error}`);
+          }
+          if (tool.duration) {
+            lines.push(`**Duration:** ${tool.duration.toFixed(2)}s`);
+          }
+          lines.push("");
+        }
+      }
+
+      lines.push("---");
+      lines.push("");
+    }
+
+    return lines.join("\n");
+  };
+
+  const handleCopyTranscript = async (format: "markdown" | "json") => {
+    const content = format === "json"
+      ? formatTranscriptAsJSON(messages)
+      : formatTranscript(messages);
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedFormat(format);
+      setTimeout(() => setCopiedFormat(null), 2000);
+    } catch (err) {
+      console.error("Failed to copy transcript:", err);
+    }
+  };
+
+  const formatTranscriptAsJSON = (msgs: Message[]): string => {
+    const transcript = {
+      conversationId: convId,
+      generatedAt: new Date().toISOString(),
+      messages: msgs.filter(m => !m.isThinking).map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        createdAt: msg.createdAt?.toISOString(),
+        attachments: msg.attachments?.map(file => ({
+          id: file.id,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          url: file.url,
+          uploadedAt: new Date(file.uploadedAt).toISOString(),
+        })),
+        toolInvocations: msg.toolInvocations?.map(tool => {
+          const base = {
+            toolName: tool.toolName,
+            state: tool.state,
+            timestamp: tool.timestamp,
+            duration: tool.duration,
+          };
+          if ("result" in tool && tool.state === "result") {
+            return { ...base, result: tool.result };
+          }
+          if ("error" in tool && tool.state === "error") {
+            return { ...base, error: tool.error };
+          }
+          if (tool.args) {
+            return { ...base, args: tool.args };
+          }
+          return base;
+        }),
+      })),
+    };
+    return JSON.stringify(transcript, null, 2);
   };
 
   const utilizationPercent = (tokenStats.totalTokens / maxTokens) * 100;
@@ -117,6 +245,47 @@ export function TokenStatus({ convId }: TokenStatusProps) {
                 <span className="text-muted-foreground">Messages Tracked</span>
                 <span className="font-medium">{tokenStats.messageCount}</span>
               </div>
+            </div>
+          </div>
+
+          {/* Copy Transcript Buttons */}
+          <div className="pt-2 border-t space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">
+              Copy transcript
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleCopyTranscript("markdown")}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                {copiedFormat === "markdown" ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Markdown
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => handleCopyTranscript("json")}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
+              >
+                {copiedFormat === "json" ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <FileJson className="h-4 w-4" />
+                    JSON
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

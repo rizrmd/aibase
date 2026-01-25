@@ -81,9 +81,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           <FileAttachmentList files={attachments} className="mb-2" />
         )}
 
-        <div className={cn(chatBubbleVariants({ isUser, animation }))}>
-          <MarkdownRenderer>{content}</MarkdownRenderer>
-        </div>
+        {/* Only show message bubble if there's actual content */}
+        {content && content.trim() && (
+          <div className={cn(chatBubbleVariants({ isUser, animation }))}>
+            <MarkdownRenderer>{content}</MarkdownRenderer>
+          </div>
+        )}
 
         {showTimeStamp && createdAt ? (
           <time
