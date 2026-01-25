@@ -483,14 +483,15 @@ export class Conversation {
         const attachmentDetails = attachments.map((a: any) => {
           let detail = `- **${a.name}** (${(a.size / 1024).toFixed(2)} KB)`;
           if (a.description) {
-            detail += `\n  - *Already analyzed*: ${a.description.substring(0, 200)}${a.description.length > 200 ? '...' : ''}`;
+            // Include more of the description (500 chars instead of 200) for better context
+            detail += `\n  - *Already analyzed*: ${a.description.substring(0, 500)}${a.description.length > 500 ? '...' : ''}`;
           }
           return detail;
         }).join('\n');
 
         const attachmentInfo = attachments.length === 1
-          ? `\n\n[File already analyzed and ready for your questions]`
-          : `\n\n[Files already analyzed and ready for your questions]`;
+          ? `\n\n[File already analyzed and ready for your questions. You can use the information above to answer questions about this file.]`
+          : `\n\n[Files already analyzed and ready for your questions. You can use the information above to answer questions about these files.]`;
 
         // If message is empty, use a default message
         if (!messageContent || messageContent.trim() === "") {
