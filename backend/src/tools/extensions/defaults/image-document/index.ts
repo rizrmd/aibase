@@ -75,7 +75,7 @@ async function analyzeImageFile(filePath, mimeType) {
             ],
           },
         ],
-        max_tokens: 500,
+        max_tokens: 1000,
       }),
       signal: controller.signal,
     });
@@ -93,7 +93,9 @@ async function analyzeImageFile(filePath, mimeType) {
     console.log('[ImageDocument] Vision API response keys:', Object.keys(data));
     console.log('[ImageDocument] Full response structure:', JSON.stringify(data, null, 2).substring(0, 500));
 
-    const description = data.choices?.[0]?.message?.content;
+    // GLM-4.6V returns reasoning in reasoning_content field
+    const description = data.choices?.[0]?.message?.content ||
+                       data.choices?.[0]?.message?.reasoning_content;
 
     console.log('[ImageDocument] Extracted description:', description ? description.substring(0, 100) : 'UNDEFINED');
 
@@ -222,7 +224,10 @@ const imageDocumentExtension = {
       }
 
       const data = await response.json();
-      const description = data.choices?.[0]?.message?.content || 'No description generated';
+      // GLM-4.6V returns reasoning in reasoning_content field
+      const description = data.choices?.[0]?.message?.content ||
+                         data.choices?.[0]?.message?.reasoning_content ||
+                         'No description generated';
 
       return {
         description,

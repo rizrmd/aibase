@@ -3,7 +3,9 @@ import { flushSync } from "react-dom";
 import type { Message } from "@/components/ui/chat";
 import { activeTabManager } from "@/lib/ws/active-tab-manager";
 import type { WSClient } from "@/lib/ws/ws-connection-manager";
+import { useChatStore } from "@/stores/chat-store";
 import { useConversationStore } from "@/stores/conversation-store";
+import { useFileStore } from "@/stores/file-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -650,6 +652,7 @@ export function useWebSocketHandlers({
 
       // Connection-related status
       if (data.status === 'connected' || data.status === 'disconnected' || data.status === 'reconnecting') {
+        const { setConnectionStatus } = useChatStore.getState();
         setConnectionStatus(data.status);
       }
 
