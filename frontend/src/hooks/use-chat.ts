@@ -165,11 +165,11 @@ export function useChat({ wsUrl, onError, onStatusChange }: UseChatOptions): Use
         const { setProcessingStatus } = useChatStore.getState();
         setProcessingStatus(data.message || null);
 
-        // Auto-clear processing status after 3 seconds if it's 'complete'
+        // Auto-clear processing status after 5 seconds if it's 'complete'
         if (data.status === 'complete') {
           setTimeout(() => {
             setProcessingStatus(null);
-          }, 3000);
+          }, 5000);
         }
       }
 

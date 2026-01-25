@@ -280,10 +280,8 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
           // Ensure extensions are loaded (hooks registered) before executing hooks
           await ensureExtensionsLoaded(projectId);
 
-          // Broadcast: Analyzing image (for images with afterFileUpload hooks)
-          if (isImage) {
-            broadcastStatus(wsServer, convId, 'processing', `Analyzing ${file.name}...`);
-          }
+          // Broadcast: Analyzing file
+          broadcastStatus(wsServer, convId, 'processing', `Analyzing ${file.name}...`);
 
           const hookResult = await extensionHookRegistry.executeHook('afterFileUpload', {
             convId,
@@ -302,15 +300,20 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
             // Update file metadata with description
             await fileStorage.updateFileMeta(convId, storedFile.name, projectId, tenantId, { description: hookResult.description });
             console.log('[UPLOAD-HANDLER] Background file metadata update completed');
+
+            // Broadcast: Analysis complete with description
+            broadcastStatus(wsServer, convId, 'complete', `Finished analyzing ${file.name}`);
           } else {
             console.log('[UPLOAD-HANDLER] Background hook: No description generated');
-          }
 
-          // Broadcast: Analysis complete
-          broadcastStatus(wsServer, convId, 'complete', `Finished analyzing ${file.name}`);
+            // Broadcast: Analysis complete but no description
+            broadcastStatus(wsServer, convId, 'complete', `Uploaded ${file.name}`);
+          }
         } catch (error) {
           console.error('[UPLOAD-HANDLER] Background extension hook execution failed:', error);
-          broadcastStatus(wsServer, convId, 'complete', `Upload complete (analysis failed for ${file.name})`);
+
+          // Broadcast: Upload complete even if analysis failed
+          broadcastStatus(wsServer, convId, 'complete', `Uploaded ${file.name}`);
         }
       })();
 
