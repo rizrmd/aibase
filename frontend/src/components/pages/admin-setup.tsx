@@ -795,7 +795,7 @@ export function AdminSetupPage() {
                   </div>
                   {index < steps.length - 1 && (
                     <div
-                      className={`h-0.5 w-16 mx-2 transition-colors ${index < currentStepIndex ? "bg-primary" : "bg-muted-foreground/30"
+                      className={`${index===0 && "ml-5"} h-0.5 w-16 mx-2 mb-5 transition-colors ${index < currentStepIndex ? "bg-primary" : "bg-muted-foreground/30"
                         }`}
                     />
                   )}

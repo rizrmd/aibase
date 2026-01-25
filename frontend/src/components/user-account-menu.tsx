@@ -1,4 +1,4 @@
-import { LogOut, UserMinus } from "lucide-react"
+import { LogOut, UserMinus, User } from "lucide-react"
 import { useAuthStore } from "@/stores/auth-store"
 
 import {
@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { useNavigate } from "react-router-dom"
 
 // Helper function to generate initials from username
 function getInitials(username: string): string {
@@ -49,6 +50,7 @@ export function UserAccountMenu({
   const initials = getInitials(user.username)
   const adminToken = useAuthStore((state) => state.adminToken);
   const stopImpersonating = useAuthStore((state) => state.stopImpersonating);
+  const navigate = useNavigate();
 
   // Inline variant for sidebar footer - shows avatar + text with dropdown menu
   if (showInline) {
@@ -62,7 +64,7 @@ export function UserAccountMenu({
                 {initials}
               </AvatarFallback>
             </Avatar>
-            <div className="flex flex-1 flex-col overflow-hidden text-left">
+            <div className="flex flex-1 flex-col min-w-0 overflow-hidden text-left">
               <span className="truncate text-sm font-medium">{user.username}</span>
               <span className="truncate text-xs text-muted-foreground">{user.email}</span>
             </div>
@@ -81,7 +83,7 @@ export function UserAccountMenu({
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
+              <div className="grid flex-1 min-w-0 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.username}</span>
                 <span className="truncate text-xs text-muted-foreground">{user.email}</span>
               </div>
@@ -94,6 +96,10 @@ export function UserAccountMenu({
               Stop Impersonating
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem onClick={() => navigate("/profile")}>
+            <User className="mr-2 h-4 w-4" />
+            Profile
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Log out
@@ -142,6 +148,10 @@ export function UserAccountMenu({
             Stop Impersonating
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onClick={() => navigate("/profile")}>
+          <User className="mr-2 h-4 w-4" />
+          Profile
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={onLogout}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out

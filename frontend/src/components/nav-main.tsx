@@ -1,5 +1,6 @@
 import { ChevronRight, type LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
+import { useState } from "react"
 
 import {
   Collapsible,
@@ -42,8 +43,10 @@ export function NavMain({
           const isItemActive = location.pathname === item.url ||
             (item.items?.some(subItem => location.pathname === subItem.url))
 
+          const [isOpen, setIsOpen] = useState(isItemActive)
+
           return (
-            <Collapsible key={item.title} asChild defaultOpen={isItemActive} open={isItemActive}>
+            <Collapsible key={item.title} asChild open={isOpen} onOpenChange={setIsOpen}>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip={item.title} isActive={location.pathname === item.url}>
                   <Link to={item.url}>

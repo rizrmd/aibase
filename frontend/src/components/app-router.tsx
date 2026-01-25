@@ -23,6 +23,7 @@ const ExtensionsSettings = lazy(() => import("./pages/extensions-settings").then
 const ExtensionEditor = lazy(() => import("./pages/extension-editor").then(module => ({ default: module.ExtensionEditor })));
 const WhatsAppSettings = lazy(() => import("./pages/whatsapp-settings").then(module => ({ default: module.WhatsAppSettings })));
 const DeveloperAPIPage = lazy(() => import("./pages/developer-api").then(module => ({ default: module.DeveloperAPIPage })));
+const ProfilePage = lazy(() => import("./pages/profile").then(module => ({ default: module.ProfilePage })));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -144,6 +145,14 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
                     <AdminRoute>
                       <UserManagementPage />
                     </AdminRoute>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <ProfilePage />
+                    </ProtectedRoute>
                   }
                 />
                 <Route
