@@ -484,7 +484,7 @@ export class Conversation {
           let detail = `- **${a.name}** (${(a.size / 1024).toFixed(2)} KB)`;
           if (a.description) {
             // Include more of the description (500 chars instead of 200) for better context
-            detail += `\n  - *Already analyzed*: ${a.description.substring(0, 500)}${a.description.length > 500 ? '...' : ''}`;
+            detail += `\n${a.description}`;
           }
           return detail;
         }).join('\n');

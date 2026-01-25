@@ -658,15 +658,54 @@ export function useWebSocketHandlers({
 
       // Processing-related status (file uploads, extension processing, etc.)
       if (data.status === 'processing' || data.status === 'complete') {
-        const { setProcessingStatus } = useChatStore.getState();
-        setProcessingStatus(data.message || null);
-        console.log('[handleStatus] Processing status updated:', data.message);
+        const { setUploadingMessageId, setProcessingStatus } = useChatStore.getState();
 
-        // Auto-clear processing status after 5 seconds if it's 'complete'
-        if (data.status === 'complete') {
-          setTimeout(() => {
-            setProcessingStatus(null);
-          }, 5000);
+        // Check if this is an extension analysis status (Analyzing...)
+        const isAnalyzing = data.message && (
+          data.message.includes('Analyzing') ||
+          data.message.includes('analyzing') ||
+          data.message.toLowerCase().includes('analyzing')
+        );
+
+        if (isAnalyzing && data.status === 'processing') {
+          // Update the upload progress message to show analysis status
+          const { uploadingMessageId } = useChatStore.getState();
+          if (uploadingMessageId) {
+            const { updateMessage } = useChatStore.getState();
+            updateMessage(uploadingMessageId, {
+              content: data.message || 'Processing...',
+              uploadProgress: 100, // Keep at 100% to show it's still working
+            });
+            console.log('[handleStatus] Updated upload progress message to:', data.message);
+          }
+        } else if (data.status === 'complete') {
+          // Upload complete - keep message briefly, then remove
+          const { uploadingMessageId } = useChatStore.getState();
+          if (uploadingMessageId) {
+            const { updateMessage } = useChatStore.getState();
+            updateMessage(uploadingMessageId, {
+              content: 'Upload complete',
+              uploadProgress: undefined,
+            });
+
+            // Auto-remove after 2 seconds
+            const timeoutId = setTimeout(() => {
+              const { setMessages, uploadingMessageId: currentId } = useChatStore.getState();
+              if (uploadingMessageId === currentId) {
+                // Only remove if it still exists (hasn't been replaced)
+                setMessages((prev) => prev.filter((m) => m.id !== uploadingMessageId));
+                setUploadingMessageId(null);
+              }
+              clearTimeout(timeoutId);
+            }, 2000);
+
+            // Store timeout ID for cleanup (in case user sends message before timeout)
+            (uploadProgressMessageId as any)._removeTimeoutId = timeoutId;
+          }
+        } else {
+          // Regular processing status (upload progress, etc.)
+          setProcessingStatus(data.message || null);
+          console.log('[handleStatus] Processing status updated:', data.message);
         }
       }
 

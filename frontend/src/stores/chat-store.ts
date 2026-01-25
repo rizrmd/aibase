@@ -15,6 +15,9 @@ interface ChatStore {
   // Processing state (for file uploads, extension processing, etc.)
   processingStatus: string | null;
 
+  // Upload progress message tracking
+  uploadingMessageId: string | null;
+
   // Todos from backend
   todos: any;
 
@@ -101,6 +104,9 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   // Processing actions
   setProcessingStatus: (status) => set({ processingStatus: status }),
+
+  // Upload progress message tracking
+  setUploadingMessageId: (id: string | null) => set({ uploadingMessageId: id }),
 
   // Todo actions
   setTodos: (todos) => set({ todos }),

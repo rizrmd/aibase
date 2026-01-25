@@ -156,6 +156,10 @@ export function useMessageSubmission({
             uploadProgress: 0,
           }]);
 
+          // Store the message ID in chat store for status updates
+          const { setUploadingMessageId } = useChatStore.getState();
+          setUploadingMessageId(uploadProgressMessageId!);
+
           try {
             const filesArray = Array.from(options.experimental_attachments);
 
@@ -179,8 +183,9 @@ export function useMessageSubmission({
 
             console.log("[Submit] Files uploaded successfully:", uploadedFiles);
 
-            // Remove the upload progress message
-            setMessages((prev) => prev.filter((m) => m.id !== uploadProgressMessageId));
+            // Keep the upload progress message - it will be updated with analysis status
+            // and removed after the user sends their message or after analysis completes
+            // The message will be updated by the "Analyzing..." status from the backend
           } catch (uploadError) {
             console.error("[Submit] File upload failed:", uploadError);
 
@@ -190,6 +195,9 @@ export function useMessageSubmission({
                 content: "Upload failed",
                 uploadProgress: undefined,
               });
+              // Clear the tracking ID on error
+              const { setUploadingMessageId } = useChatStore.getState();
+              setUploadingMessageId(null);
             }
 
             setError(uploadError instanceof Error ? uploadError.message : "File upload failed");
@@ -219,6 +227,20 @@ export function useMessageSubmission({
 
         // Set thinking start time for interval updates
         thinkingStartTimeRef.current = Date.now();
+
+        // Remove the upload progress message when user sends their actual message
+        if (uploadProgressMessageId) {
+          // Clear any pending auto-remove timeout
+          if ((uploadProgressMessageId as any)._removeTimeoutId) {
+            clearTimeout((uploadProgressMessageId as any)._removeTimeoutId);
+            delete (uploadProgressMessageId as any)._removeTimeoutId;
+          }
+
+          setMessages((prev) => prev.filter((m) => m.id !== uploadProgressMessageId));
+          // Clear the tracking ID
+          const { setUploadingMessageId } = useChatStore.getState();
+          setUploadingMessageId(null);
+        }
 
         // Add messages to UI
         setMessages((prev) => [...prev, userMessage, thinkingMessage]);
