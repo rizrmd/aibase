@@ -40,6 +40,9 @@ export const context = async () => {
  * - pdfReader(options) for extracting text from PDF files
  *   Options: { filePath?, buffer?, password?, maxPages?, debug? }
  *   Note: Passwords can be stored in memory for security
+ * - imageDocument.extractText(options) for extracting text from images (OCR)
+ *   Options: { filePath?, fileId?, prompt? }
+ *   Use this for PNG/JPG images, NOT pdfReader
  * - convId, projectId, and CURRENT_UID for context
  * - console for debugging
  * - fetch for HTTP requests
@@ -48,8 +51,9 @@ export class ScriptTool extends Tool {
   name = "script";
 
   description = `Execute Bun TypeScript code with programmatic access to other tools.
-Use for batch operations, complex workflows, data transformations, SQL queries, database operations, and PDF text extraction.
-Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), showChart(options), showTable(options), showMermaid(options), and all registered tools as async functions.
+Use for batch operations, complex workflows, data transformations, SQL queries, database operations, PDF text extraction, and image OCR.
+Available functions: progress(message, data?), memory.read(category, key), duckdb(options), postgresql(options), clickhouse(options), trino(options), pdfReader(options), imageDocument.extractText(options), showChart(options), showTable(options), showMermaid(options), and all registered tools as async functions.
+IMPORTANT: Use imageDocument.extractText() for OCR on PNG/JPG images, NOT pdfReader (pdfReader is only for PDF files).
 SECURITY REQUIREMENT: NEVER hardcode credentials (API keys, database URLs, passwords) directly in script code. ALWAYS store credentials in memory first using the memory tool, then access them using memory.read(category, key). This is a mandatory security practice - hardcoding credentials exposes secrets in code history and logs.
 Context variables: convId, projectId, CURRENT_UID (user ID from authentication token - will be empty string "" if not authenticated). Note: Bun is used instead of Node.js (Do not use require).`;
 
@@ -200,7 +204,29 @@ PDF reader examples (extract text from PDF files):
     const content = await pdfReader({ filePath: pdf.name });
     results.push({ file: pdf.name, pages: content.totalPages, text: content.text });
   }
-  return results;`,
+  return results;
+
+Image OCR examples (extract text from PNG/JPG images):
+  // Extract text from image using OCR
+  const result = await imageDocument.extractText({
+    filePath: "KTP MAYLATUN SARI.png"
+  });
+  progress(\`Extracted text from image\`);
+  return { text: result.description };
+
+  // Extract text by file ID (for uploaded files)
+  const ocr = await imageDocument.extractText({
+    fileId: "KTP MAYLATUN SARI.png"
+  });
+  return { description: ocr.description };
+
+  // Extract specific information with custom prompt (recommended!)
+  // Use the user's question as the prompt for targeted results
+  const nik = await imageDocument.extractText({
+    fileId: "KTP MAYLATUN SARI.png",
+    prompt: "What is the NIK (16-digit identification number) on this KTP card? Return only the number."
+  });
+  return { nik: nik.description };`,
       },
     },
     required: ["purpose", "code"],

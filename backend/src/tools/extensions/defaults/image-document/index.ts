@@ -248,11 +248,12 @@ const imageDocumentExtension = {
 
   /**
    * Extract text from image (OCR)
+   * If prompt is provided in options, it will be used instead of default OCR prompt
    */
   extractText: async (options) => {
     return imageDocumentExtension.extract({
       ...options,
-      prompt: "Extract all text visible in this image. Preserve the structure and formatting as much as possible. If there is no text, state that clearly.",
+      prompt: options.prompt || "Extract all text visible in this image. Preserve the structure and formatting as much as possible. If there is no text, state that clearly.",
     });
   },
 

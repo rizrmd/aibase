@@ -65,12 +65,17 @@ await todo({ action: 'add', texts });
 return { created: texts.length };
 \`\`\`
 
-**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), showChart(...), showTable(...), showMermaid(...), convertDocument(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console
+**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), showChart(...), showTable(...), showMermaid(...), convertDocument(...), imageDocument(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console
 
 **FILE ACTIONS:**
 - \`file({ action: 'write', path: 'filename.txt', content: '...' })\` - Write/create a file
 - \`file({ action: 'read', path: 'filename.txt' })\` - Read file (max 8000 chars ~2000 tokens)
 - \`file({ action: 'peek', path: 'file.log', offset: 0, limit: 1000 })\` - Paginated read
+
+**IMAGE OCR (extract text from images):**
+- \`imageDocument.extractText({ filePath: 'photo.png' })\` - Extract text from image using OCR
+- \`imageDocument.extractText({ fileId: 'KTP MAYLATUN SARI.png' })\` - Extract text from uploaded file
+- \`imageDocument.extractText({ fileId: 'photo.png', prompt: 'What is the NIK number?' })\` - Use custom prompt for specific information (recommended!)
 
 **SECURITY MANDATORY:** NEVER hardcode credentials (API keys, passwords, database URLs) in script code. Always store credentials in memory first, then use \`memory.read('category', 'key')\` to access them securely. Hardcoding credentials exposes secrets and is a security violation.`;
 };
