@@ -1,11 +1,12 @@
 /**
  * Category Storage Service
  * Manages project-specific categories for extension grouping
- * Categories are stored in data/projects/{projectId}/categories.json
+ * Categories are stored in data/projects/{tenantId}/{projectId}/categories.json
  */
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { getProjectDir } from '../config/paths';
 
 export interface Category {
   id: string;           // unique identifier (e.g., "database-tools", "web-tools")
@@ -36,15 +37,15 @@ export class CategoryStorage {
   /**
    * Get categories file path for a project
    */
-  private getCategoriesPath(projectId: string): string {
-    return path.join(process.cwd(), 'data', 'projects', projectId, 'categories.json');
+  private getCategoriesPath(projectId: string, tenantId: number | string): string {
+    return path.join(getProjectDir(projectId, tenantId), 'categories.json');
   }
 
   /**
    * Ensure categories file exists with default categories
    */
-  private async ensureCategoriesFile(projectId: string): Promise<void> {
-    const categoriesPath = this.getCategoriesPath(projectId);
+  private async ensureCategoriesFile(projectId: string, tenantId: number | string): Promise<void> {
+    const categoriesPath = this.getCategoriesPath(projectId, tenantId);
 
     try {
       await fs.access(categoriesPath);
@@ -95,7 +96,7 @@ export class CategoryStorage {
           'utf-8'
         );
 
-        console.log(`[CategoryStorage] Created default categories for project ${projectId}`);
+        console.log(`[CategoryStorage] Created default categories for project ${projectId} (tenant: ${tenantId})`);
       } else {
         throw error;
       }
@@ -105,10 +106,10 @@ export class CategoryStorage {
   /**
    * Get all categories for a project
    */
-  async getAll(projectId: string): Promise<Category[]> {
-    await this.ensureCategoriesFile(projectId);
+  async getAll(projectId: string, tenantId: number | string): Promise<Category[]> {
+    await this.ensureCategoriesFile(projectId, tenantId);
 
-    const categoriesPath = this.getCategoriesPath(projectId);
+    const categoriesPath = this.getCategoriesPath(projectId, tenantId);
     const content = await fs.readFile(categoriesPath, 'utf-8');
     const categories = JSON.parse(content) as Category[];
 
@@ -119,16 +120,16 @@ export class CategoryStorage {
   /**
    * Get category by ID
    */
-  async getById(projectId: string, categoryId: string): Promise<Category | null> {
-    const categories = await this.getAll(projectId);
+  async getById(projectId: string, tenantId: number | string, categoryId: string): Promise<Category | null> {
+    const categories = await this.getAll(projectId, tenantId);
     return categories.find(cat => cat.id === categoryId) || null;
   }
 
   /**
    * Create a new category
    */
-  async create(projectId: string, data: CreateCategoryData): Promise<Category> {
-    const categories = await this.getAll(projectId);
+  async create(projectId: string, tenantId: number | string, data: CreateCategoryData): Promise<Category> {
+    const categories = await this.getAll(projectId, tenantId);
 
     // Check if category ID already exists
     if (categories.find(cat => cat.id === data.id)) {
@@ -147,7 +148,7 @@ export class CategoryStorage {
     };
 
     categories.push(newCategory);
-    await this.saveCategories(projectId, categories);
+    await this.saveCategories(projectId, tenantId, categories);
 
     console.log(`[CategoryStorage] Created category '${data.id}' for project ${projectId}`);
     return newCategory;
@@ -156,8 +157,8 @@ export class CategoryStorage {
   /**
    * Update a category
    */
-  async update(projectId: string, categoryId: string, updates: UpdateCategoryData): Promise<Category | null> {
-    const categories = await this.getAll(projectId);
+  async update(projectId: string, tenantId: number | string, categoryId: string, updates: UpdateCategoryData): Promise<Category | null> {
+    const categories = await this.getAll(projectId, tenantId);
     const index = categories.findIndex(cat => cat.id === categoryId);
 
     if (index === -1) {
@@ -174,7 +175,7 @@ export class CategoryStorage {
     };
 
     categories[index] = updatedCategory;
-    await this.saveCategories(projectId, categories);
+    await this.saveCategories(projectId, tenantId, categories);
 
     console.log(`[CategoryStorage] Updated category '${categoryId}' for project ${projectId}`);
     return updatedCategory;
@@ -183,8 +184,8 @@ export class CategoryStorage {
   /**
    * Delete a category
    */
-  async delete(projectId: string, categoryId: string): Promise<boolean> {
-    const categories = await this.getAll(projectId);
+  async delete(projectId: string, tenantId: number | string, categoryId: string): Promise<boolean> {
+    const categories = await this.getAll(projectId, tenantId);
     const index = categories.findIndex(cat => cat.id === categoryId);
 
     if (index === -1) {
@@ -192,7 +193,7 @@ export class CategoryStorage {
     }
 
     categories.splice(index, 1);
-    await this.saveCategories(projectId, categories);
+    await this.saveCategories(projectId, tenantId, categories);
 
     console.log(`[CategoryStorage] Deleted category '${categoryId}' for project ${projectId}`);
     return true;
@@ -201,8 +202,8 @@ export class CategoryStorage {
   /**
    * Save categories to file
    */
-  private async saveCategories(projectId: string, categories: Category[]): Promise<void> {
-    const categoriesPath = this.getCategoriesPath(projectId);
+  private async saveCategories(projectId: string, tenantId: number | string, categories: Category[]): Promise<void> {
+    const categoriesPath = this.getCategoriesPath(projectId, tenantId);
     await fs.writeFile(
       categoriesPath,
       JSON.stringify(categories, null, 2),
@@ -213,25 +214,25 @@ export class CategoryStorage {
   /**
    * Check if category exists
    */
-  async exists(projectId: string, categoryId: string): Promise<boolean> {
-    const category = await this.getById(projectId, categoryId);
+  async exists(projectId: string, tenantId: number | string, categoryId: string): Promise<boolean> {
+    const category = await this.getById(projectId, tenantId, categoryId);
     return category !== null;
   }
 
   /**
    * Get or create default categories (for initialization)
    */
-  async getOrCreateDefaults(projectId: string): Promise<Category[]> {
-    await this.ensureCategoriesFile(projectId);
-    return this.getAll(projectId);
+  async getOrCreateDefaults(projectId: string, tenantId: number | string): Promise<Category[]> {
+    await this.ensureCategoriesFile(projectId, tenantId);
+    return this.getAll(projectId, tenantId);
   }
 
   /**
    * Reset categories to defaults (recreate categories.json with default categories)
    * Used when user resets extensions to defaults
    */
-  async resetToDefaults(projectId: string): Promise<void> {
-    const categoriesPath = this.getCategoriesPath(projectId);
+  async resetToDefaults(projectId: string, tenantId: number | string): Promise<void> {
+    const categoriesPath = this.getCategoriesPath(projectId, tenantId);
 
     // Delete existing categories file if exists
     try {
@@ -244,7 +245,7 @@ export class CategoryStorage {
     }
 
     // Ensure categories file is recreated with defaults
-    await this.ensureCategoriesFile(projectId);
+    await this.ensureCategoriesFile(projectId, tenantId);
 
     console.log(`[CategoryStorage] Reset categories to defaults for project ${projectId}`);
   }

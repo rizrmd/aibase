@@ -33,7 +33,11 @@ export async function handleGetCategories(req: Request, projectId: string): Prom
       }
     }
 
-    const categories = await categoryStorage.getAll(projectId);
+    // Get tenantId from project
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? auth.user.tenant_id;
+
+    const categories = await categoryStorage.getAll(projectId, tenantId);
 
     return Response.json({
       success: true,
@@ -79,7 +83,11 @@ export async function handleGetCategory(
       }
     }
 
-    const category = await categoryStorage.getById(projectId, categoryId);
+    // Get tenantId from project
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? auth.user.tenant_id;
+
+    const category = await categoryStorage.getById(projectId, tenantId, categoryId);
 
     if (!category) {
       return Response.json(
@@ -128,6 +136,10 @@ export async function handleCreateCategory(req: Request, projectId: string): Pro
       }
     }
 
+    // Get tenantId from project
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? auth.user.tenant_id;
+
     const body = await req.json();
     const { id, name, description, icon, color } = body;
 
@@ -138,7 +150,7 @@ export async function handleCreateCategory(req: Request, projectId: string): Pro
       );
     }
 
-    const category = await categoryStorage.create(projectId, {
+    const category = await categoryStorage.create(projectId, tenantId, {
       id,
       name,
       description,
@@ -190,10 +202,14 @@ export async function handleUpdateCategory(
       }
     }
 
+    // Get tenantId from project
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? auth.user.tenant_id;
+
     const body = await req.json();
     const { name, description, icon, color } = body;
 
-    const category = await categoryStorage.update(projectId, categoryId, {
+    const category = await categoryStorage.update(projectId, tenantId, categoryId, {
       name,
       description,
       icon,
@@ -251,7 +267,11 @@ export async function handleDeleteCategory(
       }
     }
 
-    const deleted = await categoryStorage.delete(projectId, categoryId);
+    // Get tenantId from project
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? auth.user.tenant_id;
+
+    const deleted = await categoryStorage.delete(projectId, tenantId, categoryId);
 
     if (!deleted) {
       return Response.json(
@@ -261,7 +281,7 @@ export async function handleDeleteCategory(
     }
 
     // Uncategorized all extensions that were in this category
-    await extensionStorage.uncategorizeByCategory(projectId, categoryId);
+    await extensionStorage.uncategorizeByCategory(projectId, categoryId, tenantId);
 
     return Response.json({
       success: true,

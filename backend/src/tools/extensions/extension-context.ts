@@ -217,7 +217,7 @@ export async function generateExtensionsContext(projectId: string): Promise<stri
   }
 
   // Group by category
-  const categories = await categoryStorage.getAll(projectId);
+  const categories = await categoryStorage.getAll(projectId, tenantId);
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
   const grouped = new Map<string, Extension[]>();

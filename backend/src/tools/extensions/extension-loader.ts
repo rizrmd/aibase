@@ -245,7 +245,7 @@ export class ExtensionLoader {
     }
 
     // Reset categories to defaults (recreate categories.json)
-    await this.categoryStorage.resetToDefaults(projectId);
+    await this.categoryStorage.resetToDefaults(projectId, tenantId);
 
     // Copy defaults
     await this.copyDefaultExtensions(projectId);
