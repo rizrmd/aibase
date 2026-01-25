@@ -14,7 +14,6 @@ import { Conversation, Tool } from "../llm/conversation";
 import { getBuiltinTools } from "../tools";
 import { WSEventEmitter } from "./events";
 import { MessagePersistence } from "./msg-persistance";
-import { detectAndStorePostgreSQLUrl } from "../llm/postgresql-detector";
 import { getConversationInfo } from "../llm/conversation-info";
 import { generateConversationTitle, getConversationTitle } from "../llm/conversation-title-generator";
 import * as fs from "fs/promises";
@@ -1348,20 +1347,6 @@ Always be helpful and conversational.`;
       urlParams, // Pass URL parameters for context replacement
       thinking: thinkingMode,
       hooks: {
-        message: {
-          before: async (message: string) => {
-            // Detect PostgreSQL URLs and test/store them in memory
-            const result = await detectAndStorePostgreSQLUrl(message, projectId);
-
-            if (result.detected) {
-              if (result.stored) {
-                console.log(`[PostgreSQL] Successfully stored connection URL for conversation ${convId}`);
-              } else {
-                console.log(`[PostgreSQL] Failed to store connection URL: ${result.error}`);
-              }
-            }
-          },
-        },
         tools: {
           before: async (toolCallId: string, toolName: string, args: any) => {
             console.log(`[Tool Hook] Before: ${toolName} (${toolCallId})`);
