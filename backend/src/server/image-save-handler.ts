@@ -4,6 +4,7 @@
  */
 
 import { FileStorage } from '../storage/file-storage';
+import { ProjectStorage } from '../storage/project-storage';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('ImageSave');
@@ -36,6 +37,17 @@ export async function handleSaveImage(req: Request): Promise<Response> {
         { status: 400 }
       );
     }
+
+    // Get project to retrieve tenant_id
+    const projectStorage = ProjectStorage.getInstance();
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return Response.json(
+        { success: false, error: 'Project not found' },
+        { status: 404 }
+      );
+    }
+    const tenantId = project.tenant_id ?? 'default';
 
     const body = await req.json() as { filename?: string; base64?: string };
     const { filename, base64 } = body;
@@ -96,6 +108,7 @@ export async function handleSaveImage(req: Request): Promise<Response> {
       buffer,
       'image/png',
       projectId,
+      tenantId,
       'user' // Default scope
     );
 

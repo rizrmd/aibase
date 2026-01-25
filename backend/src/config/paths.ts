@@ -81,46 +81,53 @@ export const PATHS = {
 } as const;
 
 /**
+ * Get tenant directory path
+ */
+export function getTenantDir(tenantId: number | string): string {
+  return join(PATHS.PROJECTS_DIR, String(tenantId));
+}
+
+/**
  * Get project directory path
  * @deprecated Use getProjectConversationDir instead
  */
-export function getProjectDir(projectId: string): string {
-  return join(PATHS.PROJECTS_DIR, projectId);
+export function getProjectDir(projectId: string, tenantId: number | string): string {
+  return join(getTenantDir(tenantId), projectId);
 }
 
 /**
  * Get conversation directory path
  */
-export function getConversationDir(projectId: string, convId: string): string {
-  return join(PATHS.PROJECTS_DIR, projectId, "conversations", convId);
+export function getConversationDir(projectId: string, convId: string, tenantId: number | string): string {
+  return join(getProjectDir(projectId, tenantId), "conversations", convId);
 }
 
 /**
  * Get conversation chats directory
  */
-export function getConversationChatsDir(projectId: string, convId: string): string {
-  return join(getConversationDir(projectId, convId), "chats");
+export function getConversationChatsDir(projectId: string, convId: string, tenantId: number | string): string {
+  return join(getConversationDir(projectId, convId, tenantId), "chats");
 }
 
 /**
  * Get conversation files directory
  */
-export function getConversationFilesDir(projectId: string, convId: string): string {
-  return join(getConversationDir(projectId, convId), "files");
+export function getConversationFilesDir(projectId: string, convId: string, tenantId: number | string): string {
+  return join(getConversationDir(projectId, convId, tenantId), "files");
 }
 
 /**
  * Get project extensions directory
  */
-export function getProjectExtensionsDir(projectId: string): string {
-  return join(PATHS.PROJECTS_DIR, projectId, "extensions");
+export function getProjectExtensionsDir(projectId: string, tenantId: number | string): string {
+  return join(getProjectDir(projectId, tenantId), "extensions");
 }
 
 /**
  * Get extension directory
  */
-export function getExtensionDir(projectId: string, extensionId: string): string {
-  return join(getProjectExtensionsDir(projectId), extensionId);
+export function getExtensionDir(projectId: string, extensionId: string, tenantId: number | string): string {
+  return join(getProjectExtensionsDir(projectId, tenantId), extensionId);
 }
 
 /**

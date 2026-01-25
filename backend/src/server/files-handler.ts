@@ -3,6 +3,7 @@
  */
 
 import { FileStorage, FileScope } from "../storage/file-storage";
+import { ProjectStorage } from "../storage/project-storage";
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
 import { createLogger } from "../utils/logger";
 import * as fs from 'fs/promises';
@@ -11,6 +12,7 @@ import * as path from 'path';
 const logger = createLogger("Files");
 
 const fileStorage = FileStorage.getInstance();
+const projectStorage = ProjectStorage.getInstance();
 const chatHistoryStorage = ChatHistoryStorage.getInstance();
 
 export interface FileWithConversation {
@@ -43,8 +45,19 @@ export async function handleGetProjectFiles(req: Request): Promise<Response> {
       );
     }
 
+    // Get project to retrieve tenant_id
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return Response.json(
+        { success: false, error: "Project not found" },
+        { status: 404 }
+      );
+    }
+    const tenantId = project.tenant_id ?? 'default';
+
     // Get all conversation directories for the project (including those without chat history)
-    const projectDir = path.join(process.cwd(), 'data', projectId);
+    const { getProjectDir } = await import('../config/paths');
+    const projectDir = getProjectDir(projectId, tenantId);
 
     // Check if project directory exists
     try {
@@ -66,7 +79,7 @@ export async function handleGetProjectFiles(req: Request): Promise<Response> {
     // Get files for each conversation directory
     const filesPromises = convDirs.map(async (convDir) => {
       const convId = convDir.name;
-      const files = await fileStorage.listFiles(convId, projectId);
+      const files = await fileStorage.listFiles(convId, projectId, tenantId);
 
       return files.map(file => ({
         name: file.name,
@@ -123,8 +136,18 @@ export async function handleGetConversationFiles(
       );
     }
 
+    // Get project to retrieve tenant_id
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return Response.json(
+        { success: false, error: "Project not found" },
+        { status: 404 }
+      );
+    }
+    const tenantId = project.tenant_id ?? 'default';
+
     // Get files for the conversation
-    const files = await fileStorage.listFiles(convId, projectId);
+    const files = await fileStorage.listFiles(convId, projectId, tenantId);
 
     const filesWithUrls = files.map(file => ({
       name: file.name,
@@ -176,7 +199,17 @@ export async function handleRenameFile(
       );
     }
 
-    await fileStorage.renameFile(convId, fileName, newName, projectId);
+    // Get project to retrieve tenant_id
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return Response.json(
+        { success: false, error: "Project not found" },
+        { status: 404 }
+      );
+    }
+    const tenantId = project.tenant_id ?? 'default';
+
+    await fileStorage.renameFile(convId, fileName, newName, projectId, tenantId);
 
     return Response.json({
       success: true,
@@ -216,7 +249,17 @@ export async function handleMoveFile(req: Request): Promise<Response> {
       );
     }
 
-    await fileStorage.moveFile(fromConvId, toConvId, fileName, projectId);
+    // Get project to retrieve tenant_id
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return Response.json(
+        { success: false, error: "Project not found" },
+        { status: 404 }
+      );
+    }
+    const tenantId = project.tenant_id ?? 'default';
+
+    await fileStorage.moveFile(fromConvId, toConvId, fileName, projectId, tenantId);
 
     return Response.json({
       success: true,
@@ -249,7 +292,17 @@ export async function handleDeleteFile(
   fileName: string
 ): Promise<Response> {
   try {
-    await fileStorage.deleteFile(convId, fileName, projectId);
+    // Get project to retrieve tenant_id
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return Response.json(
+        { success: false, error: "Project not found" },
+        { status: 404 }
+      );
+    }
+    const tenantId = project.tenant_id ?? 'default';
+
+    await fileStorage.deleteFile(convId, fileName, projectId, tenantId);
 
     return Response.json({
       success: true,

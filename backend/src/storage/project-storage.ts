@@ -6,7 +6,7 @@
 import { Database } from "bun:sqlite";
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { PATHS } from '../config/paths';
+import { PATHS, getProjectDir as getPathProjectDir } from '../config/paths';
 
 export interface Project {
   id: string;
@@ -282,7 +282,8 @@ export class ProjectStorage {
     }
 
     // Create project directory
-    const projectDir = this.getProjectDir(id);
+    const tenantId = data.tenant_id ?? 'default';
+    const projectDir = getPathProjectDir(id, tenantId);
     await fs.mkdir(projectDir, { recursive: true });
 
     const project = this.getById(id);
@@ -468,11 +469,16 @@ export class ProjectStorage {
 
     if (result.changes > 0) {
       // Delete project directory
-      const projectDir = this.getProjectDir(id);
-      try {
-        await fs.rm(projectDir, { recursive: true, force: true });
-      } catch (error) {
-        console.warn(`Failed to delete project directory ${projectDir}:`, error);
+      // First get the project to find its tenant_id
+      const project = this.getById(id);
+      if (project) {
+        const tenantId = project.tenant_id ?? 'default';
+        const projectDir = getPathProjectDir(id, tenantId);
+        try {
+          await fs.rm(projectDir, { recursive: true, force: true });
+        } catch (error) {
+          console.warn(`Failed to delete project directory ${projectDir}:`, error);
+        }
       }
     }
 
@@ -481,17 +487,28 @@ export class ProjectStorage {
 
   /**
    * Get project directory path
+   * @deprecated Use getProjectDir from config/paths instead
    */
-  getProjectDir(projectId: string): string {
+  getProjectDir(projectId: string, tenantId: number | string | null = null): string {
+    if (tenantId !== null) {
+      return getPathProjectDir(projectId, tenantId);
+    }
+    // Fallback to old structure for backward compatibility
     return path.join(this.baseDir, projectId);
   }
 
   /**
    * Ensure project directory exists
    */
-  async ensureProjectDir(projectId: string): Promise<void> {
-    const projectDir = this.getProjectDir(projectId);
-    await fs.mkdir(projectDir, { recursive: true });
+  async ensureProjectDir(projectId: string, tenantId: number | string | null = null): Promise<void> {
+    if (tenantId !== null) {
+      const projectDir = getPathProjectDir(projectId, tenantId);
+      await fs.mkdir(projectDir, { recursive: true });
+    } else {
+      // Fallback for backward compatibility
+      const projectDir = this.getProjectDir(projectId);
+      await fs.mkdir(projectDir, { recursive: true });
+    }
   }
 
   /**

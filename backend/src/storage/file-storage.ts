@@ -17,10 +17,12 @@ export interface StoredFile {
   uploadedAt: number;
   scope: FileScope;
   thumbnailUrl?: string;
+  description?: string;
 }
 
 export class FileStorage {
   private static instance: FileStorage;
+  private cacheInvalidationCallbacks: Array<() => void> = [];
 
   private constructor() {
     // No baseDir needed - using centralized path config
@@ -34,25 +36,46 @@ export class FileStorage {
   }
 
   /**
+   * Register a callback to be called when file metadata is updated
+   * Used to invalidate caches in the file tool
+   */
+  registerCacheInvalidationCallback(callback: () => void): void {
+    this.cacheInvalidationCallbacks.push(callback);
+  }
+
+  /**
+   * Trigger all registered cache invalidation callbacks
+   */
+  private invalidateCaches(): void {
+    for (const callback of this.cacheInvalidationCallbacks) {
+      try {
+        callback();
+      } catch (error) {
+        console.error('[FileStorage] Cache invalidation callback failed:', error);
+      }
+    }
+  }
+
+  /**
    * Get the directory path for a conversation
    */
-  private getConvDir(convId: string, projectId: string): string {
-    return getConversationFilesDir(projectId, convId);
+  private getConvDir(convId: string, projectId: string, tenantId: number | string): string {
+    return getConversationFilesDir(projectId, convId, tenantId);
   }
 
   /**
    * Ensure conversation directory exists
    */
-  private async ensureConvDir(convId: string, projectId: string): Promise<void> {
-    const convDir = this.getConvDir(convId, projectId);
+  private async ensureConvDir(convId: string, projectId: string, tenantId: number | string): Promise<void> {
+    const convDir = this.getConvDir(convId, projectId, tenantId);
     await fs.mkdir(convDir, { recursive: true });
   }
 
   /**
    * Get metadata file path for a file
    */
-  private getMetaFilePath(convId: string, fileName: string, projectId: string): string {
-    const convDir = this.getConvDir(convId, projectId);
+  private getMetaFilePath(convId: string, fileName: string, projectId: string, tenantId: number | string): string {
+    const convDir = this.getConvDir(convId, projectId, tenantId);
     return path.join(convDir, `.${fileName}.meta.md`);
   }
 
@@ -63,20 +86,24 @@ export class FileStorage {
     convId: string,
     fileName: string,
     projectId: string,
-    meta: { scope: FileScope; uploadedAt?: number; size?: number; type?: string; thumbnailUrl?: string }
+    tenantId: number | string,
+    meta: { scope: FileScope; uploadedAt?: number; size?: number; type?: string; thumbnailUrl?: string; description?: string }
   ): Promise<void> {
-    const metaPath = this.getMetaFilePath(convId, fileName, projectId);
+    const metaPath = this.getMetaFilePath(convId, fileName, projectId, tenantId);
 
-    // Build frontmatter content
+    // Build frontmatter (metadata only, description goes in body)
     const frontmatter = Object.entries(meta)
-      .filter(([key, value]) => value !== undefined) // Only include defined values
-      .map(([key, value]) => `${key}: ${typeof value === 'string' ? `"${value}"` : value}`)
+      .filter(([key, value]) => key !== 'description' && value !== undefined)
+      .map(([key, value]) => {
+        const stringValue = typeof value === 'string' ? value : String(value);
+        return `${key}: ${typeof value === 'string' ? `"${stringValue}"` : value}`;
+      })
       .join('\n');
 
-    const content = `---
-${frontmatter}
----
-`;
+    // Combine frontmatter + description as body content
+    const content = meta.description
+      ? `---\n${frontmatter}\n---\n${meta.description}\n`
+      : `---\n${frontmatter}\n---\n`;
 
     await fs.writeFile(metaPath, content, 'utf-8');
   }
@@ -87,9 +114,10 @@ ${frontmatter}
   private async loadFileMeta(
     convId: string,
     fileName: string,
-    projectId: string
-  ): Promise<{ scope: FileScope; uploadedAt?: number; size?: number; type?: string; thumbnailUrl?: string }> {
-    const metaPath = this.getMetaFilePath(convId, fileName, projectId);
+    projectId: string,
+    tenantId: number | string
+  ): Promise<{ scope: FileScope; uploadedAt?: number; size?: number; type?: string; thumbnailUrl?: string; description?: string }> {
+    const metaPath = this.getMetaFilePath(convId, fileName, projectId, tenantId);
 
     try {
       const content = await fs.readFile(metaPath, 'utf-8');
@@ -103,7 +131,7 @@ ${frontmatter}
       const frontmatter = frontmatterMatch[1];
       const meta: any = {};
 
-      // Parse YAML-style key: value pairs
+      // Parse YAML-style key: value pairs from frontmatter
       for (const line of frontmatter.split('\n')) {
         const colonIndex = line.indexOf(':');
         if (colonIndex > 0) {
@@ -123,6 +151,12 @@ ${frontmatter}
 
           meta[key] = value;
         }
+      }
+
+      // Extract description from body (everything after the second ---)
+      const bodyMatch = content.match(/\n---\n([\s\S]*)$/);
+      if (bodyMatch) {
+        meta.description = bodyMatch[1].trim();
       }
 
       return meta.scope ? meta : { scope: 'user', ...meta };
@@ -145,15 +179,17 @@ ${frontmatter}
     fileBuffer: Buffer,
     fileType: string,
     projectId: string,
+    tenantId: number | string,
     scope: FileScope = 'user',
-    thumbnailUrl?: string
+    thumbnailUrl?: string,
+    description?: string
   ): Promise<StoredFile> {
-    await this.ensureConvDir(convId, projectId);
+    await this.ensureConvDir(convId, projectId, tenantId);
 
     // Sanitize filename to prevent directory traversal
     const sanitizedFileName = path.basename(fileName);
 
-    const filePath = path.join(this.getConvDir(convId, projectId), sanitizedFileName);
+    const filePath = path.join(this.getConvDir(convId, projectId, tenantId), sanitizedFileName);
 
     // Check if file already exists to prevent overwrites
     try {
@@ -175,12 +211,13 @@ ${frontmatter}
     const uploadedAt = Date.now();
 
     // Save metadata
-    await this.saveFileMeta(convId, sanitizedFileName, projectId, {
+    await this.saveFileMeta(convId, sanitizedFileName, projectId, tenantId, {
       scope,
       uploadedAt,
       size: stats.size,
       type: fileType,
-      thumbnailUrl
+      thumbnailUrl,
+      description
     });
 
     return {
@@ -190,15 +227,16 @@ ${frontmatter}
       path: filePath,
       uploadedAt,
       scope,
-      thumbnailUrl
+      thumbnailUrl,
+      description
     };
   }
 
   /**
    * List all files for a conversation, optionally filtered by scope
    */
-  async listFiles(convId: string, projectId: string, scope?: FileScope): Promise<StoredFile[]> {
-    const convDir = this.getConvDir(convId, projectId);
+  async listFiles(convId: string, projectId: string, tenantId: number | string, scope?: FileScope): Promise<StoredFile[]> {
+    const convDir = this.getConvDir(convId, projectId, tenantId);
 
     try {
       const entries = await fs.readdir(convDir, { withFileTypes: true });
@@ -215,7 +253,7 @@ ${frontmatter}
           const stats = await fs.stat(filePath);
 
           // Load metadata for scope
-          const meta = await this.loadFileMeta(convId, entry.name, projectId);
+          const meta = await this.loadFileMeta(convId, entry.name, projectId, tenantId);
 
           // Filter by scope if specified
           if (scope && meta.scope !== scope) {
@@ -225,11 +263,12 @@ ${frontmatter}
           files.push({
             name: entry.name,
             size: stats.size,
-            type: '', // Type info not available from filesystem
+            type: meta.type || '', // Load type from metadata
             path: filePath,
             uploadedAt: stats.mtimeMs,
             scope: meta.scope,
             thumbnailUrl: meta.thumbnailUrl,
+            description: meta.description,
           });
         }
       }
@@ -247,11 +286,11 @@ ${frontmatter}
   /**
    * Get a specific file
    */
-  async getFile(convId: string, fileName: string, projectId: string): Promise<Buffer> {
+  async getFile(convId: string, fileName: string, projectId: string, tenantId: number | string): Promise<Buffer> {
     // Sanitize filename and decode URL-encoded characters (e.g., %20 -> space)
     const sanitizedFileName = path.basename(fileName);
     const decodedFileName = decodeURIComponent(sanitizedFileName);
-    const filePath = path.join(this.getConvDir(convId, projectId), decodedFileName);
+    const filePath = path.join(this.getConvDir(convId, projectId, tenantId), decodedFileName);
 
     return await fs.readFile(filePath);
   }
@@ -259,16 +298,16 @@ ${frontmatter}
   /**
    * Delete a file
    */
-  async deleteFile(convId: string, fileName: string, projectId: string): Promise<void> {
+  async deleteFile(convId: string, fileName: string, projectId: string, tenantId: number | string): Promise<void> {
     // Sanitize filename and decode URL-encoded characters (e.g., %20 -> space)
     const sanitizedFileName = path.basename(fileName);
     const decodedFileName = decodeURIComponent(sanitizedFileName);
-    const filePath = path.join(this.getConvDir(convId, projectId), decodedFileName);
+    const filePath = path.join(this.getConvDir(convId, projectId, tenantId), decodedFileName);
 
     await fs.unlink(filePath);
 
     // Also delete metadata file if it exists
-    const metaPath = this.getMetaFilePath(convId, decodedFileName, projectId);
+    const metaPath = this.getMetaFilePath(convId, decodedFileName, projectId, tenantId);
     try {
       await fs.unlink(metaPath);
     } catch (error: any) {
@@ -282,13 +321,13 @@ ${frontmatter}
   /**
    * Rename/move a file within the same conversation
    */
-  async renameFile(convId: string, oldName: string, newName: string, projectId: string): Promise<void> {
+  async renameFile(convId: string, oldName: string, newName: string, projectId: string, tenantId: number | string): Promise<void> {
     const sanitizedOldName = path.basename(oldName);
     const decodedOldName = decodeURIComponent(sanitizedOldName);
     const sanitizedNewName = path.basename(newName);
 
-    const oldPath = path.join(this.getConvDir(convId, projectId), decodedOldName);
-    const newPath = path.join(this.getConvDir(convId, projectId), sanitizedNewName);
+    const oldPath = path.join(this.getConvDir(convId, projectId, tenantId), decodedOldName);
+    const newPath = path.join(this.getConvDir(convId, projectId, tenantId), sanitizedNewName);
 
     // Check if source file exists
     try {
@@ -311,8 +350,8 @@ ${frontmatter}
     await fs.rename(oldPath, newPath);
 
     // Also rename metadata file if it exists
-    const oldMetaPath = this.getMetaFilePath(convId, decodedOldName, projectId);
-    const newMetaPath = this.getMetaFilePath(convId, sanitizedNewName, projectId);
+    const oldMetaPath = this.getMetaFilePath(convId, decodedOldName, projectId, tenantId);
+    const newMetaPath = this.getMetaFilePath(convId, sanitizedNewName, projectId, tenantId);
 
     try {
       await fs.rename(oldMetaPath, newMetaPath);
@@ -331,16 +370,17 @@ ${frontmatter}
     fromConvId: string,
     toConvId: string,
     fileName: string,
-    projectId: string
+    projectId: string,
+    tenantId: number | string
   ): Promise<void> {
     const sanitizedName = path.basename(fileName);
     const decodedName = decodeURIComponent(sanitizedName);
 
-    const fromPath = path.join(this.getConvDir(fromConvId, projectId), decodedName);
-    const toPath = path.join(this.getConvDir(toConvId, projectId), decodedName);
+    const fromPath = path.join(this.getConvDir(fromConvId, projectId, tenantId), decodedName);
+    const toPath = path.join(this.getConvDir(toConvId, projectId, tenantId), decodedName);
 
     // Ensure target directory exists
-    await this.ensureConvDir(toConvId, projectId);
+    await this.ensureConvDir(toConvId, projectId, tenantId);
 
     // Check if source file exists
     try {
@@ -363,8 +403,8 @@ ${frontmatter}
     await fs.rename(fromPath, toPath);
 
     // Also move metadata file if it exists
-    const oldMetaPath = this.getMetaFilePath(fromConvId, decodedName, projectId);
-    const newMetaPath = this.getMetaFilePath(toConvId, decodedName, projectId);
+    const oldMetaPath = this.getMetaFilePath(fromConvId, decodedName, projectId, tenantId);
+    const newMetaPath = this.getMetaFilePath(toConvId, decodedName, projectId, tenantId);
 
     try {
       await fs.rename(oldMetaPath, newMetaPath);
@@ -379,8 +419,8 @@ ${frontmatter}
   /**
    * Delete all files for a conversation
    */
-  async deleteAllFiles(convId: string, projectId: string): Promise<void> {
-    const convDir = this.getConvDir(convId, projectId);
+  async deleteAllFiles(convId: string, projectId: string, tenantId: number | string): Promise<void> {
+    const convDir = this.getConvDir(convId, projectId, tenantId);
 
     try {
       await fs.rm(convDir, { recursive: true, force: true });
@@ -395,16 +435,44 @@ ${frontmatter}
   /**
    * Get total storage size for a conversation
    */
-  async getStorageSize(convId: string, projectId: string): Promise<number> {
-    const files = await this.listFiles(convId, projectId);
+  async getStorageSize(convId: string, projectId: string, tenantId: number | string): Promise<number> {
+    const files = await this.listFiles(convId, projectId, tenantId);
     return files.reduce((total, file) => total + file.size, 0);
   }
 
   /**
-   * Migrate all .meta.json files to .meta.md format for a project
+   * Update metadata for an existing file
    */
-  async migrateMetadataFiles(projectId: string): Promise<{ migrated: number; errors: string[] }> {
-    const projectDir = path.join(this.baseDir, projectId);
+  async updateFileMeta(
+    convId: string,
+    fileName: string,
+    projectId: string,
+    tenantId: number | string,
+    updates: { description?: string }
+  ): Promise<void> {
+    // Load existing metadata
+    const existingMeta = await this.loadFileMeta(convId, fileName, projectId, tenantId);
+
+    // Merge with updates
+    const updatedMeta = {
+      ...existingMeta,
+      ...updates
+    };
+
+    // Save updated metadata
+    await this.saveFileMeta(convId, fileName, projectId, tenantId, updatedMeta);
+
+    // Invalidate caches so file tool sees the updated metadata
+    this.invalidateCaches();
+  }
+
+  /**
+   * Migrate all .meta.json files to .meta.md format for a project
+   * @deprecated This method is obsolete after tenant-based reorganization
+   */
+  async migrateMetadataFiles(projectId: string, tenantId: number | string): Promise<{ migrated: number; errors: string[] }> {
+    const { getProjectDir } = await import('../config/paths');
+    const projectDir = getProjectDir(projectId, tenantId);
     const errors: string[] = [];
     const countRef = { count: 0 };
 
@@ -470,19 +538,38 @@ ${frontmatter}
 
   /**
    * Migrate all .meta.json files to .meta.md format for all projects
+   * @deprecated This method is obsolete after tenant-based reorganization
    */
   async migrateAllMetadata(): Promise<{ totalMigrated: number; projectResults: Record<string, { migrated: number; errors: string[] }> }> {
+    const { PATHS } = await import('../config/paths');
     const projectResults: Record<string, { migrated: number; errors: string[] }> = {};
     let totalMigrated = 0;
 
     try {
-      const projects = await fs.readdir(this.baseDir, { withFileTypes: true });
+      // Read tenant directories
+      const tenants = await fs.readdir(PATHS.PROJECTS_DIR, { withFileTypes: true });
 
-      for (const project of projects) {
-        if (project.isDirectory()) {
-          const result = await this.migrateMetadataFiles(project.name);
-          projectResults[project.name] = result;
-          totalMigrated += result.migrated;
+      for (const tenant of tenants) {
+        if (tenant.isDirectory()) {
+          const tenantPath = path.join(PATHS.PROJECTS_DIR, tenant.name);
+
+          // Read project directories within tenant
+          try {
+            const projects = await fs.readdir(tenantPath, { withFileTypes: true });
+
+            for (const project of projects) {
+              if (project.isDirectory()) {
+                const result = await this.migrateMetadataFiles(project.name, tenant.name);
+                const key = `${tenant.name}/${project.name}`;
+                projectResults[key] = result;
+                totalMigrated += result.migrated;
+              }
+            }
+          } catch (error: any) {
+            if (error.code !== 'ENOENT') {
+              console.error(`Error reading tenant ${tenant.name}:`, error);
+            }
+          }
         }
       }
     } catch (error: any) {

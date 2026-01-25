@@ -4,9 +4,13 @@
  */
 
 import { FileStorage, FileScope } from '../storage/file-storage';
+import { ProjectStorage } from '../storage/project-storage';
 import { createLogger } from '../utils/logger';
 import * as sharp from 'sharp';
 import * as path from 'path';
+import { extensionHookRegistry } from '../tools/extensions/extension-hooks';
+import type { WSServer } from '../ws/entry';
+import { FileTool } from '../tools/definition/file-tool';
 
 const logger = createLogger('Upload');
 
@@ -19,10 +23,29 @@ export interface UploadedFileInfo {
   thumbnailUrl?: string;
   uploadedAt: number;
   scope: FileScope;
+  description?: string;
 }
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const THUMBNAIL_SIZE = 300; // pixels for the longest side
+
+/**
+ * Broadcast status message to all clients for a conversation
+ */
+function broadcastStatus(wsServer: WSServer | undefined, convId: string, status: string, message: string) {
+  if (!wsServer) return;
+
+  try {
+    wsServer.broadcastToConv(convId, {
+      type: 'status',
+      id: `status_${Date.now()}`,
+      data: { status, message },
+      metadata: { timestamp: Date.now() },
+    });
+  } catch (error) {
+    logger.warn({ error }, 'Failed to broadcast status');
+  }
+}
 
 /**
  * Check if a file is an image based on its MIME type or extension
@@ -86,7 +109,9 @@ async function generateThumbnail(
 /**
  * Handle file upload via HTTP POST
  */
-export async function handleFileUpload(req: Request): Promise<Response> {
+export async function handleFileUpload(req: Request, wsServer?: WSServer): Promise<Response> {
+  console.log('[UPLOAD-HANDLER] ============================================');
+  console.log('[UPLOAD-HANDLER] File upload request received');
   try {
     // Get conversation ID and project ID from query params
     const url = new URL(req.url);
@@ -107,6 +132,16 @@ export async function handleFileUpload(req: Request): Promise<Response> {
       );
     }
 
+    // Get project to retrieve tenant_id
+    const projectStorage = ProjectStorage.getInstance();
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return Response.json(
+        { success: false, error: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
     // Parse multipart form data
     const formData = await req.formData();
     const files = formData.getAll('files');
@@ -124,6 +159,7 @@ export async function handleFileUpload(req: Request): Promise<Response> {
 
     const fileStorage = FileStorage.getInstance();
     const uploadedFiles: UploadedFileInfo[] = [];
+    const tenantId = project.tenant_id ?? 'default';
 
     for (const file of files) {
       if (!(file instanceof File)) {
@@ -148,26 +184,36 @@ export async function handleFileUpload(req: Request): Promise<Response> {
         scope
       }, 'Processing file');
 
+      // Broadcast: Starting to process file
+      broadcastStatus(wsServer, convId, 'processing', `Uploading ${file.name}...`);
+
       // Convert File to Buffer
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
       // Generate thumbnail for images BEFORE saving file (so we have the URL)
       let thumbnailUrl: string | undefined;
-      if (isImageFile(file.name, file.type)) {
+      const isImage = isImageFile(file.name, file.type);
+      if (isImage) {
+        broadcastStatus(wsServer, convId, 'processing', `Generating thumbnail for ${file.name}...`);
         thumbnailUrl = await generateThumbnail(buffer, file.name, convId, projectId) || undefined;
       }
 
       // Save file with scope and thumbnail URL
+      broadcastStatus(wsServer, convId, 'processing', `Saving ${file.name}...`);
       const storedFile = await fileStorage.saveFile(
         convId,
         file.name,
         buffer,
         file.type,
         projectId,
+        tenantId,
         scope,
         thumbnailUrl
       );
+
+      // Broadcast: Upload complete
+      broadcastStatus(wsServer, convId, 'complete', `Successfully uploaded ${file.name}`);
 
       // Generate unique ID for the file reference
       const fileId = `file_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
@@ -182,6 +228,49 @@ export async function handleFileUpload(req: Request): Promise<Response> {
         uploadedAt: storedFile.uploadedAt,
         scope: storedFile.scope,
       });
+
+      // Call extension hooks AFTER response is sent (fire-and-forget, non-blocking)
+      // This allows the HTTP response to return immediately while analysis happens in background
+      const filePath = path.join(process.cwd(), 'data', 'projects', projectId, 'conversations', convId, 'files', storedFile.name);
+
+      // Don't await - run in background
+      (async () => {
+        try {
+          console.log('[UPLOAD-HANDLER] Starting background analysis for file:', file.name);
+
+          // Broadcast: Analyzing image (for images with afterFileUpload hooks)
+          if (isImage) {
+            broadcastStatus(wsServer, convId, 'processing', `Analyzing ${file.name}...`);
+          }
+
+          const hookResult = await extensionHookRegistry.executeHook('afterFileUpload', {
+            convId,
+            projectId,
+            fileName: storedFile.name,
+            filePath,
+            fileType: file.type,
+            fileSize: file.size,
+          });
+
+          console.log('[UPLOAD-HANDLER] Background hook execution result:', { fileName: file.name, hookResult });
+
+          if (hookResult?.description) {
+            console.log('[UPLOAD-HANDLER] Background hook generated description for', file.name, ':', hookResult.description.substring(0, 100));
+
+            // Update file metadata with description
+            await fileStorage.updateFileMeta(convId, storedFile.name, projectId, { description: hookResult.description });
+            console.log('[UPLOAD-HANDLER] Background file metadata update completed');
+          } else {
+            console.log('[UPLOAD-HANDLER] Background hook: No description generated');
+          }
+
+          // Broadcast: Analysis complete
+          broadcastStatus(wsServer, convId, 'complete', `Finished analyzing ${file.name}`);
+        } catch (error) {
+          console.error('[UPLOAD-HANDLER] Background extension hook execution failed:', error);
+          broadcastStatus(wsServer, convId, 'complete', `Upload complete (analysis failed for ${file.name})`);
+        }
+      })();
 
       logger.info({ path: storedFile.path, scope }, 'File saved');
     }
@@ -217,8 +306,16 @@ export async function handleFileDownload(req: Request): Promise<Response> {
     const convId = pathParts[4];
     const fileName = pathParts[5];
 
+    // Get project to retrieve tenant_id
+    const projectStorage = ProjectStorage.getInstance();
+    const project = projectStorage.getById(projectId);
+    if (!project) {
+      return new Response('Project not found', { status: 404 });
+    }
+
     const fileStorage = FileStorage.getInstance();
-    const fileBuffer = await fileStorage.getFile(convId, fileName, projectId);
+    const tenantId = project.tenant_id ?? 'default';
+    const fileBuffer = await fileStorage.getFile(convId, fileName, projectId, tenantId);
 
     // Try to determine content type from extension
     const ext = fileName.split('.').pop()?.toLowerCase();

@@ -7,6 +7,29 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { getExtensionDir, getProjectExtensionsDir } from '../config/paths';
 
+export interface ExampleEntry {
+  title: string;
+  description?: string;
+  code: string;
+  result?: string;
+}
+
+export interface FileExtractionConfig {
+  supportedTypes: string[];      // ['pdf', 'docx', 'xlsx', 'pptx']
+  outputFormat: 'markdown' | 'text';
+}
+
+export interface MessageUIConfig {
+  componentName: string;          // React component name
+  visualizationType: string;      // Type for __visualizations
+}
+
+export interface InspectionUIConfig {
+  tabLabel: string;               // e.g., "Query Details"
+  componentName: string;          // React component name
+  showByDefault?: boolean;        // Auto-select this tab
+}
+
 export interface ExtensionMetadata {
   id: string;           // unique identifier (same as folder name)
   name: string;         // display name
@@ -18,6 +41,18 @@ export interface ExtensionMetadata {
   isDefault: boolean;   // whether it came from defaults
   createdAt: number;    // timestamp
   updatedAt: number;    // timestamp
+
+  // NEW: Rich context/examples for LLM
+  examples?: ExampleEntry[];
+
+  // NEW: File extraction capabilities
+  fileExtraction?: FileExtractionConfig;
+
+  // NEW: Custom message UI components
+  messageUI?: MessageUIConfig;
+
+  // NEW: Inspection UI definition
+  inspectionUI?: InspectionUIConfig;
 }
 
 export interface Extension {
@@ -35,6 +70,12 @@ export interface CreateExtensionData {
   code: string;
   enabled?: boolean;
   isDefault?: boolean;
+
+  // NEW: Optional enhanced metadata
+  examples?: ExampleEntry[];
+  fileExtraction?: FileExtractionConfig;
+  messageUI?: MessageUIConfig;
+  inspectionUI?: InspectionUIConfig;
 }
 
 export interface UpdateExtensionData {
@@ -44,6 +85,12 @@ export interface UpdateExtensionData {
   version?: string;
   code?: string;
   enabled?: boolean;
+
+  // NEW: Optional enhanced metadata
+  examples?: ExampleEntry[];
+  fileExtraction?: FileExtractionConfig;
+  messageUI?: MessageUIConfig;
+  inspectionUI?: InspectionUIConfig;
 }
 
 export class ExtensionStorage {
@@ -56,45 +103,45 @@ export class ExtensionStorage {
   /**
    * Get extension directory path for a project
    */
-  private getExtensionsDir(projectId: string): string {
-    return getProjectExtensionsDir(projectId);
+  private getExtensionsDir(projectId: string, tenantId: number | string): string {
+    return getProjectExtensionsDir(projectId, tenantId);
   }
 
   /**
    * Get specific extension directory path
    */
-  private getExtensionDir(projectId: string, extensionId: string): string {
-    return getExtensionDir(projectId, extensionId);
+  private getExtensionDir(projectId: string, extensionId: string, tenantId: number | string): string {
+    return getExtensionDir(projectId, extensionId, tenantId);
   }
 
   /**
    * Get metadata file path
    */
-  private getMetadataPath(projectId: string, extensionId: string): string {
-    return path.join(this.getExtensionDir(projectId, extensionId), 'metadata.json');
+  private getMetadataPath(projectId: string, extensionId: string, tenantId: number | string): string {
+    return path.join(this.getExtensionDir(projectId, extensionId, tenantId), 'metadata.json');
   }
 
   /**
    * Get code file path
    */
-  private getCodePath(projectId: string, extensionId: string): string {
-    return path.join(this.getExtensionDir(projectId, extensionId), 'index.ts');
+  private getCodePath(projectId: string, extensionId: string, tenantId: number | string): string {
+    return path.join(this.getExtensionDir(projectId, extensionId, tenantId), 'index.ts');
   }
 
   /**
    * Ensure extensions directory exists
    */
-  async ensureExtensionsDir(projectId: string): Promise<void> {
-    const extDir = this.getExtensionsDir(projectId);
+  async ensureExtensionsDir(projectId: string, tenantId: number | string): Promise<void> {
+    const extDir = this.getExtensionsDir(projectId, tenantId);
     await fs.mkdir(extDir, { recursive: true });
   }
 
   /**
    * Create a new extension
    */
-  async create(projectId: string, data: CreateExtensionData): Promise<Extension> {
+  async create(projectId: string, tenantId: number | string, data: CreateExtensionData): Promise<Extension> {
     const now = Date.now();
-    const extensionDir = this.getExtensionDir(projectId, data.id);
+    const extensionDir = this.getExtensionDir(projectId, data.id, tenantId);
 
     // Check if extension already exists
     try {
@@ -121,18 +168,24 @@ export class ExtensionStorage {
       isDefault: data.isDefault || false,
       createdAt: now,
       updatedAt: now,
+
+      // NEW: Optional enhanced metadata
+      examples: data.examples,
+      fileExtraction: data.fileExtraction,
+      messageUI: data.messageUI,
+      inspectionUI: data.inspectionUI,
     };
 
     // Write metadata file
     await fs.writeFile(
-      this.getMetadataPath(projectId, data.id),
+      this.getMetadataPath(projectId, data.id, tenantId),
       JSON.stringify(metadata, null, 2),
       'utf-8'
     );
 
     // Write code file
     await fs.writeFile(
-      this.getCodePath(projectId, data.id),
+      this.getCodePath(projectId, data.id, tenantId),
       data.code,
       'utf-8'
     );
@@ -144,10 +197,10 @@ export class ExtensionStorage {
   /**
    * Get extension by ID
    */
-  async getById(projectId: string, extensionId: string): Promise<Extension | null> {
+  async getById(projectId: string, extensionId: string, tenantId: number | string): Promise<Extension | null> {
     try {
-      const metadataPath = this.getMetadataPath(projectId, extensionId);
-      const codePath = this.getCodePath(projectId, extensionId);
+      const metadataPath = this.getMetadataPath(projectId, extensionId, tenantId);
+      const codePath = this.getCodePath(projectId, extensionId, tenantId);
 
       const [metadataContent, code] = await Promise.all([
         fs.readFile(metadataPath, 'utf-8'),
@@ -167,8 +220,8 @@ export class ExtensionStorage {
   /**
    * Get all extensions for a project
    */
-  async getAll(projectId: string): Promise<Extension[]> {
-    const extDir = this.getExtensionsDir(projectId);
+  async getAll(projectId: string, tenantId: number | string): Promise<Extension[]> {
+    const extDir = this.getExtensionsDir(projectId, tenantId);
 
     try {
       await fs.access(extDir);
@@ -186,7 +239,7 @@ export class ExtensionStorage {
 
     for (const dir of extensionDirs) {
       try {
-        const ext = await this.getById(projectId, dir.name);
+        const ext = await this.getById(projectId, dir.name, tenantId);
         if (ext) {
           extensions.push(ext);
         }
@@ -204,16 +257,16 @@ export class ExtensionStorage {
   /**
    * Get all enabled extensions for a project
    */
-  async getEnabled(projectId: string): Promise<Extension[]> {
-    const allExtensions = await this.getAll(projectId);
+  async getEnabled(projectId: string, tenantId: number | string): Promise<Extension[]> {
+    const allExtensions = await this.getAll(projectId, tenantId);
     return allExtensions.filter(ext => ext.metadata.enabled);
   }
 
   /**
    * Update an extension
    */
-  async update(projectId: string, extensionId: string, updates: UpdateExtensionData): Promise<Extension | null> {
-    const existing = await this.getById(projectId, extensionId);
+  async update(projectId: string, extensionId: string, tenantId: number | string, updates: UpdateExtensionData): Promise<Extension | null> {
+    const existing = await this.getById(projectId, extensionId, tenantId);
     if (!existing) {
       return null;
     }
@@ -230,6 +283,12 @@ export class ExtensionStorage {
       category: updates.category !== undefined ? updates.category : existing.metadata.category,
       enabled: updates.enabled !== undefined ? updates.enabled : existing.metadata.enabled,
       updatedAt: now,
+
+      // NEW: Optional enhanced metadata
+      examples: updates.examples !== undefined ? updates.examples : existing.metadata.examples,
+      fileExtraction: updates.fileExtraction !== undefined ? updates.fileExtraction : existing.metadata.fileExtraction,
+      messageUI: updates.messageUI !== undefined ? updates.messageUI : existing.metadata.messageUI,
+      inspectionUI: updates.inspectionUI !== undefined ? updates.inspectionUI : existing.metadata.inspectionUI,
     };
 
     // Update code if provided
@@ -237,7 +296,7 @@ export class ExtensionStorage {
 
     // Write updated metadata
     await fs.writeFile(
-      this.getMetadataPath(projectId, extensionId),
+      this.getMetadataPath(projectId, extensionId, tenantId),
       JSON.stringify(updatedMetadata, null, 2),
       'utf-8'
     );
@@ -245,7 +304,7 @@ export class ExtensionStorage {
     // Write updated code if changed
     if (updates.code !== undefined) {
       await fs.writeFile(
-        this.getCodePath(projectId, extensionId),
+        this.getCodePath(projectId, extensionId, tenantId),
         updatedCode,
         'utf-8'
       );
@@ -258,8 +317,8 @@ export class ExtensionStorage {
   /**
    * Delete an extension
    */
-  async delete(projectId: string, extensionId: string): Promise<boolean> {
-    const extensionDir = this.getExtensionDir(projectId, extensionId);
+  async delete(projectId: string, extensionId: string, tenantId: number | string): Promise<boolean> {
+    const extensionDir = this.getExtensionDir(projectId, extensionId, tenantId);
 
     try {
       await fs.rm(extensionDir, { recursive: true, force: true });
@@ -276,13 +335,13 @@ export class ExtensionStorage {
   /**
    * Toggle extension enabled state
    */
-  async toggle(projectId: string, extensionId: string): Promise<Extension | null> {
-    const existing = await this.getById(projectId, extensionId);
+  async toggle(projectId: string, extensionId: string, tenantId: number | string): Promise<Extension | null> {
+    const existing = await this.getById(projectId, extensionId, tenantId);
     if (!existing) {
       return null;
     }
 
-    return this.update(projectId, extensionId, {
+    return this.update(projectId, extensionId, tenantId, {
       enabled: !existing.metadata.enabled,
     });
   }
@@ -290,8 +349,8 @@ export class ExtensionStorage {
   /**
    * Check if extension exists
    */
-  async exists(projectId: string, extensionId: string): Promise<boolean> {
-    const extensionDir = this.getExtensionDir(projectId, extensionId);
+  async exists(projectId: string, extensionId: string, tenantId: number | string): Promise<boolean> {
+    const extensionDir = this.getExtensionDir(projectId, extensionId, tenantId);
     try {
       await fs.access(extensionDir);
       return true;
@@ -303,16 +362,16 @@ export class ExtensionStorage {
   /**
    * Get extensions by category
    */
-  async getByCategory(projectId: string, category: string): Promise<Extension[]> {
-    const allExtensions = await this.getAll(projectId);
+  async getByCategory(projectId: string, category: string, tenantId: number | string): Promise<Extension[]> {
+    const allExtensions = await this.getAll(projectId, tenantId);
     return allExtensions.filter(ext => ext.metadata.category === category);
   }
 
   /**
    * Get all unique categories for a project
    */
-  async getCategories(projectId: string): Promise<string[]> {
-    const allExtensions = await this.getAll(projectId);
+  async getCategories(projectId: string, tenantId: number | string): Promise<string[]> {
+    const allExtensions = await this.getAll(projectId, tenantId);
     const categories = new Set(allExtensions.map(ext => ext.metadata.category));
     return Array.from(categories).sort();
   }
@@ -320,8 +379,8 @@ export class ExtensionStorage {
   /**
    * Get extensions grouped by category (for UI tree view)
    */
-  async getByCategoryGrouped(projectId: string): Promise<Record<string, Extension[]>> {
-    const allExtensions = await this.getAll(projectId);
+  async getByCategoryGrouped(projectId: string, tenantId: number | string): Promise<Record<string, Extension[]>> {
+    const allExtensions = await this.getAll(projectId, tenantId);
     const grouped: Record<string, Extension[]> = {};
 
     for (const ext of allExtensions) {
@@ -344,12 +403,12 @@ export class ExtensionStorage {
    * Remove category from all extensions in a specific category
    * Used when a category is deleted
    */
-  async uncategorizeByCategory(projectId: string, categoryId: string): Promise<void> {
-    const extensions = await this.getByCategory(projectId, categoryId);
+  async uncategorizeByCategory(projectId: string, categoryId: string, tenantId: number | string): Promise<void> {
+    const extensions = await this.getByCategory(projectId, categoryId, tenantId);
 
     for (const ext of extensions) {
       try {
-        await this.update(projectId, ext.metadata.id, {
+        await this.update(projectId, ext.metadata.id, tenantId, {
           category: "",
         });
         console.log(`[ExtensionStorage] Uncategorized extension '${ext.metadata.id}' from deleted category '${categoryId}'`);
