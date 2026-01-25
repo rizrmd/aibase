@@ -105,7 +105,7 @@ export function UserManagementPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen items-center px-4 pt-[60px] md:px-6 pb-4">
+    <div className="flex flex-col h-full items-center px-4 pt-12 md:pt-4 md:px-6 pb-4">
       {/* Action Buttons - Absolute positioned top right */}
       <PageActionGroup isFixedOnMobile={true}>
         <PageActionButton

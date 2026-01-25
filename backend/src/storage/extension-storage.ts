@@ -5,7 +5,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { getExtensionDir } from '../config/paths';
+import { getExtensionDir, getProjectExtensionsDir } from '../config/paths';
 
 export interface ExtensionMetadata {
   id: string;           // unique identifier (same as folder name)
@@ -57,7 +57,7 @@ export class ExtensionStorage {
    * Get extension directory path for a project
    */
   private getExtensionsDir(projectId: string): string {
-    return path.join(process.cwd(), 'data', 'projects', projectId, 'extensions');
+    return getProjectExtensionsDir(projectId);
   }
 
   /**

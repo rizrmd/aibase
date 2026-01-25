@@ -117,15 +117,13 @@ export function ExtensionsSettings() {
       // Group extensions by category
       const groups: CategoryGroup[] = catData.map((cat) => ({
         category: cat,
-        extensions: extData.filter(
-          (ext) => ext.metadata.category === cat.id
-        ),
+        extensions: extData.filter((ext) => ext.metadata.category === cat.id),
         expanded: true, // Default expanded
       }));
 
       // Add uncategorized extensions group (extensions with empty/undefined category)
       const uncategorizedExtensions = extData.filter(
-        (ext) => !ext.metadata.category || ext.metadata.category === ""
+        (ext) => !ext.metadata.category || ext.metadata.category === "",
       );
       if (uncategorizedExtensions.length > 0) {
         groups.push({
@@ -145,7 +143,7 @@ export function ExtensionsSettings() {
     } catch (error) {
       console.error("Failed to load data:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to load extensions"
+        error instanceof Error ? error.message : "Failed to load extensions",
       );
     } finally {
       setIsLoading(false);
@@ -165,27 +163,23 @@ export function ExtensionsSettings() {
     try {
       const updated = await toggleExtension(currentProject.id, extensionId);
       setExtensions((prev) =>
-        prev.map((ext) =>
-          ext.metadata.id === extensionId ? updated : ext
-        )
+        prev.map((ext) => (ext.metadata.id === extensionId ? updated : ext)),
       );
       // Update category groups
       setCategoryGroups((prev) =>
         prev.map((group) => ({
           ...group,
           extensions: group.extensions.map((ext) =>
-            ext.metadata.id === extensionId ? updated : ext
+            ext.metadata.id === extensionId ? updated : ext,
           ),
-        }))
+        })),
       );
       toast.success(
-        updated.metadata.enabled
-          ? "Extension enabled"
-          : "Extension disabled"
+        updated.metadata.enabled ? "Extension enabled" : "Extension disabled",
       );
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to toggle extension"
+        error instanceof Error ? error.message : "Failed to toggle extension",
       );
     }
   };
@@ -198,14 +192,14 @@ export function ExtensionsSettings() {
     if (!group) return;
 
     const extensionsToToggle = group.extensions.filter(
-      (ext) => ext.metadata.enabled !== enable
+      (ext) => ext.metadata.enabled !== enable,
     );
 
     if (extensionsToToggle.length === 0) {
       toast.info(
         enable
           ? "All extensions already enabled"
-          : "All extensions already disabled"
+          : "All extensions already disabled",
       );
       return;
     }
@@ -213,19 +207,29 @@ export function ExtensionsSettings() {
     // Toggle each extension
     for (const ext of extensionsToToggle) {
       try {
-        const updated = await toggleExtension(currentProject.id, ext.metadata.id);
+        const updated = await toggleExtension(
+          currentProject.id,
+          ext.metadata.id,
+        );
         setExtensions((prev) =>
-          prev.map((e) => (e.metadata.id === ext.metadata.id ? updated : e))
+          prev.map((e) => (e.metadata.id === ext.metadata.id ? updated : e)),
+        );
+        // Update category groups without changing expanded state
+        setCategoryGroups((prev) =>
+          prev.map((g) => ({
+            ...g,
+            extensions: g.extensions.map((e) =>
+              e.metadata.id === ext.metadata.id ? updated : e,
+            ),
+          })),
         );
       } catch (error) {
         console.error(`Failed to toggle ${ext.metadata.name}:`, error);
       }
     }
 
-    // Refresh category groups
-    await loadData();
     toast.success(
-      `${enable ? "Enabled" : "Disabled"} ${extensionsToToggle.length} extension(s)`
+      `${enable ? "Enabled" : "Disabled"} ${extensionsToToggle.length} extension(s)`,
     );
   };
 
@@ -245,15 +249,22 @@ export function ExtensionsSettings() {
     if (!currentProject || !deleteExtensionDialog.extensionId) return;
 
     try {
-      await deleteExtension(currentProject.id, deleteExtensionDialog.extensionId);
+      await deleteExtension(
+        currentProject.id,
+        deleteExtensionDialog.extensionId,
+      );
       await loadData();
       toast.success("Extension deleted");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete extension"
+        error instanceof Error ? error.message : "Failed to delete extension",
       );
     } finally {
-      setDeleteExtensionDialog({ open: false, extensionId: "", extensionName: "" });
+      setDeleteExtensionDialog({
+        open: false,
+        extensionId: "",
+        extensionName: "",
+      });
     }
   };
 
@@ -274,9 +285,7 @@ export function ExtensionsSettings() {
       toast.success("Extensions reset to defaults");
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to reset extensions"
+        error instanceof Error ? error.message : "Failed to reset extensions",
       );
     } finally {
       setResetExtensionsDialog(false);
@@ -310,14 +319,16 @@ export function ExtensionsSettings() {
         changeCategoryDialog.extensionId,
         {
           category: changeCategoryDialog.newCategory,
-        }
+        },
       );
       await loadData();
-      toast.success(`Moved '${changeCategoryDialog.extensionName}' to new category`);
+      toast.success(
+        `Moved '${changeCategoryDialog.extensionName}' to new category`,
+      );
       setChangeCategoryDialog({ ...changeCategoryDialog, open: false });
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to change category"
+        error instanceof Error ? error.message : "Failed to change category",
       );
     }
   };
@@ -328,8 +339,8 @@ export function ExtensionsSettings() {
       prev.map((group) =>
         group.category.id === categoryId
           ? { ...group, expanded: !group.expanded }
-          : group
-      )
+          : group,
+      ),
     );
   };
 
@@ -369,14 +380,14 @@ export function ExtensionsSettings() {
           {
             name: categoryForm.name,
             description: categoryForm.description,
-          }
+          },
         );
         setCategoryGroups((prev: CategoryGroup[]) =>
           prev.map((group: CategoryGroup) =>
             group.category.id === updated.id
               ? { ...group, category: updated }
-              : group
-          )
+              : group,
+          ),
         );
         toast.success("Category updated");
       } else {
@@ -395,7 +406,7 @@ export function ExtensionsSettings() {
       setCategoryDialogOpen(false);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to save category"
+        error instanceof Error ? error.message : "Failed to save category",
       );
     }
   };
@@ -410,14 +421,17 @@ export function ExtensionsSettings() {
     if (!currentProject || !deleteCategoryDialog.categoryId) return;
 
     try {
-      await deleteCategoryApi(currentProject.id, deleteCategoryDialog.categoryId);
+      await deleteCategoryApi(
+        currentProject.id,
+        deleteCategoryDialog.categoryId,
+      );
       await loadData();
       toast.success("Category deleted");
       // Close edit category dialog after successful deletion
       setCategoryDialogOpen(false);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete category"
+        error instanceof Error ? error.message : "Failed to delete category",
       );
     } finally {
       setDeleteCategoryDialog({ open: false, categoryId: "" });
@@ -430,12 +444,10 @@ export function ExtensionsSettings() {
       ...group,
       extensions: group.extensions.filter(
         (ext) =>
-          ext.metadata.name
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
+          ext.metadata.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           ext.metadata.description
             .toLowerCase()
-            .includes(searchTerm.toLowerCase())
+            .includes(searchTerm.toLowerCase()),
       ),
     }))
     .filter((group) => group.extensions.length > 0 || !searchTerm);
@@ -468,19 +480,11 @@ export function ExtensionsSettings() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Reset
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={openAddCategoryDialog}
-          >
+          <Button variant="outline" size="sm" onClick={openAddCategoryDialog}>
             <FolderOpen className="w-4 h-4 mr-2" />
             Add Category
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAICreator}
-          >
+          <Button variant="outline" size="sm" onClick={handleAICreator}>
             <Wand2 className="w-4 h-4 mr-2" />
             New Extension
           </Button>
@@ -508,7 +512,7 @@ export function ExtensionsSettings() {
         ) : (
           filteredGroups.map((group) => {
             const enabledCount = group.extensions.filter(
-              (ext) => ext.metadata.enabled
+              (ext) => ext.metadata.enabled,
             ).length;
             const totalCount = group.extensions.length;
 
@@ -532,11 +536,12 @@ export function ExtensionsSettings() {
                         <ChevronRight className="w-4 h-4" />
                       )}
                     </Button>
-                    <div className="flex-1">
+                    <div
+                      className="flex-1 cursor-pointer"
+                      onClick={() => toggleCategoryExpanded(group.category.id)}
+                    >
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">
-                          {group.category.name}
-                        </h3>
+                        <h3 className="font-semibold">{group.category.name}</h3>
                         <span className="text-xs bg-muted-foreground/20 px-2 py-0.5 rounded">
                           {enabledCount}/{totalCount} enabled
                         </span>
@@ -558,7 +563,7 @@ export function ExtensionsSettings() {
                       disabled={enabledCount === totalCount}
                       title="Enable all in category"
                     >
-                      <Check className="w-4 h-4 text-green-500" />
+                      <PowerIcon className={`w-4 h-4 text-green-500`} />
                     </Button>
                     <Button
                       variant="ghost"
@@ -567,7 +572,7 @@ export function ExtensionsSettings() {
                       disabled={enabledCount === 0}
                       title="Disable all in category"
                     >
-                      <X className="w-4 h-4 text-destructive" />
+                      <PowerIcon className={`w-4 h-4 text-slate-400`} />
                     </Button>
                     <Button
                       variant="ghost"
@@ -591,12 +596,11 @@ export function ExtensionsSettings() {
                       group.extensions.map((extension) => (
                         <div
                           key={extension.metadata.id}
-                          className="px-4 py-3 hover:bg-muted/30 transition-colors"
+                          className="px-4 py-3 md:pl-[50px] hover:bg-muted/30 transition-colors"
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <Code className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                                 <h4 className="font-semibold truncate">
                                   {extension.metadata.name}
                                 </h4>
@@ -627,7 +631,9 @@ export function ExtensionsSettings() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleToggle(extension.metadata.id)}
+                                onClick={() =>
+                                  handleToggle(extension.metadata.id)
+                                }
                                 title={
                                   extension.metadata.enabled
                                     ? "Disable"
@@ -645,7 +651,9 @@ export function ExtensionsSettings() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => openChangeCategoryDialog(extension)}
+                                onClick={() =>
+                                  openChangeCategoryDialog(extension)
+                                }
                                 title="Change category"
                               >
                                 <ArrowUpDown className="w-4 h-4" />
@@ -653,7 +661,12 @@ export function ExtensionsSettings() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDelete(extension.metadata.id, extension.metadata.name)}
+                                onClick={() =>
+                                  handleDelete(
+                                    extension.metadata.id,
+                                    extension.metadata.name,
+                                  )
+                                }
                                 title="Delete"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -742,7 +755,10 @@ export function ExtensionsSettings() {
                 Delete
               </Button>
             )}
-            <Button variant="outline" onClick={() => setCategoryDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setCategoryDialogOpen(false)}
+            >
               Cancel
             </Button>
             <Button onClick={handleSaveCategory}>
@@ -756,18 +772,27 @@ export function ExtensionsSettings() {
       <Dialog
         open={deleteCategoryDialog.open}
         onOpenChange={(open: boolean) =>
-          setDeleteCategoryDialog({ open, categoryId: deleteCategoryDialog.categoryId })
+          setDeleteCategoryDialog({
+            open,
+            categoryId: deleteCategoryDialog.categoryId,
+          })
         }
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Category</DialogTitle>
             <DialogDescription className="text-left">
-              Are you sure you want to delete this category? Extensions in this category will become uncategorized.
+              Are you sure you want to delete this category? Extensions in this
+              category will become uncategorized.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteCategoryDialog({ open: false, categoryId: "" })}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteCategoryDialog({ open: false, categoryId: "" })
+              }
+            >
               Cancel
             </Button>
             <Button variant="destructive" onClick={confirmDeleteCategory}>
@@ -786,11 +811,15 @@ export function ExtensionsSettings() {
           <DialogHeader>
             <DialogTitle>Reset Extensions to Defaults</DialogTitle>
             <DialogDescription className="text-left">
-              Are you sure you want to reset all extensions to defaults? This will delete all custom extensions.
+              Are you sure you want to reset all extensions to defaults? This
+              will delete all custom extensions.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setResetExtensionsDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setResetExtensionsDialog(false)}
+            >
               Cancel
             </Button>
             <Button variant="destructive" onClick={confirmResetExtensions}>
@@ -803,13 +832,16 @@ export function ExtensionsSettings() {
       {/* Change Category Dialog */}
       <Dialog
         open={changeCategoryDialog.open}
-        onOpenChange={(open: boolean) => setChangeCategoryDialog({ ...changeCategoryDialog, open })}
+        onOpenChange={(open: boolean) =>
+          setChangeCategoryDialog({ ...changeCategoryDialog, open })
+        }
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Change Extension Category</DialogTitle>
             <DialogDescription>
-              Move "{changeCategoryDialog.extensionName}" to a different category
+              Move "{changeCategoryDialog.extensionName}" to a different
+              category
             </DialogDescription>
           </DialogHeader>
 
@@ -819,7 +851,12 @@ export function ExtensionsSettings() {
               id="category-select"
               className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={changeCategoryDialog.newCategory}
-              onChange={(e) => setChangeCategoryDialog({ ...changeCategoryDialog, newCategory: e.target.value })}
+              onChange={(e) =>
+                setChangeCategoryDialog({
+                  ...changeCategoryDialog,
+                  newCategory: e.target.value,
+                })
+              }
             >
               {categoryGroups.map((group) => (
                 <option key={group.category.id} value={group.category.id}>
@@ -828,20 +865,24 @@ export function ExtensionsSettings() {
               ))}
             </select>
             <p className="text-xs text-muted-foreground mt-2">
-              Current category: {changeCategoryDialog.currentCategory || "Uncategorized"}
+              Current category:{" "}
+              {changeCategoryDialog.currentCategory || "Uncategorized"}
             </p>
           </div>
 
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setChangeCategoryDialog({ ...changeCategoryDialog, open: false })}
+              onClick={() =>
+                setChangeCategoryDialog({
+                  ...changeCategoryDialog,
+                  open: false,
+                })
+              }
             >
               Cancel
             </Button>
-            <Button onClick={handleChangeCategory}>
-              Move
-            </Button>
+            <Button onClick={handleChangeCategory}>Move</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -849,19 +890,29 @@ export function ExtensionsSettings() {
       {/* Delete Extension Confirmation Dialog */}
       <Dialog
         open={deleteExtensionDialog.open}
-        onOpenChange={(open: boolean) => setDeleteExtensionDialog({ ...deleteExtensionDialog, open })}
+        onOpenChange={(open: boolean) =>
+          setDeleteExtensionDialog({ ...deleteExtensionDialog, open })
+        }
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Extension</DialogTitle>
             <DialogDescription className="text-left">
-              Are you sure you want to delete "{deleteExtensionDialog.extensionName}"? This action cannot be undone.
+              Are you sure you want to delete "
+              {deleteExtensionDialog.extensionName}"? This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setDeleteExtensionDialog({ open: false, extensionId: "", extensionName: "" })}
+              onClick={() =>
+                setDeleteExtensionDialog({
+                  open: false,
+                  extensionId: "",
+                  extensionName: "",
+                })
+              }
             >
               Cancel
             </Button>

@@ -180,9 +180,17 @@ export function MemoryEditor() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 px-4 pt-[60px] md:px-6 pb-4">
+    <div className="flex h-full flex-col px-4 pt-12 md:pt-4 md:px-6 pb-4">
+      {/* Header */}
+      <div className="space-y-1 mb-4">
+        <h1 className="text-3xl font-bold tracking-tight">Memory</h1>
+        <p className="text-muted-foreground text-sm">
+          Store sensitive information securely and give the AI permanent knowledge.
+          Information stored here won't be directly mentioned in responses and persists across conversations.
+        </p>
+      </div>
 
-
+      <div className="flex flex-col gap-4 flex-1 overflow-hidden">
       {/* Search */}
       <div className="flex gap-2">
         <input
@@ -344,6 +352,7 @@ export function MemoryEditor() {
             </Card>
           ))
         )}
+      </div>
       </div>
     </div>
   );

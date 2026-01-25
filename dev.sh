@@ -22,8 +22,8 @@ trap cleanup SIGINT SIGTERM
 
 # Start backend
 echo "Starting backend..."
-cd "$SCRIPT_DIR/backend"
-bun run start &
+cd "$SCRIPT_DIR"
+bun run backend/src/server/index.ts &
 BACKEND_PID=$!
 
 # Wait a moment for backend to start

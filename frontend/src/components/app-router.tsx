@@ -83,10 +83,9 @@ export function AppRouter({ wsUrl }: AppRouterProps) {
   const isEmbedRoute = location.pathname === "/embed";
   const isRootRoute = location.pathname === "/";
   const isAdminSetupRoute = location.pathname === "/admin-setup";
-  const isAdminRoute = location.pathname === "/admin/users";
 
-  // Show sidebar only when inside a project
-  const shouldShowSidebar = !isLoginRoute && !isEmbedRoute && !isRootRoute && !isAdminSetupRoute && !isAdminRoute;
+  // Show sidebar on all authenticated pages except login, embed, root, and admin-setup
+  const shouldShowSidebar = !isLoginRoute && !isEmbedRoute && !isRootRoute && !isAdminSetupRoute;
 
   // Show top header account menu only when NOT inside a project (root/home or admin pages)
   const shouldShowTopAccountMenu = !isLoginRoute && user && !shouldShowSidebar;
