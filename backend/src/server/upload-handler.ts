@@ -250,11 +250,48 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
         thumbnailUrl
       );
 
-      // Broadcast: Upload complete
-      broadcastStatus(wsServer, convId, 'complete', `Successfully uploaded ${file.name}`);
-
       // Generate unique ID for the file reference
       const fileId = `file_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+
+      // Use centralized path config to ensure consistency with tenant-based structure
+      const filePath = path.join(getConversationFilesDir(projectId, convId, tenantId), storedFile.name);
+
+      // Wait for extension hooks to complete (blocking)
+      // This ensures the description is available when the AI responds
+      console.log('[UPLOAD-HANDLER] Starting extension analysis for file:', file.name);
+
+      // Ensure extensions are loaded (hooks registered) before executing hooks
+      await ensureExtensionsLoaded(projectId);
+
+      // Broadcast: Analyzing file
+      broadcastStatus(wsServer, convId, 'processing', `Analyzing ${file.name}...`);
+
+      const hookResult = await extensionHookRegistry.executeHook('afterFileUpload', {
+        convId,
+        projectId,
+        fileName: storedFile.name,
+        filePath,
+        fileType: file.type,
+        fileSize: file.size,
+      });
+
+      console.log('[UPLOAD-HANDLER] Extension hook execution result:', { fileName: file.name, hookResult });
+
+      let fileDescription: string | undefined;
+      if (hookResult?.description) {
+        console.log('[UPLOAD-HANDLER] Extension hook generated description for', file.name, ':', hookResult.description.substring(0, 100));
+
+        // Update file metadata with description
+        await fileStorage.updateFileMeta(convId, storedFile.name, projectId, tenantId, { description: hookResult.description });
+        console.log('[UPLOAD-HANDLER] File metadata updated with description');
+
+        fileDescription = hookResult.description;
+      } else {
+        console.log('[UPLOAD-HANDLER] Extension hook: No description generated');
+      }
+
+      // Broadcast: Upload and analysis complete
+      broadcastStatus(wsServer, convId, 'complete', `Successfully uploaded ${file.name}`);
 
       uploadedFiles.push({
         id: fileId,
@@ -265,57 +302,8 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
         thumbnailUrl: storedFile.thumbnailUrl,
         uploadedAt: storedFile.uploadedAt,
         scope: storedFile.scope,
+        description: fileDescription,  // Include description in response
       });
-
-      // Call extension hooks AFTER response is sent (fire-and-forget, non-blocking)
-      // This allows the HTTP response to return immediately while analysis happens in background
-      // Use centralized path config to ensure consistency with tenant-based structure
-      const filePath = path.join(getConversationFilesDir(projectId, convId, tenantId), storedFile.name);
-
-      // Don't await - run in background
-      (async () => {
-        try {
-          console.log('[UPLOAD-HANDLER] Starting background analysis for file:', file.name);
-
-          // Ensure extensions are loaded (hooks registered) before executing hooks
-          await ensureExtensionsLoaded(projectId);
-
-          // Broadcast: Analyzing file
-          broadcastStatus(wsServer, convId, 'processing', `Analyzing ${file.name}...`);
-
-          const hookResult = await extensionHookRegistry.executeHook('afterFileUpload', {
-            convId,
-            projectId,
-            fileName: storedFile.name,
-            filePath,
-            fileType: file.type,
-            fileSize: file.size,
-          });
-
-          console.log('[UPLOAD-HANDLER] Background hook execution result:', { fileName: file.name, hookResult });
-
-          if (hookResult?.description) {
-            console.log('[UPLOAD-HANDLER] Background hook generated description for', file.name, ':', hookResult.description.substring(0, 100));
-
-            // Update file metadata with description
-            await fileStorage.updateFileMeta(convId, storedFile.name, projectId, tenantId, { description: hookResult.description });
-            console.log('[UPLOAD-HANDLER] Background file metadata update completed');
-
-            // Broadcast: Analysis complete with description
-            broadcastStatus(wsServer, convId, 'complete', `Finished analyzing ${file.name}`);
-          } else {
-            console.log('[UPLOAD-HANDLER] Background hook: No description generated');
-
-            // Broadcast: Analysis complete but no description
-            broadcastStatus(wsServer, convId, 'complete', `Uploaded ${file.name}`);
-          }
-        } catch (error) {
-          console.error('[UPLOAD-HANDLER] Background extension hook execution failed:', error);
-
-          // Broadcast: Upload complete even if analysis failed
-          broadcastStatus(wsServer, convId, 'complete', `Uploaded ${file.name}`);
-        }
-      })();
 
       logger.info({ path: storedFile.path, scope }, 'File saved');
     }
