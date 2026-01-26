@@ -140,6 +140,12 @@ export function ScriptDetailsDialog({
     return truncateForDisplay(result);
   }, [result]);
 
+  // Debug: Log inspectionData whenever it changes
+  useEffect(() => {
+    console.log('[ScriptDetailsDialog] inspectionData changed:', inspectionData);
+    console.log('[ScriptDetailsDialog] inspectionData keys:', inspectionData ? Object.keys(inspectionData) : 'null');
+  }, [inspectionData]);
+
   useEffect(() => {
     if (open && code) {
       // Format and highlight the script code
@@ -287,11 +293,14 @@ export function ScriptDetailsDialog({
                     {(result && state === "result") && (
                       <TabsTrigger value="result">Result</TabsTrigger>
                     )}
-                    {inspectionData && Object.keys(inspectionData).length > 0 && Object.keys(inspectionData).map((extensionId) => (
-                      <TabsTrigger key={extensionId} value={`inspection-${extensionId}`}>
-                        {extensionId.charAt(0).toUpperCase() + extensionId.slice(1)}
-                      </TabsTrigger>
-                    ))}
+                    {inspectionData && Object.keys(inspectionData).length > 0 && Object.keys(inspectionData).map((extensionId) => {
+                      console.log('[ScriptDetailsDialog] Creating tab for extension:', extensionId);
+                      return (
+                        <TabsTrigger key={extensionId} value={`inspection-${extensionId}`}>
+                          {extensionId.charAt(0).toUpperCase() + extensionId.slice(1)}
+                        </TabsTrigger>
+                      );
+                    })}
                   </TabsList>
 
                   {/* Result Tab Content */}
