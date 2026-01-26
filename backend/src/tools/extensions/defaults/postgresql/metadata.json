@@ -8,5 +8,11 @@
   "enabled": true,
   "isDefault": false,
   "createdAt": 0,
-  "updatedAt": 0
+  "updatedAt": 0,
+  "inspectionUI": {
+    "tabLabel": "Query Details",
+    "componentName": "PostgreSQLInspector",
+    "uiFile": "ui.tsx",
+    "showByDefault": true
+  }
 }
