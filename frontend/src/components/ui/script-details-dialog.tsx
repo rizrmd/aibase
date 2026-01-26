@@ -246,61 +246,60 @@ export function ScriptDetailsDialog({
               </div>
             )}
 
-            {/* Tabbed Interface */}
-            <div className="flex-1 min-h-0">
-              <Tabs defaultValue="code" className="h-full flex flex-col">
-                <TabsList className="grid w-full auto-cols-fr">
-                  <TabsTrigger value="code">Code</TabsTrigger>
-                  {(result && state === "result") || error ? (
-                    <TabsTrigger value="result">Result</TabsTrigger>
-                  ) : null}
-                  {inspectionData && Object.keys(inspectionData).length > 0 && Object.keys(inspectionData).map((extensionId) => (
-                    <TabsTrigger key={extensionId} value={`inspection-${extensionId}`}>
-                      {extensionId.charAt(0).toUpperCase() + extensionId.slice(1)} Details
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+            {/* Horizontal Split: Code (Left) | Tabbed Results (Right) */}
+            <div className="flex-1 min-h-0 flex gap-4">
+              {/* Left Panel - Code (always visible) */}
+              <div className="w-1/2 min-w-0 flex flex-col border rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2 shrink-0">
+                  <h3 className="text-sm font-semibold">Code</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => copyToClipboard(code, "code")}
+                  >
+                    {copiedCode ? (
+                      <Check className="h-3.5 w-3.5 text-green-600" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+                <div className="flex-1 min-h-0 text-[11px] overflow-auto relative">
+                  {highlightedCode ? (
+                    <div
+                      dangerouslySetInnerHTML={{ __html: highlightedCode }}
+                      className="[&>pre]:absolute [&>pre]:p-4 [&>pre>code]:whitespace-pre-wrap [&>pre]:bg-[#0d1117]"
+                    />
+                  ) : (
+                    <pre className="p-4 bg-[#fff]">
+                      <code>{code}</code>
+                    </pre>
+                  )}
+                </div>
+              </div>
 
-                {/* Code Tab */}
-                <TabsContent value="code" className="flex-1 min-h-0 mt-2">
-                  <div className="flex flex-col h-full">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-semibold">Code</h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2"
-                        onClick={() => copyToClipboard(code, "code")}
-                      >
-                        {copiedCode ? (
-                          <Check className="h-3.5 w-3.5 text-green-600" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                    <div className="flex-1 flex text-[11px] min-h-0">
-                      {highlightedCode ? (
-                        <div
-                          dangerouslySetInnerHTML={{ __html: highlightedCode }}
-                          className="overflow-auto relative flex-1 [&>pre]:absolute [&>pre]:p-4 [&>pre>code]:whitespace-pre-wrap  [&>pre]:bg-[#0d1117]"
-                        />
-                      ) : (
-                        <pre className="p-4 bg-[#fff] overflow-auto flex-1">
-                          <code>{code}</code>
-                        </pre>
-                      )}
-                    </div>
-                  </div>
-                </TabsContent>
+              {/* Right Panel - Tabbed Results */}
+              <div className="w-1/2 min-w-0 flex flex-col">
+                <Tabs defaultValue="result" className="h-full flex flex-col">
+                  {/* Tabs for right panel */}
+                  <TabsList className="grid w-full auto-cols-fr">
+                    {(result && state === "result") && (
+                      <TabsTrigger value="result">Result</TabsTrigger>
+                    )}
+                    {inspectionData && Object.keys(inspectionData).length > 0 && Object.keys(inspectionData).map((extensionId) => (
+                      <TabsTrigger key={extensionId} value={`inspection-${extensionId}`}>
+                        {extensionId.charAt(0).toUpperCase() + extensionId.slice(1)}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
 
-                {/* Result Tab */}
-                {(result && state === "result") || error ? (
-                  <TabsContent value="result" className="flex-1 min-h-0 mt-2">
-                    <div className="flex flex-col h-full">
-                      {result && state === "result" && (
-                        <>
-                          <div className="flex items-center justify-between mb-2">
+                  {/* Result Tab Content */}
+                  {(result && state === "result") && (
+                    <TabsContent value="result" className="flex-1 min-h-0 mt-2">
+                      {result && (
+                        <div className="flex flex-col h-full gap-2">
+                          <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold">Result</h3>
                             <Button
                               variant="ghost"
@@ -323,23 +322,22 @@ export function ScriptDetailsDialog({
                             </Button>
                           </div>
 
-                          {/* Truncation Warning */}
                           {resultTruncated && (
-                            <div className="mb-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-400">
+                            <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded text-xs text-amber-700 dark:text-amber-400">
                               ⚠️ Result truncated for display (too large). Use Copy button for full data.
                             </div>
                           )}
 
-                          <div className="flex-1 flex text-[11px] min-h-0">
+                          <div className="flex-1 min-h-0 text-[11px] overflow-auto">
                             {highlightedResult ? (
                               <div
                                 dangerouslySetInnerHTML={{
                                   __html: highlightedResult,
                                 }}
-                                className="overflow-auto relative flex-1 [&>pre]:absolute [&>pre]:p-4 [&>pre>code]:whitespace-pre-wrap  [&>pre]:bg-[#0d1117]"
+                                className="[&>pre]:p-4 [&>pre>code]:whitespace-pre-wrap [&>pre]:bg-[#0d1117]"
                               />
                             ) : (
-                              <pre className="p-4 bg-[#0d1117]  overflow-x-auto flex-1">
+                              <pre className="p-4 bg-[#0d1117] overflow-x-auto">
                                 <code>
                                   {typeof displayResult === "string"
                                     ? displayResult
@@ -348,54 +346,58 @@ export function ScriptDetailsDialog({
                               </pre>
                             )}
                           </div>
-                        </>
-                      )}
-
-                      {error && (
-                        <>
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">
-                              Error
-                            </h3>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2"
-                              onClick={() => copyToClipboard(error, "error")}
-                            >
-                              {copiedError ? (
-                                <Check className="h-3.5 w-3.5 text-green-600" />
-                              ) : (
-                                <Copy className="h-3.5 w-3.5" />
-                              )}
-                            </Button>
-                          </div>
-                          <div className="text-[11px] border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30 p-3 overflow-auto flex-1">
-                            <pre className="text-red-700 dark:text-red-400 whitespace-pre-wrap">
-                              {error}
-                            </pre>
-                          </div>
-                        </>
-                      )}
-
-                      {!result && !error && state !== "executing" && (
-                        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-                          No result yet
                         </div>
                       )}
-                    </div>
-                  </TabsContent>
-                ) : null}
+                    </TabsContent>
+                  )}
 
-                {/* Extension-Specific Inspection Tabs */}
-                {inspectionData && Object.keys(inspectionData).length > 0 && Object.entries(inspectionData).map(([extensionId, data]) => (
-                  <TabsContent key={`inspection-${extensionId}`} value={`inspection-${extensionId}`} className="flex-1 min-h-0 mt-2">
-                    <div className="h-full overflow-auto">
-                      <ExtensionInspector extensionId={extensionId} data={data} error={error} />
+                  {/* Error Tab Content */}
+                  {error && (
+                    <div className="flex-1 min-h-0 mt-2">
+                      <div className="flex flex-col h-full gap-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">
+                            Error
+                          </h3>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => copyToClipboard(error, "error")}
+                          >
+                            {copiedError ? (
+                              <Check className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                        <div className="flex-1 text-[11px] border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/30 p-3 overflow-auto">
+                          <pre className="text-red-700 dark:text-red-400 whitespace-pre-wrap">
+                            {error}
+                          </pre>
+                        </div>
+                      </div>
                     </div>
-                  </TabsContent>
-                ))}
-              </Tabs>
+                  )}
+
+                  {/* Extension-Specific Inspection Tabs */}
+                  {inspectionData && Object.keys(inspectionData).length > 0 && Object.entries(inspectionData).map(([extensionId, data]) => (
+                    <TabsContent key={`inspection-${extensionId}`} value={`inspection-${extensionId}`} className="flex-1 min-h-0 mt-2">
+                      <div className="h-full overflow-auto">
+                        <ExtensionInspector extensionId={extensionId} data={data} error={error} />
+                      </div>
+                    </TabsContent>
+                  ))}
+
+                  {/* No result placeholder */}
+                  {!result && !error && state !== "executing" && (
+                    <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                      No result yet
+                    </div>
+                  )}
+                </Tabs>
+              </div>
             </div>
           </div>
         </div>
