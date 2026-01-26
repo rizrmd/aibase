@@ -1,6 +1,6 @@
 import { Tool } from "../../llm/conversation";
-import { ScriptRuntime, context as scriptRuntimeContext } from "../script-runtime/script-runtime";
-import { storeOutput } from "../script-runtime/output-storage";
+import { ScriptRuntime, context as scriptRuntimeContext } from "../extensions/script-runtime";
+import { storeOutput } from "../extensions/shared/output-storage";
 import { ExtensionLoader } from "../extensions/extension-loader";
 
 /**

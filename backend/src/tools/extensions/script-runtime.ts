@@ -1,5 +1,5 @@
-import type { Tool } from "../../llm/conversation";
-import { peek, peekInfo } from "./peek-output";
+import type { Tool } from "../llm/conversation";
+import { peek, peekInfo } from "./shared/peek-output";
 import { ProjectStorage } from "../../storage/project-storage";
 
 /**

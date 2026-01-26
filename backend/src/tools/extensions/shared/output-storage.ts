@@ -1,7 +1,7 @@
 import { writeFile, readFile, unlink, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
-import { PATHS } from "../../config/paths";
+import { PATHS } from "../../../config/paths";
 
 // In-memory storage for smaller outputs (< 10MB)
 const memoryStorage = new Map<string, any>();
