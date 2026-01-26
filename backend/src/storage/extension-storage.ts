@@ -22,11 +22,13 @@ export interface FileExtractionConfig {
 export interface MessageUIConfig {
   componentName: string;          // React component name
   visualizationType: string;      // Type for __visualizations
+  uiFile?: string;                // UI filename (default: 'ui.tsx')
 }
 
 export interface InspectionUIConfig {
   tabLabel: string;               // e.g., "Query Details"
   componentName: string;          // React component name
+  uiFile?: string;                // UI filename (default: 'ui.tsx')
   showByDefault?: boolean;        // Auto-select this tab
 }
 
