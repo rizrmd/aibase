@@ -33,12 +33,36 @@ export class ExtensionLoader {
 
   /**
    * Initialize extensions for a project by copying defaults if needed
-   * @deprecated Extensions are now loaded directly from defaults directory
+   *
+   * This copies extensions from backend/src/tools/extensions/defaults/ to data/{projectId}/extensions/
+   * Only runs if the project doesn't have extensions yet
    */
   async initializeProject(projectId: string): Promise<void> {
-    // No-op - extensions are loaded from defaults by default
-    // Kept for backwards compatibility
-    console.log(`[ExtensionLoader] initializeProject called (no-op, extensions loaded from defaults)`);
+    const tenantId = this.getTenantId(projectId);
+
+    // Check if USE_DEFAULT_EXTENSIONS is enabled
+    // If true, we don't need to copy - extensions load directly from backend folder
+    const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
+
+    if (useDefaults) {
+      console.log(`[ExtensionLoader] USE_DEFAULT_EXTENSIONS=true, skipping copy to project folder`);
+      return;
+    }
+
+    // Ensure project extensions directory exists
+    await this.extensionStorage.ensureExtensionsDir(projectId, tenantId);
+
+    // Check if defaults have already been copied
+    const existingExtensions = await this.extensionStorage.getAll(projectId, tenantId);
+
+    // If project already has extensions, don't overwrite
+    if (existingExtensions.length > 0) {
+      console.log(`[ExtensionLoader] Project ${projectId} already has ${existingExtensions.length} extensions`);
+      return;
+    }
+
+    // Copy default extensions to project folder
+    await this.copyDefaultExtensions(projectId);
   }
 
   /**
@@ -94,22 +118,29 @@ export class ExtensionLoader {
   /**
    * Load all enabled extensions for a project and return their exports
    *
+   * Behavior controlled by USE_DEFAULT_EXTENSIONS environment variable:
+   * - true: Load from backend/src/tools/extensions/defaults/ (development mode)
+   * - false: Load from data/{projectId}/extensions/ (production mode, per-project customization)
+   *
    * @param projectId - Project ID
-   * @param useProjectExtensions - If true, load project-specific extensions instead of defaults
    */
-  async loadExtensions(projectId: string, useProjectExtensions: boolean = false): Promise<Record<string, any>> {
+  async loadExtensions(projectId: string): Promise<Record<string, any>> {
     const tenantId = this.getTenantId(projectId);
+    const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
+
     // Get all enabled extensions
     let extensions: Extension[];
 
-    if (useProjectExtensions) {
-      // Load project-specific extensions (for future custom extensions)
-      console.log(`[ExtensionLoader] Loading project-specific extensions for ${projectId}`);
-      extensions = await this.extensionStorage.getEnabled(projectId, tenantId);
-    } else {
-      // Load directly from defaults directory (default behavior)
-      console.log(`[ExtensionLoader] Loading extensions from defaults directory`);
+    if (useDefaults) {
+      // Development mode: Load directly from defaults directory
+      // Useful for hot-reload during development
+      console.log(`[ExtensionLoader] USE_DEFAULT_EXTENSIONS=true, loading from backend/src/tools/extensions/defaults/`);
       extensions = await this.loadDefaults();
+    } else {
+      // Production mode: Load from project's extensions folder
+      // Each project can have different extension versions
+      console.log(`[ExtensionLoader] USE_DEFAULT_EXTENSIONS=false, loading from data/${projectId}/extensions/`);
+      extensions = await this.extensionStorage.getEnabled(projectId, tenantId);
     }
 
     if (extensions.length === 0) {
