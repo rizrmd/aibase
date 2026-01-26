@@ -253,17 +253,6 @@ export class WebSocketServer {
     const { ensureDirectories } = await import("../config/paths");
     await ensureDirectories();
 
-    // Pre-bundle extension UIs to warm up cache (async, don't wait)
-    const { preBundleExtensionUIs } = await import("./extension-ui-handler");
-    preBundleExtensionUIs().catch((error) => {
-      console.error('[Server] Extension UI pre-bundling failed:', error);
-    });
-
-    // Run migration for embed conversations (async, don't wait)
-    migrateEmbedConversations().catch((error) => {
-      console.error('[Server] Migration failed:', error);
-    });
-
     const wsHandlers = this.wsServer.getWebSocketHandlers();
 
     // Define WebSocket data type
@@ -276,6 +265,8 @@ export class WebSocketServer {
       urlParams?: Record<string, string>;
       isWhatsAppWS?: boolean;
     }
+
+    console.log('[DEBUG] About to call Bun.serve...');
 
     this.bunServer = Bun.serve<WebSocketData>({
       port: this.options.port,
@@ -972,6 +963,24 @@ export class WebSocketServer {
       { port: this.options.port, hostname: this.options.hostname },
       `WebSocket server started on http://${this.options.hostname}:${this.options.port}`
     );
+
+    console.log('[DEBUG] Server started, scheduling background tasks...');
+
+    // Schedule background tasks to run after server starts (defer to next tick)
+    setTimeout(() => {
+      console.log('[DEBUG] Background tasks starting...');
+      // Pre-bundle extension UIs to warm up cache (async, background)
+      import("./extension-ui-handler").then(({ preBundleExtensionUIs }) => {
+        preBundleExtensionUIs().catch((error) => {
+          console.error('[Server] Extension UI pre-bundling failed:', error);
+        });
+      });
+
+      // Run migration for embed conversations (async, background)
+      migrateEmbedConversations().catch((error) => {
+        console.error('[Server] Migration failed:', error);
+      });
+    }, 0);
   }
 
   /**

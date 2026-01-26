@@ -11,6 +11,12 @@ import * as path from 'path';
  * Migrate existing embed_user_{uid} conversations to new structure
  */
 export async function migrateEmbedConversations(): Promise<void> {
+  // Skip migration if flag is set (useful for development with many projects)
+  if (process.env.SKIP_MIGRATION === 'true') {
+    console.log('[Migration] Skipping migration (SKIP_MIGRATION=true)');
+    return;
+  }
+
   const dataDir = path.join(process.cwd(), 'data');
 
   try {

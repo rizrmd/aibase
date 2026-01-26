@@ -23,11 +23,32 @@ trap cleanup SIGINT SIGTERM
 # Start backend with hot-reload
 echo "Starting backend with hot-reload..."
 cd "$SCRIPT_DIR"
-bun --watch run backend/src/server/index.ts &
+SKIP_MIGRATION=true bun --watch run backend/src/server/index.ts &
 BACKEND_PID=$!
 
-# Wait a moment for backend to start
-sleep 2
+# Wait for backend to be healthy using health check endpoint
+echo "Waiting for backend to be ready..."
+BACKEND_URL="http://localhost:5040"
+MAX_WAIT=30
+WAIT_TIME=0
+HEALTH_CHECK_INTERVAL=1
+
+while [ $WAIT_TIME -lt $MAX_WAIT ]; do
+  if curl -s -f "${BACKEND_URL}/health" > /dev/null 2>&1; then
+    echo "✓ Backend is ready!"
+    break
+  fi
+  echo "  Waiting for backend... (${WAIT_TIME}s)"
+  sleep $HEALTH_CHECK_INTERVAL
+  WAIT_TIME=$((WAIT_TIME + HEALTH_CHECK_INTERVAL))
+done
+
+if [ $WAIT_TIME -ge $MAX_WAIT ]; then
+  echo "✗ Backend failed to start within ${MAX_WAIT}s"
+  echo "  Check backend logs for errors"
+  kill $BACKEND_PID 2>/dev/null
+  exit 1
+fi
 
 # Start frontend
 echo "Starting frontend..."
