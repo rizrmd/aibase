@@ -165,6 +165,10 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
 
         const handleScriptClick = () => {
           if (isScript) {
+            console.log('[handleScriptClick] invocation:', invocation);
+            console.log('[handleScriptClick] has inspectionData?', !!(invocation as any).inspectionData);
+            console.log('[handleScriptClick] inspectionData:', (invocation as any).inspectionData);
+
             // For executing state, code might be in result field
             const code =
               invocation.args?.code ||

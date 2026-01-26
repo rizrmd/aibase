@@ -1301,6 +1301,8 @@ export function useWebSocketHandlers({
       if (data.result?.__inspectionData) {
         const { extensionId, data: inspectionData } = data.result.__inspectionData;
         console.log("[Tool Call] Received inspection data for extension:", extensionId, inspectionData);
+        console.log("[Tool Call] toolCallId:", data.toolCallId);
+        console.log("[Tool Call] toolInvocation before update:", toolInvocation);
 
         // Store inspection data for use in dialog
         // We'll attach this to the tool invocation
@@ -1309,6 +1311,9 @@ export function useWebSocketHandlers({
           [extensionId]: inspectionData,
         };
         currentToolInvocationsRef.current.set(data.toolCallId, toolInvocation);
+
+        console.log("[Tool Call] toolInvocation after update:", toolInvocation);
+        console.log("[Tool Call] inspectionData keys:", Object.keys(toolInvocation.inspectionData || {}));
       }
 
       // Update or create assistant message to include tool invocations
