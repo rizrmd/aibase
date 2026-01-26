@@ -1,6 +1,8 @@
 import { Tool } from "../../llm/conversation";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { getProjectDir } from "../../config/paths";
+import { ProjectStorage } from "../../storage/project-storage";
 
 /**
  * Context for the Memory tool
@@ -44,7 +46,7 @@ await memory({ action: 'remove', category: 'api_keys' });
  * Memory Tool - Project-level persistent key-value storage
  * Memory is always visible in the context - no need to read it!
  * Actions: set, remove
- * Memory is stored per project in /data/{proj-id}/memory.json
+ * Memory is stored per project in /data/projects/{tenantId}/{projectId}/memory.json
  * Structure: { category: { key: value } }
  */
 
@@ -81,31 +83,41 @@ export class MemoryTool extends Tool {
   };
 
   private projectId: string = "A1";
+  private tenantId: number | string = "default";
 
   /**
    * Set the project ID for this tool instance
    */
   setProjectId(projectId: string): void {
     this.projectId = projectId;
+
+    // Also fetch and store tenant_id
+    const projectStorage = ProjectStorage.getInstance();
+    const project = projectStorage.getById(projectId);
+    this.tenantId = project?.tenant_id ?? 'default';
+  }
+
+  /**
+   * Set the tenant ID for this tool instance
+   */
+  setTenantId(tenantId: number | string): void {
+    this.tenantId = tenantId;
   }
 
   /**
    * Get the path to the memory file
+   * Returns: data/projects/{tenantId}/{projectId}/memory.json
    */
   private getMemoryFilePath(): string {
-    return path.join(
-      process.cwd(),
-      "data",
-      this.projectId,
-      "memory.json"
-    );
+    return path.join(getProjectDir(this.projectId, this.tenantId), "memory.json");
   }
 
   /**
    * Get the directory containing the memory file
+   * Returns: data/projects/{tenantId}/{projectId}/
    */
   private getMemoryDir(): string {
-    return path.join(process.cwd(), "data", this.projectId);
+    return getProjectDir(this.projectId, this.tenantId);
   }
 
   /**
