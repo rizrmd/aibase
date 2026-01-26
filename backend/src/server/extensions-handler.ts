@@ -37,11 +37,31 @@ export async function handleGetExtensions(req: Request, projectId: string): Prom
       }
     }
 
-    // Initialize extensions for project if needed (copies defaults)
-    await extensionLoader.initializeProject(projectId);
+    // Check if we should use default extensions or project-specific ones
+    const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
 
-    // Get all extensions
-    const extensions = await extensionStorage.getAll(projectId);
+    let extensions;
+    if (useDefaults) {
+      // Development mode: Load from defaults directory
+      // Convert Extension format to match what UI expects
+      const defaultExtensions = await extensionLoader['loadDefaults']();
+
+      // Transform to include isDefault flag
+      extensions = defaultExtensions.map(ext => ({
+        ...ext,
+        metadata: {
+          ...ext.metadata,
+          isDefault: true,
+        },
+      }));
+
+      logger.info({ useDefaults, count: extensions.length }, "Loaded extensions from defaults directory");
+    } else {
+      // Production mode: Load from project extensions folder
+      await extensionLoader.initializeProject(projectId);
+      extensions = await extensionStorage.getAll(projectId);
+      logger.info({ useDefaults, count: extensions.length }, "Loaded extensions from project folder");
+    }
 
     return Response.json({
       success: true,
@@ -87,7 +107,18 @@ export async function handleGetExtension(
       }
     }
 
-    const extension = await extensionStorage.getById(projectId, extensionId);
+    // Check if we should use default extensions or project-specific ones
+    const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
+
+    let extension;
+    if (useDefaults) {
+      // Development mode: Load from defaults directory
+      const defaultExtensions = await extensionLoader['loadDefaults']();
+      extension = defaultExtensions.find(ext => ext.metadata.id === extensionId);
+    } else {
+      // Production mode: Load from project extensions folder
+      extension = await extensionStorage.getById(projectId, extensionId);
+    }
 
     if (!extension) {
       return Response.json(
