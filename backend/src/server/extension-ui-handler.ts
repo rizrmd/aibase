@@ -26,6 +26,13 @@ interface CacheMetadata {
 const metadataCache = new Map<string, CacheMetadata>();
 
 /**
+ * Check if running in production mode
+ */
+function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+/**
  * Generate content hash for ETag
  */
 function generateContentHash(content: string): string {
@@ -95,7 +102,7 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
     const uiStat = await fs.stat(uiPath);
 
     // Bundle dengan esbuild
-    logger.info({ extensionId }, 'Bundling extension UI with esbuild');
+    logger.info({ extensionId, production: isProduction() }, 'Bundling extension UI with esbuild');
 
     const result = await esbuild.build({
       entryPoints: [uiPath],
@@ -103,8 +110,8 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
       platform: 'browser',
       target: 'es2020',
       format: 'esm',
-      minify: false,                     // POC: no minification for debugging
-      sourcemap: true,                   // Source maps for debugging
+      minify: isProduction(),            // Minify in production
+      sourcemap: !isProduction(),        // Source maps in development only
       external: ['react', 'react-dom'],  // Exclude shared React deps
       write: false,
       outdir: 'out',
@@ -277,7 +284,6 @@ export async function preBundleExtensionUIs(): Promise<void> {
 
         // Read and bundle
         logger.debug({ extensionId }, 'Pre-bundling extension UI');
-        const uiCode = await fs.readFile(uiPath, 'utf-8');
 
         const result = await esbuild.build({
           entryPoints: [uiPath],
@@ -285,8 +291,8 @@ export async function preBundleExtensionUIs(): Promise<void> {
           platform: 'browser',
           target: 'es2020',
           format: 'esm',
-          minify: false,
-          sourcemap: true,
+          minify: isProduction(),      // Minify in production
+          sourcemap: !isProduction(),  // Source maps in development only
           external: ['react', 'react-dom'],
           write: false,
           outdir: 'out',
