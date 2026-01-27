@@ -3,8 +3,6 @@
  * Displays uploaded images with AI-generated descriptions
  */
 
-import React from 'react';
-
 interface InspectorProps {
   data: {
     filePath?: string;

@@ -3,8 +3,6 @@
  * Displays web search results with descriptions
  */
 
-import React from 'react';
-
 interface SearchResult {
   title?: string;
   url?: string;

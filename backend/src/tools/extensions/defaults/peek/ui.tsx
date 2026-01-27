@@ -3,8 +3,6 @@
  * Displays paginated access to large stored outputs
  */
 
-import React from 'react';
-
 interface PeekMetadata {
   totalSize: number;
   dataType: string;
@@ -282,44 +280,46 @@ export function PeekMessage({ toolInvocation }: MessageProps) {
                   {peekData.length > 1000 && '...'}
                 </pre>
               ) : Array.isArray(peekData) ? (
-                <table className="w-full text-xs">
-                  <thead className="bg-muted">
-                    <tr>
-                      {peekData.length > 0 && typeof peekData[0] === 'object' && peekData[0] !== null ? (
-                        Object.keys(peekData[0] as object).map((key) => (
-                          <th
-                            key={key}
-                            className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap"
-                          >
-                            {key}
-                          </th>
-                        ))
-                      ) : (
-                        <th className="px-2 py-1 text-left font-medium text-muted-foreground">Value</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {peekData.slice(0, 10).map((row, idx) => (
-                      <tr key={idx} className="border-t">
-                        {typeof row === 'object' && row !== null ? (
-                          Object.values(row).map((value, vIdx) => (
-                            <td key={vIdx} className="px-2 py-1">
-                              {String(value ?? 'NULL')}
-                            </td>
+                <>
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted">
+                      <tr>
+                        {peekData.length > 0 && typeof peekData[0] === 'object' && peekData[0] !== null ? (
+                          Object.keys(peekData[0] as object).map((key) => (
+                            <th
+                              key={key}
+                              className="px-2 py-1 text-left font-medium text-muted-foreground whitespace-nowrap"
+                            >
+                              {key}
+                            </th>
                           ))
                         ) : (
-                          <td className="px-2 py-1">{String(row)}</td>
+                          <th className="px-2 py-1 text-left font-medium text-muted-foreground">Value</th>
                         )}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {peekData.length > 10 && (
-                  <div className="p-2 text-xs text-center text-muted-foreground bg-muted">
-                    Showing 10 of {peekData.length} rows in this page
-                  </div>
-                )}
+                    </thead>
+                    <tbody>
+                      {peekData.slice(0, 10).map((row, idx) => (
+                        <tr key={idx} className="border-t">
+                          {typeof row === 'object' && row !== null ? (
+                            Object.values(row).map((value, vIdx) => (
+                              <td key={vIdx} className="px-2 py-1">
+                                {String(value ?? 'NULL')}
+                              </td>
+                            ))
+                          ) : (
+                            <td className="px-2 py-1">{String(row)}</td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {peekData.length > 10 && (
+                    <div className="p-2 text-xs text-center text-muted-foreground bg-muted">
+                      Showing 10 of {peekData.length} rows in this page
+                    </div>
+                  )}
+                </>
               ) : (
                 <pre className="p-2 text-xs font-mono">
                   {JSON.stringify(peekData, null, 2)}

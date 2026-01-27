@@ -3,8 +3,6 @@
  * Displays interactive charts using ECharts (loaded from window.libs)
  */
 
-import React from 'react';
-
 // Get ReactECharts from window.libs (loaded by frontend)
 declare const window: {
   libs: {

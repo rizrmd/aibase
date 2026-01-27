@@ -3,8 +3,6 @@
  * Contains both inspection dialog UI and inline message chat UI
  */
 
-import React from 'react';
-
 interface InspectorProps {
   data: {
     query?: string;

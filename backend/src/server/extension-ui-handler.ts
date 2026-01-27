@@ -47,11 +47,28 @@ function generateETag(contentHash: string): string {
 }
 
 /**
- * Transform bundled code - currently no transformation needed
- * Everything is bundled by esbuild including React
+ * Transform bundled code - replace React imports with window.libs references
  */
 function transformBundledCode(code: string): string {
-  return code;
+  // Replace require('react') with window.libs.React
+  let transformed = code.replace(
+    /require\(["']react["']\)/g,
+    'window.libs.React'
+  );
+
+  // Replace require('react/jsx-runtime') with window.libs.React
+  transformed = transformed.replace(
+    /require\(["']react\/jsx-runtime["']\)/g,
+    'window.libs.React'
+  );
+
+  // Replace require('react-dom') with window.libs.ReactDOM
+  transformed = transformed.replace(
+    /require\(["']react-dom["']\)/g,
+    'window.libs.ReactDOM'
+  );
+
+  return transformed;
 }
 
 /**
@@ -153,8 +170,7 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
       minify: isProduction(),            // Minify in production
       sourcemap: !isProduction(),        // Source maps in development only
       // Externalize React dependencies - they'll be provided by window.libs at runtime
-      // Bundle everything - no external dependencies
-      // This avoids all bare specifier and require() issues
+      external: ['react', 'react/jsx-runtime', 'react-dom'],
       write: false,
       outdir: 'out',
     });
@@ -364,8 +380,7 @@ export async function preBundleExtensionUIs(): Promise<void> {
           minify: isProduction(),        // Minify in production
           sourcemap: !isProduction(),    // Source maps in development only
           // Externalize React dependencies - they'll be provided by window.libs at runtime
-          // Bundle everything - no external dependencies
-      // This avoids all bare specifier and require() issues
+          external: ['react', 'react/jsx-runtime', 'react-dom'],
           write: false,
           outdir: 'out',
         });

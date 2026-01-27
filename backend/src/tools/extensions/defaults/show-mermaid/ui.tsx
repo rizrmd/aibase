@@ -3,9 +3,7 @@
  * Displays Mermaid diagrams (using window.libs.mermaid from frontend)
  */
 
-import React, { useEffect, useState, useRef } from 'react';
-
-// Get mermaid from window.libs (loaded by frontend)
+// Get React hooks and mermaid from window.libs (loaded by frontend)
 declare const window: {
   libs: {
     React: any;
@@ -14,6 +12,7 @@ declare const window: {
   };
 };
 
+const { useEffect, useState, useRef } = window.libs.React;
 const mermaid = window.libs.mermaid;
 
 interface InspectorProps {

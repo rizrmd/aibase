@@ -3,8 +3,6 @@
  * Displays tabular data with columns and rows
  */
 
-import React from 'react';
-
 interface TableColumn {
   key: string;
   label: string;

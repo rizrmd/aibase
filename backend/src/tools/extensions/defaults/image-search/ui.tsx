@@ -3,8 +3,6 @@
  * Displays image search results with thumbnails
  */
 
-import React from 'react';
-
 interface InspectorProps {
   data: {
     query?: string;

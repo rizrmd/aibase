@@ -3,8 +3,6 @@
  * Contains both inspection dialog UI and inline message chat UI
  */
 
-import React from 'react';
-
 interface InspectorProps {
   data: {
     query?: string;
@@ -64,10 +62,10 @@ export default function ClickHouseInspector({ data, error }: InspectorProps) {
     );
   }
 
-  const { query, executionTime, rowCount, count, columns, sampleData, data, tables, stats } = data;
+  const { query, executionTime, rowCount, count, columns, sampleData, data: resultData, tables, stats } = data;
 
   // Handle both direct extension results and wrapped user results
-  const displayData = sampleData || data || tables;
+  const displayData = sampleData || resultData || tables;
   const displayCount = rowCount || count;
   const hasData = displayData && displayData.length > 0;
   const hasColumns = columns && columns.length > 0;
