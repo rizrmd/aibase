@@ -669,8 +669,19 @@ export class WebSocketServer {
         }
 
         // LLM API endpoints
-        if (pathname === "/api/llm/completion" && req.method === "POST") {
-          return handleChatCompletion(req);
+        if (pathname === "/api/llm/completion") {
+          if (req.method === "OPTIONS") {
+            return new Response(null, {
+              headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+              },
+            });
+          }
+          if (req.method === "POST") {
+            return handleChatCompletion(req);
+          }
         }
 
         // Conversations API endpoints
