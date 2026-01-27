@@ -89,14 +89,15 @@ async function loadComponentFromBackend(
         const module = { exports: {} };
 
         // Inject dependencies into window.libs for the code
-        window = window || {};
-        window.libs = {
-          React: React,
-          ReactDOM: ReactDOM,
-          ReactECharts: ReactECharts,
-          echarts: echarts,
-          mermaid: mermaid
-        };
+        if (typeof window !== 'undefined') {
+          window.libs = {
+            React: React,
+            ReactDOM: ReactDOM,
+            ReactECharts: ReactECharts,
+            echarts: echarts,
+            mermaid: mermaid
+          };
+        }
 
         // Execute the bundled code
         ${bundledCode}
