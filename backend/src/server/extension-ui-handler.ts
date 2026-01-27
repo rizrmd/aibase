@@ -47,56 +47,11 @@ function generateETag(contentHash: string): string {
 }
 
 /**
- * Transform bundled code to replace external imports with window.libs references
- * This allows esbuild to externalize React while still making it available at runtime
+ * Transform bundled code - currently no transformation needed
+ * Everything is bundled by esbuild including React
  */
 function transformBundledCode(code: string): string {
-  let transformed = code;
-
-  // Step 1: Handle CommonJS require() calls (for format: 'cjs')
-  // The minified output has patterns like: var L=require("react"),e=require("react/jsx-runtime")
-  // We need to handle all require patterns in one pass
-
-  // First, replace react requires with window.libs
-  transformed = transformed.replace(
-    /(\w+)=(?:require\(['"]react['"]\)|window\.libs\.React)/g,
-    'const $1=window.libs.React'
-  );
-
-  // Then remove react/jsx-runtime requires
-  transformed = transformed.replace(
-    /\w+=(?:require\(['"]react\/jsx[^'"]*['"]\)|window\.libs\.jsxRuntime)/g,
-    ''
-  );
-
-  // Clean up: replace double commas, trailing commas, and fix var/const issues
-  transformed = transformed.replace(/,const/g, ';\nconst');
-  transformed = transformed.replace(/,\n/g, ';\n');
-  transformed = transformed.replace(/var const/g, 'const');
-  transformed = transformed.replace(/;const const/g, ';\nconst');
-  transformed = transformed.replace(/const (\w+)=window\.libs\.React;const/g, 'const $1=window.libs.React;\nconst');
-
-  // Also handle ESM import statements (for format: 'esm' fallback or direct imports)
-  const importReplacements: [RegExp, string][] = [
-    // Simple React import: import React from 'react'
-    [/import\s+React\s+from\s+['"]react['"];?\s*\n?/g, 'const React = window.libs.React;\n'],
-    // Star import: import * as React from 'react'
-    [/import\s+\*\s+as\s+React\s+from\s+['"]react['"];?\s*\n?/g, 'const React = window.libs.React;\n'],
-    // Destructured React imports: import { useState, useEffect } from 'react'
-    [/import\s*\{\s*([^}]+)\s*\}\s+from\s+['"]react['"];?\s*\n?/g, 'const { $1 } = window.libs.React;\n'],
-    // Combined: import React, { ... } from 'react'
-    [/import\s+React\s*,\s*\{\s*([^}]+)\s*\}\s+from\s+['"]react['"];?\s*\n?/g, 'const React = window.libs.React;\nconst { $1 } = window.libs.React;\n'],
-    // Remove jsx-runtime imports
-    [/import\s+[^;]*?from\s+['"]react\/jsx[^'"]*['"];?\s*\n?/g, ''],
-    // Other external dependencies (react-dom, etc.)
-    [/import\s+\*\s+as\s+(\w+)\s+from\s+['"]react-dom['"];?\s*\n?/g, 'const $1 = window.libs.ReactDOM;\n'],
-  ];
-
-  for (const [pattern, replacement] of importReplacements) {
-    transformed = transformed.replace(pattern, replacement);
-  }
-
-  return transformed;
+  return code;
 }
 
 /**
@@ -198,7 +153,8 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
       minify: isProduction(),            // Minify in production
       sourcemap: !isProduction(),        // Source maps in development only
       // Externalize React dependencies - they'll be provided by window.libs at runtime
-      external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+      // Bundle everything - no external dependencies
+      // This avoids all bare specifier and require() issues
       write: false,
       outdir: 'out',
     });
@@ -408,7 +364,8 @@ export async function preBundleExtensionUIs(): Promise<void> {
           minify: isProduction(),        // Minify in production
           sourcemap: !isProduction(),    // Source maps in development only
           // Externalize React dependencies - they'll be provided by window.libs at runtime
-          external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+          // Bundle everything - no external dependencies
+      // This avoids all bare specifier and require() issues
           write: false,
           outdir: 'out',
         });
