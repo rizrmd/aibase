@@ -7,6 +7,12 @@
  * - Project-specific UI: /api/extensions/:id/ui?projectId=xxx&tenantId=xxx
  */
 
+import React from "react";
+import ReactDOM from "react-dom";
+import ReactECharts from "echarts-for-react";
+import * as echarts from "echarts";
+import mermaid from "mermaid";
+
 import type { ComponentType } from "react";
 import type { ToolInvocation } from "./types";
 
@@ -82,7 +88,19 @@ async function loadComponentFromBackend(
     // This is safe because the code comes from our own backend
     // All dependencies are now bundled by esbuild (no external imports)
     try {
+      // First, set up window.libs with actual imported values
+      if (typeof window !== 'undefined') {
+        window.libs = {
+          React: React,
+          ReactDOM: ReactDOM,
+          ReactECharts: ReactECharts,
+          echarts: echarts,
+          mermaid: mermaid
+        };
+      }
+
       const moduleFactory = new Function(
+        'React', 'ReactDOM', 'ReactECharts', 'echarts', 'mermaid',
         `
         "use strict";
         // Module exports object
@@ -107,13 +125,13 @@ async function loadComponentFromBackend(
         `
       );
 
-      // Execute with window.libs as arguments
+      // Execute with actual dependencies as arguments
       const moduleExports = moduleFactory(
-        window.libs.React,
-        window.libs.ReactDOM,
-        window.libs.echarts,
-        window.libs.ReactECharts,
-        window.libs.mermaid
+        React,
+        ReactDOM,
+        ReactECharts,
+        echarts,
+        mermaid
       );
 
       // Get the named export we need (e.g., ShowChartMessage)
