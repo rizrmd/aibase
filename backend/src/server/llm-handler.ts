@@ -35,7 +35,14 @@ export async function handleChatCompletion(req: Request): Promise<Response> {
                     success: false,
                     error: "prompt is required"
                 },
-                { status: 400 }
+                {
+                    status: 400,
+                    headers: {
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "POST, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                    }
+                }
             );
         }
 
@@ -56,6 +63,12 @@ export async function handleChatCompletion(req: Request): Promise<Response> {
         return Response.json({
             success: true,
             response: responseText
+        }, {
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            }
         });
 
     } catch (error) {
@@ -65,7 +78,14 @@ export async function handleChatCompletion(req: Request): Promise<Response> {
                 success: false,
                 response: error instanceof Error ? error.message : "Failed to generate completion"
             },
-            { status: 500 }
+            {
+                status: 500,
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                }
+            }
         );
     }
 }
