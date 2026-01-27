@@ -10,6 +10,19 @@
 import type { ComponentType } from "react";
 import type { ToolInvocation } from "./types";
 
+// Type declaration for window.libs
+declare global {
+  interface Window {
+    libs: {
+      React: any;
+      ReactDOM: any;
+      echarts: any;
+      ReactECharts: any;
+      mermaid: any;
+    };
+  }
+}
+
 export interface VisualizationComponentProps {
   toolInvocation: ToolInvocation;
 }
@@ -78,11 +91,11 @@ async function loadComponentFromBackend(
       // Replace named exports: export function X -> module.exports.X = function
       .replace(/export\s+(async\s+)?function\s+(\w+)/g, 'module.exports.$2 = $1function $2')
       // Replace export const X = ... -> const X = ...; module.exports.X = X;
-      .replace(/export\s+const\s+(\w+)\s*=/g, (match, name) => {
+      .replace(/export\s+const\s+(\w+)\s*=/g, (_match, name) => {
         return `const ${name} =`;
       })
       // Handle export { X, Y }
-      .replace(/export\s*{([^}]+)}/g, (match, exports) => {
+      .replace(/export\s*{([^}]+)}/g, (_match, exports) => {
         // Convert export { X, Y } to module.exports.X = X; module.exports.Y = Y;
         return exports.split(',').map((e: string) => {
           const [name, as] = e.trim().split(/\s+as\s+/);
