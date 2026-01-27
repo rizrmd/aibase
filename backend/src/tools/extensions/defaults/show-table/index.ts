@@ -3,6 +3,11 @@
  * Display tabular data in the frontend
  */
 
+// Get the visualization collector from global scope (injected by ScriptRuntime)
+declare const globalThis: {
+  __registerVisualization?: (type: string, args: any) => any;
+};
+
 // Type definitions
 interface TableColumn {
   key: string;
@@ -127,8 +132,13 @@ const showTableExtension = {
    * });
    */
   showTable: async (args: ShowTableOptions): Promise<ShowTableResult> => {
-    const toolCallId = `call_${Date.now()}_table`;
+    // Register visualization with the script runtime
+    if (globalThis.__registerVisualization) {
+      return globalThis.__registerVisualization("show-table", args);
+    }
 
+    // Fallback for direct usage
+    const toolCallId = `call_${Date.now()}_table`;
     return {
       __visualization: {
         type: "show-table",

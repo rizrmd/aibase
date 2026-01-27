@@ -3,6 +3,11 @@
  * Display interactive charts in the frontend
  */
 
+// Get the visualization collector from global scope (injected by ScriptRuntime)
+declare const globalThis: {
+  __registerVisualization?: (type: string, args: any) => any;
+};
+
 // Type definitions
 interface ChartSeries {
   name: string;
@@ -129,8 +134,14 @@ const showChartExtension = {
    * });
    */
   showChart: async (args: ShowChartOptions): Promise<ChartVisualizationResult> => {
-    const toolCallId = `call_${Date.now()}_chart`;
+    // Register visualization with the script runtime
+    // This ensures charts are included in __visualizations array
+    if (globalThis.__registerVisualization) {
+      return globalThis.__registerVisualization("show-chart", args);
+    }
 
+    // Fallback for direct usage (not recommended)
+    const toolCallId = `call_${Date.now()}_chart`;
     return {
       __visualization: {
         type: "show-chart",

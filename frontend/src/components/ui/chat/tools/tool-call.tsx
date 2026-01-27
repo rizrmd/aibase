@@ -137,6 +137,10 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
         if (isScript) {
           console.log('[ToolCall] Script invocation result:', 'result' in invocation ? invocation.result : undefined);
           console.log('[ToolCall] Script visualizations found:', scriptVisualizations);
+          console.log('[ToolCall] Has __visualizations key?', 'result' in invocation && '__visualizations' in (invocation.result || {}));
+          console.log('[ToolCall] __visualizations count:', scriptVisualizations?.length || 0);
+          console.log('[ToolCall] __visualizations types:', scriptVisualizations?.map((v: any) => v.type) || []);
+          console.log('[ToolCall] Full invocation:', invocation);
         }
 
         // Handle visualization tool calls using backend plugin system
@@ -393,28 +397,54 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                 {/* Render visualizations from script result using backend plugin system */}
                 {scriptVisualizations && scriptVisualizations.length > 0 && (
                   <div className="mt-2 mb-4">
+                    {console.log('[ToolCall] Rendering visualizations, count:', scriptVisualizations.length)}
                     {scriptVisualizations.map((viz: any, vizIndex: number) => {
                       // Create wrapper component for each visualization
                       const VizComponentWrapper = () => {
                         const [Comp, setComp] = React.useState<ComponentType<any> | null>(null);
+                        const [error, setError] = React.useState<string | null>(null);
 
                         React.useEffect(() => {
+                          console.log(`[VizComponentWrapper] Loading component for viz.type: ${viz.type}, vizIndex: ${vizIndex}`);
                           getExtensionComponent(viz.type).then(comp => {
-                            setComp(() => comp || (() => <div className="p-4 text-sm text-muted-foreground">UI component not found for: {viz.type}</div>));
+                            console.log(`[VizComponentWrapper] Got component for ${viz.type}:`, comp ? 'YES' : 'NO');
+                            if (comp) {
+                              setComp(() => comp);
+                            } else {
+                              setError(`UI component not found for: ${viz.type}`);
+                            }
+                          }).catch(err => {
+                            console.error(`[VizComponentWrapper] Error loading component for ${viz.type}:`, err);
+                            setError(`Failed to load component: ${err.message}`);
                           });
-                        }, [viz.type]);
+                        }, [viz.type, vizIndex]);
+
+                        if (error) {
+                          return <div className="p-4 text-sm text-red-600 dark:text-red-400">Error: {error}</div>;
+                        }
 
                         if (!Comp) return <div className="h-[200px] w-full animate-pulse bg-muted rounded-xl" />;
 
+                        // Create toolInvocation in the format expected by the UI component
+                        // The component expects: toolInvocation.result.args = chart data
                         const vizInvocation = {
                           toolName: viz.type,
                           toolCallId: viz.toolCallId,
-                          args: viz.args,
+                          args: {},  // Empty args at root level
                           state: "result" as const,
-                          result: { __visualization: viz }
+                          result: {
+                            args: viz.args  // ← Chart data goes here, where component expects it
+                          }
                         };
 
-                        return <Comp toolInvocation={vizInvocation} />;
+                        console.log(`[VizComponentWrapper] Rendering ${viz.type} with args:`, vizInvocation.result.args);
+
+                        try {
+                          return <Comp toolInvocation={vizInvocation} />;
+                        } catch (err) {
+                          console.error(`[VizComponentWrapper] Error rendering ${viz.type}:`, err);
+                          return <div className="p-4 text-sm text-red-600 dark:text-red-400">Render error: {err instanceof Error ? err.message : 'Unknown error'}</div>;
+                        }
                       };
 
                       return (

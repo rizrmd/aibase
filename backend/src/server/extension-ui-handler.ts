@@ -167,7 +167,18 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
       );
     }
 
-    const bundledCode = result.outputFiles[0].text;
+    // Extract the JS file (not the sourcemap) from output files
+    // When sourcemap is enabled, outputFiles contains both .js and .js.map
+    const jsFile = result.outputFiles.find(f => !f.path.endsWith('.map'));
+    if (!jsFile) {
+      logger.error({ extensionId }, 'No JS file in esbuild output');
+      return Response.json(
+        { success: false, error: 'Failed to bundle extension UI' },
+        { status: 500 }
+      );
+    }
+
+    const bundledCode = jsFile.text;
     const contentHash = generateContentHash(bundledCode);
     const etag = generateETag(contentHash);
 
@@ -311,7 +322,7 @@ export async function preBundleExtensionUIs(): Promise<void> {
 
   try {
     // Get all extension directories
-    const entries = await fs.readdir(extensionsDir, { withFileTypes: true });
+    const entries = await fs.readdir(globalExtensionsDir, { withFileTypes: true });
     const extensionDirs = entries.filter(entry => entry.isDirectory());
 
     let bundledCount = 0;
@@ -319,14 +330,14 @@ export async function preBundleExtensionUIs(): Promise<void> {
 
     for (const dir of extensionDirs) {
       const extensionId = dir.name;
-      const uiPath = path.join(extensionsDir, extensionId, 'ui.tsx');
+      const uiPath = path.join(globalExtensionsDir, extensionId, 'ui.tsx');
 
       try {
         // Check if ui.tsx exists
         await fs.access(uiPath);
 
-        // Check if already cached
-        const cached = await getFromCacheWithMetadata(extensionId);
+        // Check if already cached (pass uiPath for proper cache key)
+        const cached = await getFromCacheWithMetadata(extensionId, uiPath);
         if (cached) {
           cachedCount++;
           logger.debug({ extensionId }, 'Extension UI already cached');
@@ -344,7 +355,14 @@ export async function preBundleExtensionUIs(): Promise<void> {
           format: 'esm',
           minify: isProduction(),      // Minify in production
           sourcemap: !isProduction(),  // Source maps in development only
-          external: ['react', 'react-dom'],
+          external: [
+            'react',
+            'react-dom',
+            'react/jsx-runtime',
+            'echarts',
+            'echarts-for-react',
+            'mermaid'
+          ],  // Exclude shared deps - loaded from frontend window.libs
           write: false,
           outdir: 'out',
         });
@@ -354,12 +372,19 @@ export async function preBundleExtensionUIs(): Promise<void> {
           continue;
         }
 
-        const bundledCode = result.outputFiles[0].text;
+        // Extract the JS file (not the sourcemap) from output files
+        const jsFile = result.outputFiles.find(f => !f.path.endsWith('.map'));
+        if (!jsFile) {
+          logger.error({ extensionId }, 'No JS file in esbuild output');
+          continue;
+        }
+
+        const bundledCode = jsFile.text;
         const uiStat = await fs.stat(uiPath);
         const contentHash = generateContentHash(bundledCode);
         const etag = generateETag(contentHash);
 
-        await saveToCacheWithMetadata(extensionId, bundledCode, {
+        await saveToCacheWithMetadata(uiPath, bundledCode, {
           etag,
           contentHash,
           bundleSize: bundledCode.length,

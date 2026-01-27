@@ -149,9 +149,12 @@ export class ScriptRuntime {
           __visualizations: allVisualizations
         };
         console.log('[ScriptRuntime] Final result with visualizations:', JSON.stringify(finalResult, null, 2));
+        console.log('[ScriptRuntime] __visualizations count:', allVisualizations.length);
+        console.log('[ScriptRuntime] __visualizations types:', allVisualizations.map((v: any) => v.type));
         return finalResult;
       }
 
+      console.log('[ScriptRuntime] No visualizations to include, returning original result');
       return result;
     } catch (error: any) {
       console.error('[ScriptRuntime] Execution error:', error);
@@ -220,6 +223,9 @@ export class ScriptRuntime {
 
       // Inject inspection broadcast function for extensions
       __broadcastInspection: this.createInspectionBroadcastFunction(),
+
+      // Inject visualization collector for extensions (showChart, showTable, showMermaid)
+      __registerVisualization: this.createVisualizationCollector(),
     };
 
     // Inject all registered tools as callable functions
@@ -272,6 +278,25 @@ export class ScriptRuntime {
           }
         },
       });
+    };
+  }
+
+  /**
+   * Create the visualization collector function for extensions
+   * Allows extensions like showChart/showTable/showMermaid to register visualizations
+   */
+  private createVisualizationCollector() {
+    return (type: string, args: any) => {
+      const toolCallId = `${this.context.toolCallId}_${type}_${Date.now()}`;
+      const visualization = {
+        type,
+        toolCallId,
+        args
+      };
+      this.collectedVisualizations.push(visualization);
+      console.log(`[ScriptRuntime] Registered visualization: type=${type}, total=${this.collectedVisualizations.length}`);
+      // Return the visualization object for backward compatibility
+      return { __visualization: visualization };
     };
   }
 

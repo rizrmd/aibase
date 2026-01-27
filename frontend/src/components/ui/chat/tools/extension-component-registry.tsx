@@ -72,14 +72,19 @@ async function loadComponentFromBackend(
     // Dynamic import
     const module = await import(blobUrl);
 
-    // Clean up blob URL
-    URL.revokeObjectURL(blobUrl);
+    // Clean up blob URL after a short delay to ensure module is loaded
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
 
     // Get named export (ShowChartMessage, ShowTableMessage, ShowMermaidMessage, etc.)
     const messageComponentName = extensionId.split('-').map((part, idx) =>
       idx === 0 ? part.charAt(0).toUpperCase() + part.slice(1) :
       part.charAt(0).toUpperCase() + part.slice(1)
     ).join('') + 'Message';
+
+    console.log(`[ExtensionRegistry] Looking for component: ${messageComponentName}`);
+    console.log(`[ExtensionRegistry] Module exports:`, Object.keys(module));
+    console.log(`[ExtensionRegistry] Has named export?`, !!module[messageComponentName]);
+    console.log(`[ExtensionRegistry] Has default export?`, !!module.default);
 
     const component = module[messageComponentName] || module.default || Object.values(module)[0];
 
@@ -88,6 +93,7 @@ async function loadComponentFromBackend(
       return component as ComponentType<VisualizationComponentProps>;
     }
 
+    console.warn(`[ExtensionRegistry] No component found in module for ${extensionId}`);
     return null;
   } catch (error) {
     console.warn(`[ExtensionRegistry] Failed to load backend UI for ${extensionId}:`, error);
