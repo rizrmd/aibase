@@ -59,11 +59,56 @@ func isFeatureEnabled(envVar string) bool {
 	return value == "true" || value == "1" || value == "yes"
 }
 
+// loadEnvFileToOsEnv loads a .env file and sets the values in os.Environ()
+func loadEnvFileToOsEnv(envPath string) error {
+	// Read the .env file
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		return err
+	}
+
+	// Parse each line and set environment variables
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse KEY=VALUE
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			// Remove quotes if present
+			value = strings.Trim(value, "\"'")
+			os.Setenv(key, value)
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	color.Cyan("AIBase Development Environment v%s\n", version)
 	color.Cyan("=====================================\n\n")
 
-	// Check which features are enabled
+	// Get project root early to load .env file
+	projectRoot, err := getProjectRoot()
+	if err != nil {
+		color.Red("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Load .env file from project root to get feature flags
+	envFile := filepath.Join(projectRoot, ".env")
+	if _, err := os.Stat(envFile); err == nil {
+		loadEnvFileToOsEnv(envFile)
+	}
+
+	// Check which features are enabled (now reading from loaded .env)
 	enableAimeow := isFeatureEnabled("AIMEOW")
 	enableQdrant := isFeatureEnabled("QDRANT")
 
@@ -80,12 +125,7 @@ func main() {
 
 	currentStep := 0
 
-	// Get project root (parent of bins/)
-	projectRoot, err := getProjectRoot()
-	if err != nil {
-		color.Red("Error: %v\n", err)
-		os.Exit(1)
-	}
+	// Project root was already loaded above
 
 	// Setup paths
 	dataDir := filepath.Join(projectRoot, "data")
@@ -224,8 +264,7 @@ func main() {
 	backendLogsPath := filepath.Join(dataDir, "logs", "backend")
 	os.MkdirAll(backendLogsPath, 0755)
 
-	// Load .env file from project root for backend environment variables
-	envFile := filepath.Join(projectRoot, ".env")
+	// envFile was already loaded at startup
 	backendEnv := []string{
 		"NODE_ENV=production",
 	}
