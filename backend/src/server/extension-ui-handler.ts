@@ -47,6 +47,37 @@ function generateETag(contentHash: string): string {
 }
 
 /**
+ * Transform bundled code to replace external imports with window.libs references
+ * This allows esbuild to externalize React while still making it available at runtime
+ */
+function transformBundledCode(code: string): string {
+  let transformed = code;
+
+  // Replace bare module imports with window.libs references
+  // This handles: import ... from 'react' and import ... from 'react-dom'
+  const importReplacements: [RegExp, string][] = [
+    // Simple React import: import React from 'react'
+    [/import\s+React\s+from\s+['"]react['"];?\s*\n?/g, 'const React = window.libs.React;\n'],
+    // Star import: import * as React from 'react'
+    [/import\s+\*\s+as\s+React\s+from\s+['"]react['"];?\s*\n?/g, 'const React = window.libs.React;\n'],
+    // Destructured React imports: import { useState, useEffect } from 'react'
+    [/import\s*\{\s*([^}]+)\s*\}\s+from\s+['"]react['"];?\s*\n?/g, 'const { $1 } = window.libs.React;\n'],
+    // Combined: import React, { ... } from 'react'
+    [/import\s+React\s*,\s*\{\s*([^}]+)\s*\}\s+from\s+['"]react['"];?\s*\n?/g, 'const React = window.libs.React;\nconst { $1 } = window.libs.React;\n'],
+    // Remove jsx-runtime imports
+    [/import\s+[^;]*?from\s+['"]react\/jsx[^'"]*['"];?\s*\n?/g, ''],
+    // Other external dependencies (react-dom, etc.)
+    [/import\s+\*\s+as\s+(\w+)\s+from\s+['"]react-dom['"];?\s*\n?/g, 'const $1 = window.libs.ReactDOM;\n'],
+  ];
+
+  for (const [pattern, replacement] of importReplacements) {
+    transformed = transformed.replace(pattern, replacement);
+  }
+
+  return transformed;
+}
+
+/**
  * GET /api/extensions/:id/ui?projectId=xxx&tenantId=xxx
  * Get transpiled & bundled extension UI component
  *
@@ -140,11 +171,12 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
       bundle: true,                      // Bundle dependencies
       platform: 'browser',
       target: 'es2020',
-      format: 'esm',
+      format: 'cjs',                     // CommonJS format (uses module.exports)
+      jsx: 'automatic',                  // Automatic JSX runtime (no jsx-runtime imports needed)
       minify: isProduction(),            // Minify in production
       sourcemap: !isProduction(),        // Source maps in development only
-      // NOTE: Don't externalize anything - bundle everything together
-      // This avoids bare specifier errors when loading with new Function()
+      // Externalize React dependencies - they'll be provided by window.libs at runtime
+      external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
       write: false,
       outdir: 'out',
     });
@@ -172,7 +204,10 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
       );
     }
 
-    const bundledCode = jsFile.text;
+    let bundledCode = jsFile.text;
+
+    // Transform bundled code to replace external imports with window.libs references
+    bundledCode = transformBundledCode(bundledCode);
     const contentHash = generateContentHash(bundledCode);
     const etag = generateETag(contentHash);
 
@@ -346,11 +381,12 @@ export async function preBundleExtensionUIs(): Promise<void> {
           bundle: true,
           platform: 'browser',
           target: 'es2020',
-          format: 'esm',
-          minify: isProduction(),      // Minify in production
-          sourcemap: !isProduction(),  // Source maps in development only
-          // NOTE: Don't externalize anything - bundle everything together
-          // This avoids bare specifier errors when loading with new Function()
+          format: 'cjs',                 // CommonJS format (uses module.exports)
+          jsx: 'automatic',              // Automatic JSX runtime (no jsx-runtime imports needed)
+          minify: isProduction(),        // Minify in production
+          sourcemap: !isProduction(),    // Source maps in development only
+          // Externalize React dependencies - they'll be provided by window.libs at runtime
+          external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
           write: false,
           outdir: 'out',
         });
@@ -367,7 +403,10 @@ export async function preBundleExtensionUIs(): Promise<void> {
           continue;
         }
 
-        const bundledCode = jsFile.text;
+        let bundledCode = jsFile.text;
+
+        // Transform bundled code to replace external imports with window.libs references
+        bundledCode = transformBundledCode(bundledCode);
         const uiStat = await fs.stat(uiPath);
         const contentHash = generateContentHash(bundledCode);
         const etag = generateETag(contentHash);
