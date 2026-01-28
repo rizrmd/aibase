@@ -319,7 +319,7 @@ async function saveToCacheWithMetadata(
     metadataCache.set(cacheKey, metadata);
     logger.info({ cacheKey, size: code.length, etag: metadata.etag }, 'Cached bundled UI with metadata');
   } catch (error) {
-    logger.error({ extensionId, error }, 'Failed to cache bundled UI');
+    logger.error({ uiPath, error }, 'Failed to cache bundled UI');
     // Non-fatal, continue without caching
   }
 }

@@ -341,7 +341,8 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
 
     // Find existing conversation for this UID
     let convId: string | null = null;
-    const conversations = await chatHistoryStorage.listAllConversations(projectId);
+    const tenantId = 'default'; // WhatsApp messages use default tenant
+    const conversations = await chatHistoryStorage.listAllConversations(projectId, tenantId);
 
     // Look for existing conversation with this WhatsApp number in the ID
     for (const conv of conversations) {
@@ -752,7 +753,8 @@ export async function handleGetWhatsAppConversations(req: Request): Promise<Resp
     const chatHistoryStorage = ChatHistoryStorage.getInstance();
 
     // Get all conversations for this project
-    const allConversations = await chatHistoryStorage.listAllConversations(projectId);
+    const tenantId = 'default'; // WhatsApp messages use default tenant
+    const allConversations = await chatHistoryStorage.listAllConversations(projectId, tenantId);
 
     // Filter only WhatsApp conversations (convId starts with "wa_")
     const whatsappConversations = allConversations

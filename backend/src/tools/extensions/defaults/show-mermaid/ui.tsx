@@ -12,8 +12,8 @@ declare const window: {
   };
 };
 
-const { useEffect, useState, useRef } = window.libs.React;
-const mermaid = window.libs.mermaid;
+const { useEffect, useState, useRef } = window.libs.React as any;
+const mermaid = window.libs.mermaid as any;
 
 interface InspectorProps {
   data: {
@@ -40,11 +40,16 @@ interface MessageProps {
  * Mermaid Diagram Component
  */
 function MermaidDiagram({ code }: { code: string }) {
+  // @ts-ignore - React hooks from window.libs
   const rootRef = useRef<HTMLDivElement>(null);
+  // @ts-ignore - React hooks from window.libs
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // @ts-ignore - React hooks from window.libs
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // @ts-ignore - React hooks from window.libs
   const [svgContent, setSvgContent] = useState<string | null>(null);
 
+  // @ts-ignore - React hooks from window.libs
   useEffect(() => {
     // Initialize Mermaid on mount
     mermaid.initialize({

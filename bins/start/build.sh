@@ -4,8 +4,14 @@ set -e
 
 echo "Building cross-platform binaries..."
 
+# Get the script directory location (where this build.sh script lives)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Get the project root (2 levels up from bins/start)
-PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Change to the script directory so go build can find the module
+cd "$SCRIPT_DIR"
 
 # Build with stripped symbols for all platforms
 echo "→ Building Windows binary..."

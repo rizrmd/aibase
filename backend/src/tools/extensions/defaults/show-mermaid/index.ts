@@ -3,11 +3,6 @@
  * Display Mermaid diagrams in the frontend
  */
 
-// Get the visualization collector from global scope (injected by ScriptRuntime)
-declare const globalThis: {
-  __registerVisualization?: (type: string, args: any) => any;
-};
-
 // Type definitions
 interface ShowMermaidOptions {
   title: string;
@@ -119,13 +114,9 @@ const showMermaidExtension = {
    * });
    */
   showMermaid: async (args: ShowMermaidOptions): Promise<ShowMermaidResult> => {
-    // Register visualization with the script runtime
-    if (globalThis.__registerVisualization) {
-      return globalThis.__registerVisualization("show-mermaid", args);
-    }
-
-    // Fallback for direct usage
-    const toolCallId = `call_${Date.now()}_mermaid`;
+    // Return visualization metadata directly
+    // ScriptRuntime will collect this into __visualizations array
+    const toolCallId = `viz_mermaid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     return {
       __visualization: {
         type: "show-mermaid",
@@ -136,4 +127,5 @@ const showMermaidExtension = {
   },
 };
 
+// @ts-expect-error - Extension loader wraps this code in an async function
 return showMermaidExtension;

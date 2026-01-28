@@ -195,3 +195,116 @@ export async function reloadExtension(
   }
   return await response.json();
 }
+
+/**
+ * Get extension health status (error tracking)
+ */
+export async function getExtensionHealth(
+  projectId: string,
+  extensionId: string
+): Promise<{
+  hasError: boolean;
+  errorCount?: number;
+  lastError?: string;
+  lastErrorAt?: number;
+}> {
+  const response = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/extensions/${extensionId}/health`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to get extension health");
+  }
+
+  return await response.json();
+}
+
+/**
+ * Get extension debug logs
+ */
+export async function getExtensionDebugLogs(
+  projectId: string,
+  extensionId: string
+): Promise<Array<{
+  timestamp: number;
+  level: "info" | "warn" | "error" | "debug";
+  message: string;
+  source: 'frontend' | 'backend';
+  data?: any;
+}>> {
+  const response = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/extensions/${extensionId}/debug`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to get debug logs");
+  }
+
+  const data = await response.json();
+  return data.data.logs || [];
+}
+
+/**
+ * Toggle extension debug mode
+ */
+export async function toggleExtensionDebug(
+  projectId: string,
+  extensionId: string,
+  debug: boolean
+): Promise<Extension> {
+  const response = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/extensions/${extensionId}/debug`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ debug }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to toggle debug mode");
+  }
+
+  const data = await response.json();
+  return data.data.extension;
+}
+
+/**
+ * Toggle extension source (between default and project)
+ */
+export async function toggleExtensionSource(
+  projectId: string,
+  extensionId: string,
+  source: 'default' | 'project'
+): Promise<{ success: boolean; data: { extensionId: string; source: string; message: string } }> {
+  const response = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/extensions/${extensionId}/toggle-source`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ source }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to toggle extension source");
+  }
+
+  return await response.json();
+}

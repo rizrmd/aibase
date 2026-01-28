@@ -8,7 +8,7 @@ import { generateExtension } from "../services/extension-generator";
 
 export async function handleExtensionGeneratorRequest(req: Request, projectId: string): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { prompt?: unknown; category?: unknown };
     const { prompt, category } = body;
 
     // Validate input
@@ -27,19 +27,19 @@ export async function handleExtensionGeneratorRequest(req: Request, projectId: s
     }
 
     console.log(`[ExtensionGenerator] Generating extension for project ${projectId}`);
-    console.log(`[ExtensionGenerator] Prompt: ${prompt.substring(0, 100)}...`);
+    console.log(`[ExtensionGenerator] Prompt: ${(prompt as string).substring(0, 100)}...`);
 
     // Generate extension using AI
-    const extension = await generateExtension(prompt, {
+    const extension = await generateExtension(prompt as string, {
       projectId,
-      category: category || '',
+      category: (category as string | undefined) || '',
     });
 
     // Save extension to project
     const extensionStorage = new ExtensionStorage();
 
     // Check if extension already exists
-    const existing = await extensionStorage.getById(projectId, extension.metadata.id);
+    const existing = await extensionStorage.getById(projectId, 'default', extension.metadata.id);
     if (existing) {
       return Response.json({
         success: false,
@@ -49,7 +49,7 @@ export async function handleExtensionGeneratorRequest(req: Request, projectId: s
     }
 
     // Create extension
-    const created = await extensionStorage.create(projectId, {
+    const created = await extensionStorage.create(projectId, 'default', {
       id: extension.metadata.id,
       name: extension.metadata.name,
       description: extension.metadata.description,
@@ -89,7 +89,7 @@ export async function handleExtensionGeneratorRequest(req: Request, projectId: s
  */
 export async function handleExtensionPreviewRequest(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { prompt?: unknown; category?: unknown };
     const { prompt, category } = body;
 
     if (!prompt || typeof prompt !== 'string') {
@@ -99,12 +99,12 @@ export async function handleExtensionPreviewRequest(req: Request): Promise<Respo
       }, { status: 400 });
     }
 
-    console.log(`[ExtensionGenerator] Generating preview for prompt: ${prompt.substring(0, 100)}...`);
+    console.log(`[ExtensionGenerator] Generating preview for prompt: ${(prompt as string).substring(0, 100)}...`);
 
     // Generate extension preview
-    const extension = await generateExtension(prompt, {
+    const extension = await generateExtension(prompt as string, {
       projectId: 'preview',
-      category: category || '',
+      category: (category as string | undefined) || '',
     });
 
     // Add timestamp fields that frontend expects

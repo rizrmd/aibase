@@ -111,7 +111,7 @@ describe('FileTool', () => {
     });
 
     it('should handle missing action', async () => {
-      await expect(fileTool.execute({})).rejects.toThrow('Unknown action: undefined');
+      await expect(fileTool.execute({} as any)).rejects.toThrow('Unknown action: undefined');
     });
   });
 

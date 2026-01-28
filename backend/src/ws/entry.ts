@@ -459,6 +459,25 @@ export class WSServer extends WSEventEmitter {
       return;
     }
 
+    // Load project to get tenant_id (after projectId check)
+    const projectStorage = ProjectStorage.getInstance();
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? 'default';
+    if (!projectId) {
+      console.error("Project ID is required for WebSocket connection");
+      this.sendToWebSocket(ws, {
+        type: "error",
+        id: this.generateMessageId(),
+        data: {
+          code: "MISSING_PROJECT_ID",
+          message: "Project ID is required. Please select or create a project.",
+        },
+        metadata: { timestamp: Date.now() },
+      });
+      ws.close(1008, "Project ID required");
+      return;
+    }
+
     const sessionId = this.generateSessionId();
 
     console.log(`=== New Connection ===`);
@@ -475,13 +494,10 @@ export class WSServer extends WSEventEmitter {
 
     // For embed connections with uid, check if project allows uid-based identification
     // Only use embedUid as CURRENT_UID if project.use_client_uid is true
-    let effectiveUserId = authenticatedUser?.id;
+    let effectiveUserId: string | undefined = authenticatedUser?.id?.toString();
 
     if (embedUid && ws.data?.isEmbed) {
       // Check if project allows uid-based user identification
-      const projectStorage = ProjectStorage.getInstance();
-      const project = projectStorage.getById(projectId);
-
       if (project?.use_client_uid) {
         // Use the external uid as CURRENT_UID (not the database user ID)
         effectiveUserId = embedUid;
@@ -492,6 +508,7 @@ export class WSServer extends WSEventEmitter {
     const connectionInfo: ConnectionInfo = {
       convId,
       projectId,
+      tenantId,
       userId: effectiveUserId,
       sessionId,
       connectedAt: Date.now(),
@@ -515,8 +532,8 @@ export class WSServer extends WSEventEmitter {
 
     // Create conversation for this session with existing history
     // Load from disk if available
-    const existingHistory = await this.messagePersistence.getClientHistory(convId, projectId, effectiveUserId);
-    const conversation = await this.createConversation(existingHistory, convId, projectId, effectiveUserId, urlParams);
+    const existingHistory = await this.messagePersistence.getClientHistory(convId, projectId, effectiveUserId ?? 'anonymous');
+    const conversation = await this.createConversation(existingHistory, convId, projectId, effectiveUserId ?? 'anonymous', urlParams);
     connectionInfo.conversation = conversation;
 
     // Hook into conversation to persist changes to MessagePersistence
@@ -525,7 +542,7 @@ export class WSServer extends WSEventEmitter {
       originalAddMessage(message);
       // Immediately persist the updated conversation history
       const history = (conversation as any)._history || [];
-      this.messagePersistence.setClientHistory(convId, history, projectId, effectiveUserId);
+      this.messagePersistence.setClientHistory(convId, history, projectId, effectiveUserId ?? 'anonymous');
     };
 
     // Start heartbeat for this connection
@@ -820,7 +837,8 @@ export class WSServer extends WSEventEmitter {
       // Get conversation info to retrieve token usage
       const convInfo = await getConversationInfo(
         connectionInfo.convId,
-        connectionInfo.projectId
+        connectionInfo.projectId,
+        connectionInfo.tenantId
       );
       const tokenUsage = convInfo?.tokenUsage?.total;
 
@@ -1053,8 +1071,9 @@ export class WSServer extends WSEventEmitter {
 
   /**
    * Broadcast message to all connections for a specific conversation
+   * Public method for external modules to send messages to a conversation
    */
-  private broadcastToConv(convId: string, message: WSMessage): number {
+  public broadcastToConv(convId: string, message: WSMessage): number {
     let sent = 0;
     for (const [ws, connInfo] of this.connections) {
       if (connInfo.convId === convId) {
@@ -1191,7 +1210,8 @@ export class WSServer extends WSEventEmitter {
           // Get conversation info for token usage totals
           const convInfo = await getConversationInfo(
             connectionInfo.convId,
-            connectionInfo.projectId
+            connectionInfo.projectId,
+            connectionInfo.tenantId
           );
           const totalTokenUsage = convInfo?.tokenUsage?.total;
 
@@ -1621,6 +1641,7 @@ Always be helpful and conversational.`;
 interface ConnectionInfo {
   convId: string;
   projectId: string;
+  tenantId: number | string;
   userId?: string;
   sessionId: string;
   connectedAt: number;

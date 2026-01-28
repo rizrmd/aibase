@@ -96,7 +96,7 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
       return Response.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const body = await req.json();
+    const body = await req.json() as { name?: unknown; domain?: unknown };
 
     if (!body.name) {
       return Response.json(
@@ -106,8 +106,8 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
     }
 
     const tenant = await tenantStorage.create({
-      name: body.name,
-      domain: body.domain || null,
+      name: body.name as string,
+      domain: body.domain ? body.domain as string : null,
     });
 
     return Response.json({ tenant }, { status: 201 });
@@ -141,11 +141,11 @@ export async function handleUpdateTenant(req: Request, tenantId: string): Promis
       return Response.json({ error: "Invalid tenant ID" }, { status: 400 });
     }
 
-    const body = await req.json();
+    const body = await req.json() as { name?: unknown; domain?: unknown };
 
     const tenant = await tenantStorage.update(tenantIdNum, {
-      name: body.name,
-      domain: body.domain,
+      name: body.name as string,
+      domain: body.domain as string | undefined,
     });
 
     if (!tenant) {
@@ -414,7 +414,7 @@ export async function handleCreateTenantUser(req: Request, tenantId: string): Pr
       return Response.json({ error: "Tenant not found" }, { status: 404 });
     }
 
-    const body = await req.json();
+    const body = await req.json() as { email?: unknown; username?: unknown; password?: unknown; role?: unknown };
 
     if (!body.email || !body.username || !body.password) {
       return Response.json(
@@ -424,14 +424,14 @@ export async function handleCreateTenantUser(req: Request, tenantId: string): Pr
     }
 
     // Hash the password
-    const password_hash = await Bun.password.hash(body.password);
+    const password_hash = await Bun.password.hash(body.password as string);
 
     // Create user with tenant_id
     const user = await userStorage.create({
-      email: body.email,
-      username: body.username,
+      email: body.email as string,
+      username: body.username as string,
       password_hash,
-      role: body.role || 'user',
+      role: (body.role as 'admin' | 'user') || 'user',
       tenant_id: tenantIdNum,
     });
 
@@ -488,7 +488,7 @@ export async function handleUpdateTenantUser(req: Request, tenantId: string, use
       return Response.json({ error: "User does not belong to this tenant" }, { status: 403 });
     }
 
-    const body = await req.json();
+    const body = await req.json() as { email?: unknown; username?: unknown; password?: unknown; role?: unknown };
     const updateData: any = {};
 
     if (body.email !== undefined) {
@@ -498,14 +498,15 @@ export async function handleUpdateTenantUser(req: Request, tenantId: string, use
       updateData.username = body.username;
     }
     if (body.password !== undefined) {
-      updateData.password_hash = await Bun.password.hash(body.password);
+      updateData.password_hash = await Bun.password.hash(body.password as string);
     }
     if (body.role !== undefined) {
       // Validate role
-      if (!['admin', 'user'].includes(body.role)) {
+      const role = body.role as 'admin' | 'user';
+      if (!['admin', 'user'].includes(role)) {
         return Response.json({ error: "Invalid role. Must be 'admin' or 'user'" }, { status: 400 });
       }
-      updateData.role = body.role;
+      updateData.role = role;
     }
 
     const user = await userStorage.update(userIdNum, updateData);

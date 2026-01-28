@@ -68,6 +68,7 @@ import {
   handleUpdateExtension,
   handleDeleteExtension,
   handleToggleExtension,
+  handleToggleExtensionSource,
   handleReloadExtension,
   handleResetExtensions,
   handleGenerateExtension,
@@ -506,7 +507,7 @@ export class WebSocketServer {
         const extensionGenerateMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/extensions\/generate$/);
         if (extensionGenerateMatch && req.method === "POST") {
           const projectId = extensionGenerateMatch[1];
-          return handleGenerateExtension(req, projectId);
+          if (projectId) return handleGenerateExtension(req, projectId);
         }
 
         const extensionPreviewMatch = pathname.match(/^\/api\/extensions\/preview$/);
@@ -541,6 +542,14 @@ export class WebSocketServer {
           return handleReloadExtension(req, projectId!, extensionId!);
         }
 
+        // Extension source toggle endpoint
+        const extensionSourceToggleMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/extensions\/([^\/]+)\/toggle-source$/);
+        if (extensionSourceToggleMatch && req.method === "POST") {
+          const projectId = extensionSourceToggleMatch[1];
+          const extensionId = extensionSourceToggleMatch[2];
+          return handleToggleExtensionSource(req, projectId!, extensionId!);
+        }
+
         // Extension UI bundling endpoint
         const extensionUIMatch = pathname.match(/^\/api\/extensions\/([^\/]+)\/ui$/);
         if (extensionUIMatch && req.method === "GET") {
@@ -549,14 +558,85 @@ export class WebSocketServer {
           return handleGetExtensionUI(req, extensionId!);
         }
 
+        // Extension metadata endpoint
+        const extensionMetadataMatch = pathname.match(/^\/api\/extensions\/([^\/]+)\/metadata$/);
+        if (extensionMetadataMatch && req.method === "GET") {
+          const extensionId = extensionMetadataMatch[1];
+          const { handleGetExtensionMetadata } = await import("./extensions-handler");
+          return handleGetExtensionMetadata(req, extensionId!);
+        }
+
+        // Extension dependency bundling endpoint
+        if (pathname === "/api/extensions/dependencies/bundle" && req.method === "POST") {
+          const { handleBundleDependencies } = await import("./extension-dependency-handler");
+          return handleBundleDependencies(req);
+        }
+
+        // Extension dependency stats endpoint
+        if (pathname === "/api/extensions/dependencies/stats" && req.method === "GET") {
+          const { handleGetDependencyStats } = await import("./extension-dependency-handler");
+          return handleGetDependencyStats();
+        }
+
+        // Extension dependency cache clear endpoint
+        if (pathname === "/api/extensions/dependencies/cache" && req.method === "DELETE") {
+          const { handleClearDependencyCache } = await import("./extension-dependency-handler");
+          return handleClearDependencyCache(req);
+        }
+
+        // Extension health endpoint
+        const extensionHealthMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/extensions\/([^\/]+)\/health$/);
+        if (extensionHealthMatch && req.method === "GET") {
+          const projectId = extensionHealthMatch[1];
+          const extensionId = extensionHealthMatch[2];
+          if (projectId && extensionId) {
+            const { handleGetExtensionHealth } = await import("./extensions-handler");
+            return handleGetExtensionHealth(req, projectId, extensionId);
+          }
+        }
+
+        // Extension debug logs endpoint
+        const extensionDebugMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/extensions\/([^\/]+)\/debug$/);
+        if (extensionDebugMatch && req.method === "GET") {
+          const projectId = extensionDebugMatch[1];
+          const extensionId = extensionDebugMatch[2];
+          if (projectId && extensionId) {
+            const { handleGetExtensionDebugLogs } = await import("./extensions-handler");
+            return handleGetExtensionDebugLogs(req, projectId, extensionId);
+          }
+        }
+
+        // Extension debug toggle endpoint
+        if (extensionDebugMatch && req.method === "PATCH") {
+          const projectId = extensionDebugMatch[1];
+          const extensionId = extensionDebugMatch[2];
+          if (projectId && extensionId) {
+            const { handleToggleExtensionDebug } = await import("./extensions-handler");
+            return handleToggleExtensionDebug(req, projectId, extensionId);
+          }
+        }
+
+        // Extension logs endpoint (frontend logging)
+        const extensionLogsMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/extensions\/([^\/]+)\/logs$/);
+        if (extensionLogsMatch && req.method === "POST") {
+          const projectId = extensionLogsMatch[1];
+          const extensionId = extensionLogsMatch[2];
+          if (projectId && extensionId) {
+            const { handleAddExtensionLog } = await import("./extensions-handler");
+            return handleAddExtensionLog(req, projectId, extensionId);
+          }
+        }
+
         // Categories API endpoints
         const categoriesMatch = pathname.match(/^\/api\/projects\/([^\/]+)\/categories$/);
         if (categoriesMatch) {
           const projectId = categoriesMatch[1];
-          if (req.method === "GET") {
-            return handleGetCategories(req, projectId);
-          } else if (req.method === "POST") {
-            return handleCreateCategory(req, projectId);
+          if (projectId) {
+            if (req.method === "GET") {
+              return handleGetCategories(req, projectId);
+            } else if (req.method === "POST") {
+              return handleCreateCategory(req, projectId);
+            }
           }
         }
 
@@ -564,12 +644,14 @@ export class WebSocketServer {
         if (categoryIdMatch) {
           const projectId = categoryIdMatch[1];
           const categoryId = categoryIdMatch[2];
-          if (req.method === "GET") {
-            return handleGetCategory(req, projectId, categoryId);
-          } else if (req.method === "PUT") {
-            return handleUpdateCategory(req, projectId, categoryId);
-          } else if (req.method === "DELETE") {
-            return handleDeleteCategory(req, projectId, categoryId);
+          if (projectId && categoryId) {
+            if (req.method === "GET") {
+              return handleGetCategory(req, projectId, categoryId);
+            } else if (req.method === "PUT") {
+              return handleUpdateCategory(req, projectId, categoryId);
+            } else if (req.method === "DELETE") {
+              return handleDeleteCategory(req, projectId, categoryId);
+            }
           }
         }
 

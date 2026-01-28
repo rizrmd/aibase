@@ -2,7 +2,7 @@
  * Handler for file management API endpoints
  */
 
-import { FileStorage, FileScope } from "../storage/file-storage";
+import { FileStorage, type FileScope } from "../storage/file-storage";
 import { ProjectStorage } from "../storage/project-storage";
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
 import { createLogger } from "../utils/logger";
@@ -186,7 +186,7 @@ export async function handleRenameFile(
   fileName: string
 ): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { newName?: unknown };
     const { newName } = body;
 
     if (!newName) {
@@ -209,7 +209,7 @@ export async function handleRenameFile(
     }
     const tenantId = project.tenant_id ?? 'default';
 
-    await fileStorage.renameFile(convId, fileName, newName, projectId, tenantId);
+    await fileStorage.renameFile(convId, fileName, newName as string, projectId, tenantId);
 
     return Response.json({
       success: true,
@@ -236,7 +236,12 @@ export async function handleRenameFile(
  */
 export async function handleMoveFile(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as {
+      projectId?: unknown;
+      fromConvId?: unknown;
+      toConvId?: unknown;
+      fileName?: unknown;
+    };
     const { projectId, fromConvId, toConvId, fileName } = body;
 
     if (!projectId || !fromConvId || !toConvId || !fileName) {
@@ -250,7 +255,7 @@ export async function handleMoveFile(req: Request): Promise<Response> {
     }
 
     // Get project to retrieve tenant_id
-    const project = projectStorage.getById(projectId);
+    const project = projectStorage.getById(projectId as string);
     if (!project) {
       return Response.json(
         { success: false, error: "Project not found" },
@@ -259,7 +264,7 @@ export async function handleMoveFile(req: Request): Promise<Response> {
     }
     const tenantId = project.tenant_id ?? 'default';
 
-    await fileStorage.moveFile(fromConvId, toConvId, fileName, projectId, tenantId);
+    await fileStorage.moveFile(fromConvId as string, toConvId as string, fileName as string, projectId as string, tenantId);
 
     return Response.json({
       success: true,

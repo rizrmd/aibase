@@ -3,7 +3,7 @@
  * Handles multipart/form-data file uploads
  */
 
-import { FileStorage, FileScope } from '../storage/file-storage';
+import { FileStorage, type FileScope } from '../storage/file-storage';
 import { ProjectStorage } from '../storage/project-storage';
 import { createLogger } from '../utils/logger';
 import sharp from 'sharp';
@@ -277,7 +277,7 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
       console.log('[UPLOAD-HANDLER] Extension hook execution result:', { fileName: file.name, hookResult });
 
       let fileDescription: string | undefined;
-      if (hookResult?.description) {
+      if (hookResult?.description && typeof hookResult.description === 'string') {
         console.log('[UPLOAD-HANDLER] Extension hook generated description for', file.name, ':', hookResult.description.substring(0, 100));
 
         // Update file metadata with description
@@ -342,6 +342,10 @@ export async function handleFileDownload(req: Request): Promise<Response> {
     const convId = pathParts[4];
     const fileName = pathParts[5];
 
+    if (!projectId || !convId || !fileName) {
+      return new Response('Invalid file path', { status: 400 });
+    }
+
     // Get project to retrieve tenant_id
     const projectStorage = ProjectStorage.getInstance();
     const project = projectStorage.getById(projectId);
@@ -355,7 +359,7 @@ export async function handleFileDownload(req: Request): Promise<Response> {
 
     // Try to determine content type from extension
     const ext = fileName.split('.').pop()?.toLowerCase();
-    const contentType = getContentType(ext);
+    const contentType = getContentType(ext ?? 'application/octet-stream');
 
     // Convert Buffer to Uint8Array for Response
     const uint8Array = new Uint8Array(fileBuffer);

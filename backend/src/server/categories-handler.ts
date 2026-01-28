@@ -140,7 +140,13 @@ export async function handleCreateCategory(req: Request, projectId: string): Pro
     const project = projectStorage.getById(projectId);
     const tenantId = project?.tenant_id ?? auth.user.tenant_id;
 
-    const body = await req.json();
+    const body = await req.json() as {
+      id?: unknown;
+      name?: unknown;
+      description?: unknown;
+      icon?: unknown;
+      color?: unknown;
+    };
     const { id, name, description, icon, color } = body;
 
     if (!id || !name) {
@@ -151,11 +157,11 @@ export async function handleCreateCategory(req: Request, projectId: string): Pro
     }
 
     const category = await categoryStorage.create(projectId, tenantId, {
-      id,
-      name,
-      description,
-      icon,
-      color,
+      id: id as string,
+      name: name as string,
+      description: description as string | undefined,
+      icon: icon as string | undefined,
+      color: color as string | undefined,
     });
 
     return Response.json({
@@ -206,14 +212,19 @@ export async function handleUpdateCategory(
     const project = projectStorage.getById(projectId);
     const tenantId = project?.tenant_id ?? auth.user.tenant_id;
 
-    const body = await req.json();
+    const body = await req.json() as {
+      name?: unknown;
+      description?: unknown;
+      icon?: unknown;
+      color?: unknown;
+    };
     const { name, description, icon, color } = body;
 
     const category = await categoryStorage.update(projectId, tenantId, categoryId, {
-      name,
-      description,
-      icon,
-      color,
+      name: name as string | undefined,
+      description: description as string | undefined,
+      icon: icon as string | undefined,
+      color: color as string | undefined,
     });
 
     if (!category) {

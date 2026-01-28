@@ -157,8 +157,8 @@ export async function handleUpdateEmbedCss(req: Request, projectId: string): Pro
       );
     }
 
-    const body = await req.json();
-    const customCss = body.customCss || "";
+    const body = await req.json() as { customCss?: unknown };
+    const customCss = (body.customCss as string | undefined) || "";
 
     // Limit CSS size to 10KB
     if (customCss.length > 10240) {
@@ -200,8 +200,8 @@ export async function handleUpdateWelcomeMessage(req: Request, projectId: string
       );
     }
 
-    const body = await req.json();
-    const welcomeMessage = body.welcomeMessage || null;
+    const body = await req.json() as { welcomeMessage?: unknown };
+    const welcomeMessage = (body.welcomeMessage as string | null | undefined) || null;
 
     // Limit welcome message size to 500 characters
     if (welcomeMessage && welcomeMessage.length > 500) {

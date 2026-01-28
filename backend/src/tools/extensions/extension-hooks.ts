@@ -69,8 +69,9 @@ class ExtensionHookRegistry {
 
   /**
    * Execute all hooks of a specific type
+   * Returns the first non-empty result from any hook
    */
-  async executeHook(type: HookType, context: any): Promise<void> {
+  async executeHook(type: HookType, context: any): Promise<FileUploadResult | undefined> {
     const hooks = this.hooks.get(type);
     if (!hooks || hooks.size === 0) {
       return;

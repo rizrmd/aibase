@@ -19,7 +19,7 @@ export interface Session {
 
 export class SessionStorage {
   private static instance: SessionStorage;
-  private db: Database;
+  private db!: Database;
   private dbPath: string;
 
   // Default session duration: 7 days

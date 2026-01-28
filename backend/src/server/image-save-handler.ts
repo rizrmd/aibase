@@ -77,7 +77,7 @@ export async function handleSaveImage(req: Request): Promise<Response> {
 
     // Convert base64 to Buffer
     const base64Data = base64.includes('base64,')
-      ? base64.split('base64,')[1]
+      ? (base64.split('base64,')[1] ?? base64)
       : base64;
 
     const buffer = Buffer.from(base64Data, 'base64');

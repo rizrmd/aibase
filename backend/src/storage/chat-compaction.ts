@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import OpenAI from 'openai';
 import { getConversationDir, getConversationChatsDir } from '../config/paths';
 
@@ -157,7 +157,8 @@ ${messages.map((msg, idx) => {
     // For assistant, only include the text content, not tool calls
     return `[${idx}] ASSISTANT: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`;
   } else if (msg.role === 'tool') {
-    return `[${idx}] TOOL: ${msg.content?.substring(0, 200)}...`;
+    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+    return `[${idx}] TOOL: ${content.substring(0, 200)}...`;
   }
   return '';
 }).filter(Boolean).join('\n\n')}

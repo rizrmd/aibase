@@ -227,10 +227,11 @@ const duckdbExtension = {
           }
 
           return extensionResult;
-        } catch (parseError) {
+        } catch (parseError: unknown) {
           // Return raw output for debugging
+          const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
           throw new Error(
-            `Failed to parse JSON result: ${parseError.message}\nRaw output (first 500 chars): ${trimmedResult.substring(0, 500)}`
+            `Failed to parse JSON result: ${errorMessage}\nRaw output (first 500 chars): ${trimmedResult.substring(0, 500)}`
           );
         }
       } else {
@@ -247,4 +248,5 @@ const duckdbExtension = {
   },
 };
 
+// @ts-expect-error - Extension loader wraps this code in an async function
 return duckdbExtension;

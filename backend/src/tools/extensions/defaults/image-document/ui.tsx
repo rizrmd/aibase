@@ -155,7 +155,7 @@ export function ImageDocumentMessage({ toolInvocation }: MessageProps) {
 
   const filePath = result.filePath || args?.filePath;
   const fileId = result.fileId || args?.fileId;
-  const fileName = result.fileName;
+  const fileName = (result as any).fileName;
 
   const imageUrl = getImageUrl(filePath, fileId);
 

@@ -19,7 +19,9 @@ export interface Tenant {
 
 export interface CreateTenantData {
   name: string;
+  slug?: string;
   domain?: string | null;
+  logo_url?: string | null;
 }
 
 export interface UpdateTenantData {
@@ -29,7 +31,7 @@ export interface UpdateTenantData {
 
 export class TenantStorage {
   private static instance: TenantStorage;
-  private db: Database;
+  private db!: Database;
   private dbPath: string;
 
   private constructor() {

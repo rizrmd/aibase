@@ -32,6 +32,11 @@ export interface InspectionUIConfig {
   showByDefault?: boolean;        // Auto-select this tab
 }
 
+export interface DependencyConfig {
+  frontend?: Record<string, string>;  // Package -> version (e.g., "d3": "^7.9.0")
+  backend?: Record<string, string>;   // Reserved for future use
+}
+
 export interface ExtensionMetadata {
   id: string;           // unique identifier (same as folder name)
   name: string;         // display name
@@ -55,6 +60,27 @@ export interface ExtensionMetadata {
 
   // NEW: Inspection UI definition
   inspectionUI?: InspectionUIConfig;
+
+  // NEW: Dynamic npm package dependencies
+  dependencies?: DependencyConfig;
+
+  // NEW: Error tracking
+  errorCount?: number;           // Total number of errors
+  lastError?: string;            // Last error message
+  lastErrorAt?: number;          // Timestamp of last error
+  hasError?: boolean;            // Convenience flag
+
+  // NEW: Debug mode
+  debug?: boolean;               // Enable detailed logging
+  debugLogs?: DebugLogEntry[];   // Recent debug logs
+}
+
+export interface DebugLogEntry {
+  timestamp: number;             // When the log was created
+  level: 'info' | 'warn' | 'error' | 'debug';
+  message: string;               // Log message
+  source: 'frontend' | 'backend'; // Where the log originated
+  data?: any;                    // Additional data
 }
 
 export interface Extension {
@@ -78,6 +104,8 @@ export interface CreateExtensionData {
   fileExtraction?: FileExtractionConfig;
   messageUI?: MessageUIConfig;
   inspectionUI?: InspectionUIConfig;
+  dependencies?: DependencyConfig;
+  debug?: boolean;
 }
 
 export interface UpdateExtensionData {
@@ -85,14 +113,24 @@ export interface UpdateExtensionData {
   description?: string;
   author?: string;
   version?: string;
+  category?: string;
   code?: string;
   enabled?: boolean;
+  debug?: boolean;
+  debugLogs?: DebugLogEntry[];
 
   // NEW: Optional enhanced metadata
   examples?: ExampleEntry[];
   fileExtraction?: FileExtractionConfig;
   messageUI?: MessageUIConfig;
   inspectionUI?: InspectionUIConfig;
+  dependencies?: DependencyConfig;
+
+  // NEW: Error tracking fields
+  errorCount?: number;
+  lastError?: string;
+  lastErrorAt?: number;
+  hasError?: boolean;
 }
 
 export class ExtensionStorage {
@@ -176,6 +214,15 @@ export class ExtensionStorage {
       fileExtraction: data.fileExtraction,
       messageUI: data.messageUI,
       inspectionUI: data.inspectionUI,
+      dependencies: data.dependencies,
+      debug: data.debug || false,
+
+      // NEW: Error tracking (initialize)
+      errorCount: 0,
+      lastError: undefined,
+      lastErrorAt: undefined,
+      hasError: false,
+      debugLogs: [],
     };
 
     // Write metadata file
@@ -291,6 +338,7 @@ export class ExtensionStorage {
       fileExtraction: updates.fileExtraction !== undefined ? updates.fileExtraction : existing.metadata.fileExtraction,
       messageUI: updates.messageUI !== undefined ? updates.messageUI : existing.metadata.messageUI,
       inspectionUI: updates.inspectionUI !== undefined ? updates.inspectionUI : existing.metadata.inspectionUI,
+      dependencies: updates.dependencies !== undefined ? updates.dependencies : existing.metadata.dependencies,
     };
 
     // Update code if provided
@@ -390,12 +438,12 @@ export class ExtensionStorage {
       if (!grouped[category]) {
         grouped[category] = [];
       }
-      grouped[category].push(ext);
+      grouped[category]!.push(ext);
     }
 
     // Sort extensions within each category by name
     for (const category in grouped) {
-      grouped[category].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name));
+      grouped[category]!.sort((a, b) => a.metadata.name.localeCompare(b.metadata.name));
     }
 
     return grouped;
@@ -418,5 +466,78 @@ export class ExtensionStorage {
         console.error(`[ExtensionStorage] Failed to uncategorize extension '${ext.metadata.id}':`, error);
       }
     }
+  }
+
+  /**
+   * Record an error for an extension
+   */
+  async recordError(
+    projectId: string,
+    extensionId: string,
+    tenantId: number | string,
+    error: Error | string
+  ): Promise<void> {
+    const existing = await this.getById(projectId, extensionId, tenantId);
+    if (!existing) return;
+
+    const errorMessage = typeof error === 'string' ? error : error.message;
+    const now = Date.now();
+
+    await this.update(projectId, extensionId, tenantId, {
+      errorCount: (existing.metadata.errorCount || 0) + 1,
+      lastError: errorMessage,
+      lastErrorAt: now,
+      hasError: true,
+    });
+  }
+
+  /**
+   * Clear error status for an extension
+   */
+  async clearError(
+    projectId: string,
+    extensionId: string,
+    tenantId: number | string
+  ): Promise<void> {
+    await this.update(projectId, extensionId, tenantId, {
+      lastError: undefined,
+      lastErrorAt: undefined,
+      hasError: false,
+    });
+  }
+
+  /**
+   * Add debug log entry for an extension
+   */
+  async addDebugLog(
+    projectId: string,
+    extensionId: string,
+    tenantId: number | string,
+    level: 'info' | 'warn' | 'error' | 'debug',
+    message: string,
+    data?: any,
+    source: 'frontend' | 'backend' = 'backend'
+  ): Promise<void> {
+    const existing = await this.getById(projectId, extensionId, tenantId);
+    if (!existing) return;
+
+    // Only add logs if debug mode is enabled
+    if (!existing.metadata.debug) return;
+
+    const logs = existing.metadata.debugLogs || [];
+    const newLog: DebugLogEntry = {
+      timestamp: Date.now(),
+      level,
+      message,
+      source,
+      data,
+    };
+
+    // Keep only last 100 logs
+    const updatedLogs = [...logs, newLog].slice(-100);
+
+    await this.update(projectId, extensionId, tenantId, {
+      debugLogs: updatedLogs,
+    });
   }
 }

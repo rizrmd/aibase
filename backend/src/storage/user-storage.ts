@@ -141,12 +141,13 @@ export class UserStorage {
    */
   private async checkNeedsMigration(): Promise<boolean> {
     try {
+      const db = this.getDatabase();
       // Get the actual CREATE TABLE SQL from sqlite_master
-      const tableSchema = this.db.prepare(`
+      const tableSchema = db.prepare(`
         SELECT sql FROM sqlite_master WHERE type='table' AND name='users'
       `).get() as { sql: string } | undefined;
 
-      if (!tableSchema || !tableSchema.sql) {
+      if (!tableSchema?.sql) {
         // Table doesn't exist, no migration needed
         return false;
       }
@@ -191,11 +192,12 @@ export class UserStorage {
    */
   private async migrateSchema(): Promise<void> {
     try {
+      const db = this.getDatabase();
       // Begin transaction
-      this.db.run('BEGIN TRANSACTION');
+      db.run('BEGIN TRANSACTION');
 
       // Create new table with composite unique constraint
-      this.db.run(`
+      db.run(`
         CREATE TABLE users_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           email TEXT UNIQUE NOT NULL,
@@ -212,7 +214,7 @@ export class UserStorage {
 
       // Copy data from old table to new table
       // For users with NULL tenant_id, set tenant_id to 1 (default tenant)
-      this.db.run(`
+      db.run(`
         INSERT INTO users_new (id, email, username, password_hash, role, tenant_id, created_at, updated_at)
         SELECT
           id,
@@ -227,22 +229,23 @@ export class UserStorage {
       `);
 
       // Drop old table
-      this.db.run('DROP TABLE users');
+      db.run('DROP TABLE users');
 
       // Rename new table to users
-      this.db.run('ALTER TABLE users_new RENAME TO users');
+      db.run('ALTER TABLE users_new RENAME TO users');
 
       // Create indexes
-      this.db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+      db.run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
 
       // Commit transaction
-      this.db.run('COMMIT');
+      db.run('COMMIT');
 
       console.log('[UserStorage] Schema migration completed successfully');
     } catch (error: any) {
       // Rollback on error
       try {
-        this.db.run('ROLLBACK');
+        const db = this.getDatabase();
+        db.run('ROLLBACK');
       } catch (rollbackError) {
         // Ignore rollback errors
       }
@@ -264,7 +267,8 @@ export class UserStorage {
       throw new Error('Admin and user roles must belong to a tenant');
     }
 
-    const stmt = this.db.prepare(`
+    const db = this.getDatabase();
+    const stmt = db.prepare(`
       INSERT INTO users (email, username, password_hash, role, tenant_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
@@ -296,24 +300,30 @@ export class UserStorage {
    * Get user by ID
    */
   getById(id: number): User | null {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
-    return stmt.get(id) as User | null;
+    const db = this.getDatabase();
+    const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+    const result = stmt.get(id) as User | undefined;
+    return result ?? null;
   }
 
   /**
    * Get user by email
    */
   getByEmail(email: string): User | null {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');
-    return stmt.get(email) as User | null;
+    const db = this.getDatabase();
+    const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
+    const result = stmt.get(email) as User | undefined;
+    return result ?? null;
   }
 
   /**
    * Get user by username
    */
   getByUsername(username: string): User | null {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE username = ?');
-    return stmt.get(username) as User | null;
+    const db = this.getDatabase();
+    const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
+    const result = stmt.get(username) as User | undefined;
+    return result ?? null;
   }
 
   /**
@@ -357,7 +367,8 @@ export class UserStorage {
     values.push(Date.now());
     values.push(id);
 
-    const stmt = this.db.prepare(`
+    const db = this.getDatabase();
+    const stmt = db.prepare(`
       UPDATE users SET ${updates.join(', ')} WHERE id = ?
     `);
 
@@ -381,7 +392,8 @@ export class UserStorage {
    * Delete user
    */
   async delete(id: number): Promise<boolean> {
-    const stmt = this.db.prepare('DELETE FROM users WHERE id = ?');
+    const db = this.getDatabase();
+    const stmt = db.prepare('DELETE FROM users WHERE id = ?');
     const result = stmt.run(id);
     return result.changes > 0;
   }
@@ -390,7 +402,8 @@ export class UserStorage {
    * Get all users (without password hashes for security)
    */
   getAll(): Omit<User, 'password_hash'>[] {
-    const stmt = this.db.prepare('SELECT id, email, username, role, tenant_id, created_at, updated_at FROM users');
+    const db = this.getDatabase();
+    const stmt = db.prepare('SELECT id, email, username, role, tenant_id, created_at, updated_at FROM users');
     return stmt.all() as Omit<User, 'password_hash'>[];
   }
 
@@ -398,7 +411,8 @@ export class UserStorage {
    * Get all users for a specific tenant
    */
   getByTenantId(tenantId: number): Omit<User, 'password_hash'>[] {
-    const stmt = this.db.prepare('SELECT id, email, username, role, tenant_id, created_at, updated_at FROM users WHERE tenant_id = ?');
+    const db = this.getDatabase();
+    const stmt = db.prepare('SELECT id, email, username, role, tenant_id, created_at, updated_at FROM users WHERE tenant_id = ?');
     return stmt.all(tenantId) as Omit<User, 'password_hash'>[];
   }
 
@@ -406,7 +420,8 @@ export class UserStorage {
    * Get users by role
    */
   getByRole(role: UserRole): User[] {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE role = ?');
+    const db = this.getDatabase();
+    const stmt = db.prepare('SELECT * FROM users WHERE role = ?');
     return stmt.all(role) as User[];
   }
 
@@ -429,7 +444,8 @@ export class UserStorage {
    * Count total users
    */
   count(): number {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM users');
+    const db = this.getDatabase();
+    const stmt = db.prepare('SELECT COUNT(*) as count FROM users');
     const result = stmt.get() as { count: number };
     return result.count;
   }

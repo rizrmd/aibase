@@ -107,7 +107,7 @@ export async function extractTextFromExcel(filePath: string): Promise<string> {
     // Extract text from all sheets
     const allText: string[] = [];
 
-    workbook.SheetNames.forEach((sheetName) => {
+    workbook.SheetNames.forEach((sheetName: string) => {
       const worksheet = workbook.Sheets[sheetName];
 
       // Convert sheet to JSON with header: 1 to get array of arrays

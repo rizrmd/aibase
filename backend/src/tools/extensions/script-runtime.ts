@@ -1,4 +1,4 @@
-import type { Tool } from "../llm/conversation";
+import type { Tool } from "../../llm/conversation";
 import { peek, peekInfo } from "./shared/peek-output";
 import { ProjectStorage } from "../../storage/project-storage";
 
@@ -65,7 +65,12 @@ await todo({ action: 'add', texts });
 return { created: texts.length };
 \`\`\`
 
-**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), showChart(...), showTable(...), showMermaid(...), convertDocument(...), imageDocument(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console
+**Available:** fetch, progress(msg), memory.read(category, key), file(...), todo(...), memory(...), peek(outputId, offset, limit), peekInfo(outputId), webSearch(...), imageSearch(...), showChart(...), showTable(...), showMermaid(...), convertDocument(...), imageDocument(...), convId, projectId, CURRENT_UID (user ID from authentication, empty string "" if not authenticated), console (goes to server logs, not visible to AI - use progress() or return values for AI-visible output)
+
+**BACKEND DEPENDENCIES:** If the active extension has declared backend dependencies in metadata.json, they are available via the \`deps\` object:
+- \`deps.packageName\` - For packages without hyphens (e.g., deps.lodash)
+- \`deps['package-name']\` - For packages with hyphens (e.g., deps['csv-parse'])
+- Example: \`const { groupBy } = deps.lodash; const { format } = deps['date-fns'];\`
 
 **FILE ACTIONS:**
 - \`file({ action: 'write', path: 'filename.txt', content: '...' })\` - Write/create a file
@@ -196,9 +201,6 @@ export class ScriptRuntime {
     (globalThis as any).projectId = this.context.projectId;
     (globalThis as any).tenantId = tenantId;
 
-    // Inject __registerVisualization into globalThis for extensions to access
-    (globalThis as any).__registerVisualization = this.createVisualizationCollector();
-
     const scope: Record<string, any> = {
       // Context variables
       convId: this.context.convId,
@@ -206,7 +208,8 @@ export class ScriptRuntime {
       tenantId: tenantId,
       CURRENT_UID: this.context.userId,
 
-      // Allow console for debugging
+      // Console for debugging (goes to server logs)
+      // To show output to AI, return it in your result or use progress()
       console: console,
 
       // Enable HTTP requests

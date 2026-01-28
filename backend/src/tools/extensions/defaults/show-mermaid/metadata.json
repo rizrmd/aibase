@@ -8,5 +8,10 @@
   "enabled": true,
   "isDefault": true,
   "createdAt": 0,
-  "updatedAt": 0
+  "updatedAt": 0,
+  "dependencies": {
+    "frontend": {
+      "mermaid": "^11.0.0"
+    }
+  }
 }

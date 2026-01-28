@@ -84,16 +84,27 @@ async function createRootUser(): Promise<CreateResult> {
 
     if (tenants.length === 0) {
       // Create default tenant
-      tenant = await tenantStorage.create({
+      const createdTenant = await tenantStorage.create({
         name: DEFAULT_ROOT_USER.tenant_name,
         slug: DEFAULT_ROOT_USER.tenant_name.toLowerCase().replace(/\s+/g, "-"),
         logo_url: null,
       });
+      tenant = createdTenant;
       console.log(`✓ Created default tenant: ${tenant.name}`);
     } else {
       // Use first existing tenant
-      tenant = tenants[0];
-      console.log(`✓ Using existing tenant: ${tenant.name}`);
+      const existingTenant = tenants[0];
+      if (existingTenant) {
+        tenant = existingTenant;
+        console.log(`✓ Using existing tenant: ${tenant.name}`);
+      }
+    }
+
+    if (!tenant) {
+      return {
+        success: false,
+        message: "Failed to get or create tenant",
+      };
     }
 
     // Hash password using Bun's built-in password hashing

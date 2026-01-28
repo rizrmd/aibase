@@ -66,6 +66,7 @@
 import { readdir, stat, rename, mkdir, cp } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
+import * as fs from "fs/promises";
 
 const DATA_DIR = "./data";
 
@@ -239,7 +240,7 @@ async function migrateProjectFolders(): Promise<number> {
       try {
         const remaining = await readdir(projectDir);
         if (remaining.length === 0) {
-          await Deno.remove(projectDir);
+          await fs.rm(projectDir, { recursive: true });
           console.log(`✓ Removed empty project folder: ${projectId}`);
         }
       } catch {

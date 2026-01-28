@@ -84,7 +84,7 @@ export const embedWsRateLimiter = new RateLimiter(60000); // 1 minute window for
 export function getClientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0].trim();
+    return forwarded.split(",")[0]?.trim() ?? forwarded;
   }
 
   const realIp = req.headers.get("x-real-ip");

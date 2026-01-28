@@ -9,12 +9,16 @@ import { ExtensionStorage, type Extension, type ExtensionMetadata } from '../../
 import { ProjectStorage } from '../../storage/project-storage';
 import { CategoryStorage } from '../../storage/category-storage';
 import { extensionHookRegistry } from './extension-hooks';
+import { dependencyBundler } from './dependency-bundler';
+import type { DependencyRequest } from './dependency-bundler';
+import * as os from 'os';
 
 export class ExtensionLoader {
   private extensionStorage: ExtensionStorage;
   private categoryStorage: CategoryStorage;
   private projectStorage: ProjectStorage;
   private defaultsPath: string;
+  private workerCache: Map<string, Worker> = new Map();
 
   constructor() {
     this.extensionStorage = new ExtensionStorage();
@@ -119,7 +123,7 @@ export class ExtensionLoader {
    * Load all enabled extensions for a project and return their exports
    *
    * Behavior controlled by USE_DEFAULT_EXTENSIONS environment variable:
-   * - true: Load from backend/src/tools/extensions/defaults/ (development mode)
+   * - true: Load from backend/src/tools/extensions/defaults/ with project overrides (development mode)
    * - false: Load from data/{projectId}/extensions/ (production mode, per-project customization)
    *
    * @param projectId - Project ID
@@ -132,10 +136,34 @@ export class ExtensionLoader {
     let extensions: Extension[];
 
     if (useDefaults) {
-      // Development mode: Load directly from defaults directory
-      // Useful for hot-reload during development
-      console.log(`[ExtensionLoader] USE_DEFAULT_EXTENSIONS=true, loading from backend/src/tools/extensions/defaults/`);
-      extensions = await this.loadDefaults();
+      // Development mode: Load from defaults directory with project overrides
+      // Project extensions override defaults with the same ID
+      console.log(`[ExtensionLoader] USE_DEFAULT_EXTENSIONS=true, loading from defaults + project override`);
+
+      const [defaultExts, projectExts] = await Promise.all([
+        this.loadDefaults(),
+        this.extensionStorage.getAll(projectId, tenantId)
+      ]);
+
+      // Create map of project extensions for fast lookup
+      const projectMap = new Map(projectExts.map(p => [p.metadata.id, p]));
+
+      // Start with defaults, override with project versions
+      extensions = defaultExts.map(d => {
+        const override = projectMap.get(d.metadata.id);
+        if (override) {
+          console.log(`[ExtensionLoader] Using project version for ${d.metadata.id}`);
+          return override;
+        }
+        return d;
+      });
+
+      // Add project-only extensions (not in defaults)
+      const defaultIds = new Set(defaultExts.map(d => d.metadata.id));
+      const projectOnly = projectExts.filter(p => !defaultIds.has(p.metadata.id));
+      extensions.push(...projectOnly);
+
+      console.log(`[ExtensionLoader] Loaded ${extensions.length} extensions (${projectMap.size} overridden by project, ${projectOnly.length} project-only)`);
     } else {
       // Production mode: Load from project's extensions folder
       // Each project can have different extension versions
@@ -156,6 +184,10 @@ export class ExtensionLoader {
       try {
         const exports = await this.evaluateExtension(extension);
 
+        // Clear error status on successful load
+        const tenantId = this.getTenantId(projectId);
+        await this.extensionStorage.clearError(projectId, extension.metadata.id, tenantId);
+
         // Create a namespace for the extension using its metadata.id
         // Convert kebab-case ID to camelCase for valid JavaScript identifier
         const namespace = extension.metadata.id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -168,7 +200,10 @@ export class ExtensionLoader {
           Object.assign(scope, exports);
           console.log(`[ExtensionLoader] Loaded extension '${extension.metadata.name}' with ${functionNames.length} function (flattened to scope): ${functionNames.join(', ')}`);
           console.log(`[ExtensionLoader] Scope keys:`, Object.keys(scope));
-          console.log(`[ExtensionLoader] Export type for '${functionNames[0]}':`, typeof exports[functionNames[0]]);
+          const funcName = functionNames[0];
+          if (funcName) {
+            console.log(`[ExtensionLoader] Export type for '${funcName}':`, typeof exports[funcName]);
+          }
         } else {
           // Multiple functions - use namespace to avoid conflicts
           scope[namespace] = exports;
@@ -176,6 +211,23 @@ export class ExtensionLoader {
         }
       } catch (error: any) {
         console.error(`[ExtensionLoader] Failed to load extension '${extension.metadata.name}':`, error);
+
+        // Record error in metadata
+        const tenantId = this.getTenantId(projectId);
+        await this.extensionStorage.recordError(projectId, extension.metadata.id, tenantId, error);
+
+        // Add debug log if debug mode is enabled
+        if (extension.metadata.debug) {
+          await this.extensionStorage.addDebugLog(
+            projectId,
+            extension.metadata.id,
+            tenantId,
+            'error',
+            `Failed to load extension: ${error instanceof Error ? error.message : String(error)}`,
+            { stack: error instanceof Error ? error.stack : undefined }
+          );
+        }
+
         // Continue loading other extensions even if one fails
       }
     }
@@ -229,50 +281,79 @@ export class ExtensionLoader {
   }
 
   /**
-   * Evaluate an extension's TypeScript code and return its exports
+   * Evaluate an extension's TypeScript code using worker thread isolation
    */
   private async evaluateExtension(extension: Extension): Promise<Record<string, any>> {
+    const workerPath = path.join(__dirname, 'extension-worker.ts');
+
     try {
-      // Use Bun's transpiler to compile TypeScript to JavaScript
-      const transpiler = new Bun.Transpiler({
-        loader: 'ts',
-      });
+      console.log(`[ExtensionLoader] Evaluating '${extension.metadata.name}' in worker thread`);
 
-      const jsCode = transpiler.transformSync(extension.code);
+      // Load backend dependencies if declared
+      const backendDeps = extension.metadata.dependencies?.backend || {};
 
-      console.log(`[ExtensionLoader] Evaluating '${extension.metadata.name}':`);
-      console.log(`[ExtensionLoader] Transpiled code (first 500 chars):`, jsCode.substring(0, 500));
+      if (Object.keys(backendDeps).length > 0) {
+        console.log(`[ExtensionLoader] Loading ${Object.keys(backendDeps).length} backend dependencies for '${extension.metadata.name}'`);
+      }
 
-      // Wrap code to capture exports and provide globals
-      // Extensions can use: return exports; or module.exports = exports; or export default exports
-      // We wrap the code in a function body to capture the return value
-      const wrappedCode = `
-        globalThis.extensionHookRegistry = arguments[0];
-        const module = { exports: {} };
-        const getExtensionExports = () => {
-          ${jsCode}
+      // Create or reuse worker
+      const workerKey = extension.metadata.id;
+      let worker = this.workerCache.get(workerKey);
+
+      if (!worker) {
+        worker = new Worker(workerPath, {
+          env: {
+            EXTENSION_ID: extension.metadata.id,
+          },
+        });
+        this.workerCache.set(workerKey, worker);
+        console.log(`[ExtensionLoader] Created new worker for '${extension.metadata.name}'`);
+      }
+
+      // Send evaluation request to worker
+      const messageId = `eval_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      const result = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Worker evaluation timeout'));
+        }, 35000); // 35 second total timeout
+
+        worker.onmessage = (e: MessageEvent) => {
+          if (e.data.id === messageId) {
+            clearTimeout(timeout);
+            if (e.data.type === 'error') {
+              reject(new Error(e.data.error));
+            } else {
+              resolve(e.data.result);
+            }
+          }
         };
-        const extensionResult = getExtensionExports();
-        // Check if module.exports was actually populated (has keys)
-        const moduleExportsKeys = Object.keys(module.exports);
-        if (moduleExportsKeys.length > 0) {
-          return module.exports;
-        }
-        return extensionResult || {};
-      `;
 
-      // Execute in isolated context with hook registry
-      const AsyncFunction = (async function () {}).constructor as any;
-      const fn = new AsyncFunction(wrappedCode);
-      const result = await fn(extensionHookRegistry);
+        worker.onerror = (error) => {
+          clearTimeout(timeout);
+          reject(new Error(`Worker error: ${error}`));
+        };
+
+        const message = {
+          id: messageId,
+          type: 'evaluate',
+          extensionId: extension.metadata.id,
+          code: extension.code,
+          dependencies: backendDeps,
+          metadata: extension.metadata,
+        };
+
+        worker.postMessage(message);
+      });
 
       console.log(`[ExtensionLoader] Result from extension '${extension.metadata.name}':`, JSON.stringify(result, null, 2));
       console.log(`[ExtensionLoader] Result keys:`, Object.keys(result));
-      console.log(`[ExtensionLoader] Result.showTable type:`, typeof result.showTable);
 
-      // Handle different export patterns
-      if (result.default) {
-        return result.default;
+      // Add debug log if debug mode is enabled
+      if (extension.metadata.debug) {
+        const tenantId = this.getTenantId(extension.metadata.id); // Wait, need projectId
+        // We don't have projectId here, so we'll handle this differently
+        // For now, skip since we don't have context
       }
 
       return result;
@@ -308,5 +389,83 @@ export class ExtensionLoader {
    */
   getStorage(): ExtensionStorage {
     return this.extensionStorage;
+  }
+
+  /**
+   * Get extension source status
+   * Returns information about which extensions have project versions
+   */
+  async getExtensionSourceStatus(projectId: string): Promise<Map<string, { hasDefault: boolean; hasProject: boolean; currentSource: 'default' | 'project' }>> {
+    const tenantId = this.getTenantId(projectId);
+    const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
+
+    const status = new Map<string, { hasDefault: boolean; hasProject: boolean; currentSource: 'default' | 'project' }>();
+
+    if (useDefaults) {
+      // In dev mode, check both sources
+      const [defaultExts, projectExts] = await Promise.all([
+        this.loadDefaults(),
+        this.extensionStorage.getAll(projectId, tenantId)
+      ]);
+
+      const projectMap = new Map(projectExts.map(p => [p.metadata.id, p]));
+
+      // Add all defaults
+      for (const def of defaultExts) {
+        const hasProject = projectMap.has(def.metadata.id);
+        status.set(def.metadata.id, {
+          hasDefault: true,
+          hasProject: hasProject,
+          currentSource: hasProject ? 'project' : 'default'
+        });
+      }
+
+      // Add project-only extensions
+      const defaultIds = new Set(defaultExts.map(d => d.metadata.id));
+      for (const proj of projectExts) {
+        if (!defaultIds.has(proj.metadata.id)) {
+          status.set(proj.metadata.id, {
+            hasDefault: false,
+            hasProject: true,
+            currentSource: 'project'
+          });
+        }
+      }
+    } else {
+      // In prod mode, only project extensions exist
+      const projectExts = await this.extensionStorage.getAll(projectId, tenantId);
+      for (const proj of projectExts) {
+        status.set(proj.metadata.id, {
+          hasDefault: false,
+          hasProject: true,
+          currentSource: 'project'
+        });
+      }
+    }
+
+    return status;
+  }
+
+  /**
+   * Terminate worker for an extension
+   */
+  terminateWorker(extensionId: string): void {
+    const worker = this.workerCache.get(extensionId);
+    if (worker) {
+      worker.terminate();
+      this.workerCache.delete(extensionId);
+      console.log(`[ExtensionLoader] Terminated worker for extension '${extensionId}'`);
+    }
+  }
+
+  /**
+   * Terminate all workers
+   */
+  terminateAllWorkers(): void {
+    for (const [extensionId, worker] of this.workerCache.entries()) {
+      worker.terminate();
+      console.log(`[ExtensionLoader] Terminated worker for extension '${extensionId}'`);
+    }
+    this.workerCache.clear();
   }
 }

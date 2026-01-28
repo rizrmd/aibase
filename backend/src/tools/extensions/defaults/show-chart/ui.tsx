@@ -3,6 +3,8 @@
  * Displays interactive charts using ECharts (loaded from window.libs)
  */
 
+/// <reference lib="dom" />
+
 // Get ReactECharts from window.libs (loaded by frontend)
 declare const window: {
   libs: {
@@ -53,7 +55,10 @@ interface MessageProps {
  * Get chart theme based on document class
  */
 function getChartTheme(): 'dark' | undefined {
-  return typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return undefined;
+  }
+  return document.documentElement.classList.contains('dark')
     ? 'dark'
     : undefined;
 }
@@ -254,7 +259,11 @@ export function ShowChartMessage({ toolInvocation }: MessageProps) {
   const theme = getChartTheme();
   const { title, description, chartType, xAxis, yAxis, series } = toolInvocation.result.args;
 
+  // Debug logging (automatically captured when debug mode enabled)
+  console.log('[show-chart] Rendering chart:', { title, chartType, seriesCount: series?.length });
+
   if (!series || series.length === 0) {
+    console.warn('[show-chart] No series data available');
     return (
       <div className="text-sm text-muted-foreground">
         No chart data available
@@ -262,27 +271,42 @@ export function ShowChartMessage({ toolInvocation }: MessageProps) {
     );
   }
 
-  const option = buildChartOption(chartType || 'bar', { series, xAxis, yAxis }, theme);
+  try {
+    const option = buildChartOption(chartType || 'bar', { series, xAxis, yAxis }, theme);
+    console.log('[show-chart] Chart option built successfully');
 
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
-      {/* Title and Description */}
-      <div className="flex flex-col gap-1">
-        <h3 className="font-semibold leading-none tracking-tight">{title}</h3>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
-      </div>
+    return (
+      <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
+        {/* Title and Description */}
+        <div className="flex flex-col gap-1">
+          <h3 className="font-semibold leading-none tracking-tight">{title}</h3>
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
 
-      {/* Chart Rendering */}
-      <div className="h-[300px] w-full">
-        <ReactECharts
-          option={option}
-          theme={theme}
-          style={{ height: '100%', width: '100%' }}
-          opts={{ renderer: 'svg' }}
-        />
+        {/* Chart Rendering */}
+        <div className="h-[300px] w-full">
+          <ReactECharts
+            option={option}
+            theme={theme}
+            style={{ height: '100%', width: '100%' }}
+            opts={{ renderer: 'svg' }}
+          />
+        </div>
       </div>
-    </div>
-  );
+    );
+  } catch (error) {
+    console.error('[show-chart] Failed to render chart:', {
+      error: error instanceof Error ? error.message : String(error),
+      chartType,
+      seriesCount: series?.length
+    });
+
+    return (
+      <div className="text-sm text-destructive">
+        Failed to render chart: {error instanceof Error ? error.message : String(error)}
+      </div>
+    );
+  }
 }

@@ -54,7 +54,7 @@ export interface UpdateProjectData {
 
 export class ProjectStorage {
   private static instance: ProjectStorage;
-  private db: Database;
+  private db!: Database;
   private dbPath: string;
   private baseDir: string;
 

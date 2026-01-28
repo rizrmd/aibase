@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TodoTool, TodoItem, TodoList } from '../../src/tools/definition/todo-tool';
+import { TodoTool, type TodoItem, type TodoList } from '../../src/tools/definition/todo-tool';
 import { getTestDataDir } from '../../test-setup';
 import { rmSync } from 'fs';
 import { randomUUID } from 'crypto';
@@ -51,15 +51,15 @@ describe('TodoTool', () => {
       expect(parsedAdd.summary.completed).toBe(0);
       expect(parsedAdd.summary.pending).toBe(1);
       expect(parsedAdd.items).toHaveLength(1);
-      expect(parsedAdd.items[0].text).toBe(todoText);
-      expect(parsedAdd.items[0].checked).toBe(false);
-      expect(parsedAdd.items[0].id).toBeDefined();
+      expect(parsedAdd.items[0]!.text).toBe(todoText);
+      expect(parsedAdd.items[0]!.checked).toBe(false);
+      expect(parsedAdd.items[0]!.id).toBeDefined();
 
       // Verify in list
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult) as TodoList;
       expect(todos.items).toHaveLength(1);
-      expect(todos.items[0].text).toBe(todoText);
+      expect(todos.items[0]!.text).toBe(todoText);
     });
 
     it('should add multiple todos at once', async () => {
@@ -76,8 +76,8 @@ describe('TodoTool', () => {
       expect(parsedAdd.items).toHaveLength(3);
       
       for (let i = 0; i < todoTexts.length; i++) {
-        expect(parsedAdd.items[i].text).toBe(todoTexts[i]);
-        expect(parsedAdd.items[i].checked).toBe(false);
+        expect(parsedAdd.items[i]!.text).toBe(todoTexts[i]);
+        expect(parsedAdd.items[i]!.checked).toBe(false);
       }
 
       // Verify in list
@@ -85,9 +85,9 @@ describe('TodoTool', () => {
       const todos = JSON.parse(listResult);
       expect(todos.items).toHaveLength(3);
       
-      expect(todos.items[0].text).toBe('First todo');
-      expect(todos.items[1].text).toBe('Second todo');
-      expect(todos.items[2].text).toBe('Third todo');
+      expect(todos.items[0]!.text).toBe('First todo');
+      expect(todos.items[1]!.text).toBe('Second todo');
+      expect(todos.items[2]!.text).toBe('Third todo');
     });
   });
 
@@ -104,7 +104,7 @@ describe('TodoTool', () => {
       // Get todo IDs
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult) as TodoList;
-      const todoId = todos.items[0].id;
+      const todoId = todos.items[0]!.id;
 
       // Check off todo
       const checkResult = await todoTool.execute({
@@ -119,17 +119,17 @@ describe('TodoTool', () => {
       // Verify status
       const updatedListResult = await todoTool.execute({ action: 'list' });
       const updatedTodos = JSON.parse(updatedListResult);
-      expect(updatedTodos.items[0].checked).toBe(true);
-      expect(updatedTodos.items[1].checked).toBe(false);
-      expect(updatedTodos.items[2].checked).toBe(false);
-      expect(updatedTodos.items[3].checked).toBe(false);
+      expect(updatedTodos.items[0]!.checked).toBe(true);
+      expect(updatedTodos.items[1]!.checked).toBe(false);
+      expect(updatedTodos.items[2]!.checked).toBe(false);
+      expect(updatedTodos.items[3]!.checked).toBe(false);
     });
 
     it('should check off multiple todos', async () => {
       // Get todo IDs
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult) as TodoList;
-      const todoIds = [todos.items[0].id, todos.items[2].id];
+      const todoIds = [todos.items[0]!.id, todos.items[2]!.id];
 
       // Check off todos
       const checkResult = await todoTool.execute({
@@ -144,24 +144,24 @@ describe('TodoTool', () => {
       // Verify status
       const updatedListResult = await todoTool.execute({ action: 'list' });
       const updatedTodos = JSON.parse(updatedListResult);
-      expect(updatedTodos.items[0].checked).toBe(true);
-      expect(updatedTodos.items[1].checked).toBe(false);
-      expect(updatedTodos.items[2].checked).toBe(true);
-      expect(updatedTodos.items[3].checked).toBe(false);
+      expect(updatedTodos.items[0]!.checked).toBe(true);
+      expect(updatedTodos.items[1]!.checked).toBe(false);
+      expect(updatedTodos.items[2]!.checked).toBe(true);
+      expect(updatedTodos.items[3]!.checked).toBe(false);
     });
 
     it('should uncheck todos', async () => {
       // Check off some todos first
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult) as TodoList;
-      const todoIds = [todos.items[0].id, todos.items[1].id];
+      const todoIds = [todos.items[0]!.id, todos.items[1]!.id];
 
       await todoTool.execute({ action: 'check', ids: todoIds });
 
       // Now uncheck them
       const uncheckResult = await todoTool.execute({
         action: 'uncheck',
-        ids: [todos.items[0].id]
+        ids: [todos.items[0]!.id]
       });
 
       const parsedUncheck = JSON.parse(uncheckResult);
@@ -171,10 +171,10 @@ describe('TodoTool', () => {
       // Verify status
       const finalListResult = await todoTool.execute({ action: 'list' });
       const finalTodos = JSON.parse(finalListResult);
-      expect(finalTodos.items[0].checked).toBe(false); // Unchecked
-      expect(finalTodos.items[1].checked).toBe(true);  // Still checked
-      expect(finalTodos.items[2].checked).toBe(false);
-      expect(finalTodos.items[3].checked).toBe(false);
+      expect(finalTodos.items[0]!.checked).toBe(false); // Unchecked
+      expect(finalTodos.items[1]!.checked).toBe(true);  // Still checked
+      expect(finalTodos.items[2]!.checked).toBe(false);
+      expect(finalTodos.items[3]!.checked).toBe(false);
     });
   });
 
@@ -191,7 +191,7 @@ describe('TodoTool', () => {
       // Get todo IDs
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult) as TodoList;
-      const todoId = todos.items[1].id; // Remove middle todo
+      const todoId = todos.items[1]!.id; // Remove middle todo
 
       // Remove todo
       const removeResult = await todoTool.execute({
@@ -207,15 +207,15 @@ describe('TodoTool', () => {
       const updatedListResult = await todoTool.execute({ action: 'list' });
       const updatedTodos = JSON.parse(updatedListResult);
       expect(updatedTodos.items).toHaveLength(2);
-      expect(updatedTodos.items[0].text).toBe('Todo 1');
-      expect(updatedTodos.items[1].text).toBe('Todo 3');
+      expect(updatedTodos.items[0]!.text).toBe('Todo 1');
+      expect(updatedTodos.items[1]!.text).toBe('Todo 3');
     });
 
     it('should remove multiple todos', async () => {
       // Get todo IDs
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult) as TodoList;
-      const todoIds = [todos.items[0].id, todos.items[2].id]; // Remove first and last
+      const todoIds = [todos.items[0]!.id, todos.items[2]!.id]; // Remove first and last
 
       // Remove todos
       const removeResult = await todoTool.execute({
@@ -231,7 +231,7 @@ describe('TodoTool', () => {
       const updatedListResult = await todoTool.execute({ action: 'list' });
       const updatedTodos = JSON.parse(updatedListResult);
       expect(updatedTodos.items).toHaveLength(1);
-      expect(updatedTodos.items[0].text).toBe('Todo 2');
+      expect(updatedTodos.items[0]!.text).toBe('Todo 2');
     });
 
     it('should clear all todos', async () => {
@@ -261,7 +261,7 @@ describe('TodoTool', () => {
       const todos = JSON.parse(listResult) as TodoList;
       await todoTool.execute({
         action: 'check',
-        ids: [todos.items[0].id, todos.items[2].id] // Check off task 1 and 3
+        ids: [todos.items[0]!.id, todos.items[2]!.id] // Check off task 1 and 3
       });
     });
 
@@ -281,10 +281,10 @@ describe('TodoTool', () => {
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult);
       expect(todos.items).toHaveLength(2);
-      expect(todos.items[0].text).toBe('Incomplete task 1');
-      expect(todos.items[1].text).toBe('Incomplete task 2');
-      expect(todos.items[0].checked).toBe(false);
-      expect(todos.items[1].checked).toBe(false);
+      expect(todos.items[0]!.text).toBe('Incomplete task 1');
+      expect(todos.items[1]!.text).toBe('Incomplete task 2');
+      expect(todos.items[0]!.checked).toBe(false);
+      expect(todos.items[1]!.checked).toBe(false);
     });
 
     it('should handle finish when no completed todos', async () => {
@@ -331,7 +331,7 @@ describe('TodoTool', () => {
       const listResult = await newTodoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult);
       expect(todos.items).toHaveLength(1);
-      expect(todos.items[0].text).toBe('Persistent todo');
+      expect(todos.items[0]!.text).toBe('Persistent todo');
     });
   });
 
@@ -408,7 +408,7 @@ describe('TodoTool', () => {
   describe('Broadcast Callback', () => {
     it('should call broadcast callback on changes', async () => {
       const broadcastCalls: any[] = [];
-      
+
       todoTool.setBroadcastCallback((convId: string, todos: TodoList) => {
         broadcastCalls.push({ convId, todos });
       });
@@ -422,12 +422,12 @@ describe('TodoTool', () => {
       expect(broadcastCalls).toHaveLength(1);
       expect(broadcastCalls[0].convId).toBe(convId);
       expect(broadcastCalls[0].todos.items).toHaveLength(1);
-      expect(broadcastCalls[0].todos.items[0].text).toBe('Broadcast test');
+      expect(broadcastCalls[0].todos.items[0]!.text).toBe('Broadcast test');
 
       // Check todo
       const listResult = await todoTool.execute({ action: 'list' });
       const todos = JSON.parse(listResult) as TodoList;
-      const todoId = todos.items[0].id;
+      const todoId = todos.items[0]!.id;
 
       await todoTool.execute({
         action: 'check',
@@ -435,7 +435,7 @@ describe('TodoTool', () => {
       });
 
       expect(broadcastCalls).toHaveLength(2);
-      expect(broadcastCalls[1].todos.items[0].checked).toBe(true);
+      expect(broadcastCalls[1].todos.items[0]!.checked).toBe(true);
     });
   });
 });

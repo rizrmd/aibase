@@ -20,6 +20,14 @@ cleanup() {
 # Trap SIGINT and SIGTERM to run cleanup
 trap cleanup SIGINT SIGTERM
 
+# Load .env file if it exists
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+    echo "Loaded .env file"
+fi
+
 # Check if AIMEOW is enabled
 if [ "$AIMEOW" = "true" ]; then
     # Setup aimeow paths
@@ -74,7 +82,7 @@ fi
 # Start backend with hot-reload
 echo "Starting backend with hot-reload..."
 cd "$SCRIPT_DIR"
-bun --watch run backend/src/server/index.ts &
+bun --watch --env-file=.env run backend/src/server/index.ts &
 BACKEND_PID=$!
 
 # Wait a moment for backend to start

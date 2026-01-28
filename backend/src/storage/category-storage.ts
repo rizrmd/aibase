@@ -165,12 +165,18 @@ export class CategoryStorage {
       return null;
     }
 
+    const existing = categories[index];
+    if (!existing) {
+      return null;
+    }
+
     const updatedCategory: Category = {
-      ...categories[index],
-      name: updates.name !== undefined ? updates.name : categories[index].name,
-      description: updates.description !== undefined ? updates.description : categories[index].description,
-      icon: updates.icon !== undefined ? updates.icon : categories[index].icon,
-      color: updates.color !== undefined ? updates.color : categories[index].color,
+      id: existing.id,
+      name: updates.name ?? existing.name,
+      description: updates.description ?? existing.description,
+      icon: updates.icon ?? existing.icon,
+      color: updates.color ?? existing.color,
+      createdAt: existing.createdAt,
       updatedAt: Date.now(),
     };
 

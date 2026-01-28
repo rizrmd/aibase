@@ -243,6 +243,9 @@ export class FileTool extends Tool {
       }
 
       const frontmatter = frontmatterMatch[1];
+      if (!frontmatter) {
+        return { scope: 'user' };
+      }
       const meta: any = {};
 
       // Parse YAML-style key: value pairs
@@ -250,7 +253,7 @@ export class FileTool extends Tool {
         const colonIndex = line.indexOf(':');
         if (colonIndex > 0) {
           const key = line.slice(0, colonIndex).trim();
-          let value = line.slice(colonIndex + 1).trim();
+          let value: string | boolean | number = line.slice(colonIndex + 1).trim();
 
           // Remove quotes from string values
           if ((value.startsWith('"') && value.endsWith('"')) ||
@@ -259,8 +262,8 @@ export class FileTool extends Tool {
           }
 
           // Parse numbers and booleans
-          if (value === 'true') value = true;
-          else if (value === 'false') value = false;
+          if (value === 'true') value = true as boolean;
+          else if (value === 'false') value = false as boolean;
           else if (!isNaN(Number(value))) value = Number(value);
 
           meta[key] = value;
@@ -660,6 +663,7 @@ ${frontmatter}
     }
 
     // Get all files and filter by time
+    const baseDir = this.getBaseDir();
     const allFiles = await this.listFilesRecursive(filesDir, baseDir, scope);
     const recentFiles = allFiles.filter((file: any) => {
       const modifiedTime = new Date(file.modified).getTime();

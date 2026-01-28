@@ -243,4 +243,5 @@ const webSearchExtension = {
   },
 };
 
+// @ts-expect-error - Extension loader wraps this code in an async function
 return webSearchExtension;

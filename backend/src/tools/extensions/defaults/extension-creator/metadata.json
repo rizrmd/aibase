@@ -1,0 +1,12 @@
+{
+  "id": "extension-creator",
+  "name": "Extension Creator",
+  "description": "Create and modify extensions through natural language. Always works with project extensions, never touches defaults.",
+  "author": "AIBase",
+  "version": "1.0.0",
+  "category": "developer-tools",
+  "enabled": true,
+  "isDefault": true,
+  "createdAt": 0,
+  "updatedAt": 0
+}

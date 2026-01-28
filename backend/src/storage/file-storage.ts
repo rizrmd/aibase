@@ -131,6 +131,10 @@ export class FileStorage {
       }
 
       const frontmatter = frontmatterMatch[1];
+      if (!frontmatter) {
+        return { scope: 'user' };
+      }
+
       const meta: any = {};
 
       // Parse YAML-style key: value pairs from frontmatter
@@ -146,10 +150,10 @@ export class FileStorage {
             value = value.slice(1, -1);
           }
 
-          // Parse numbers and booleans
-          if (value === 'true') value = true;
-          else if (value === 'false') value = false;
-          else if (!isNaN(Number(value))) value = Number(value);
+          // Parse numbers and booleans (convert to string to avoid type errors)
+          if (value === 'true') value = 'true';
+          else if (value === 'false') value = 'false';
+          else if (!isNaN(Number(value))) value = String(value);
 
           meta[key] = value;
         }
@@ -158,7 +162,7 @@ export class FileStorage {
       // Extract description from body (everything after the second ---)
       // Allow optional whitespace after the closing ---
       const bodyMatch = content.match(/\n---\s*\n([\s\S]*)$/);
-      if (bodyMatch) {
+      if (bodyMatch && bodyMatch[1]) {
         meta.description = bodyMatch[1].trim();
         if (meta.description) {
           console.log(`[FileStorage] Loaded description for ${fileName}: ${meta.description.substring(0, 50)}...`);

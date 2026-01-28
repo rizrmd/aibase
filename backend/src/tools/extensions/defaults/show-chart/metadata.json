@@ -8,5 +8,11 @@
   "enabled": true,
   "isDefault": true,
   "createdAt": 0,
-  "updatedAt": 0
+  "updatedAt": 0,
+  "dependencies": {
+    "frontend": {
+      "echarts": "^5.5.0",
+      "echarts-for-react": "^6.0.0"
+    }
+  }
 }

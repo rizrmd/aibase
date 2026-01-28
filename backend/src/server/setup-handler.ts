@@ -56,8 +56,12 @@ function extractLicenseKey(req: Request): string | null {
   const cookieHeader = req.headers.get("Cookie");
   if (cookieHeader) {
     const cookies = cookieHeader.split(";").reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split("=");
-      acc[key] = value;
+      const parts = cookie.trim().split("=");
+      if (parts.length === 2) {
+        const key = parts[0];
+        const value = parts[1];
+        if (key && value !== undefined) acc[key] = value;
+      }
       return acc;
     }, {} as Record<string, string>);
 
@@ -289,7 +293,7 @@ export async function handleGetPublicSetup(req: Request): Promise<Response> {
       return Response.json({
         success: true,
         setup: {
-          appName: null,
+          appName: undefined,
           hasLogo: false,
           aimeowEnabled: process.env.AIMEOW === "true",
         },
@@ -302,7 +306,7 @@ export async function handleGetPublicSetup(req: Request): Promise<Response> {
     return Response.json({
       success: true,
       setup: {
-        appName: setup.appName || null,
+        appName: setup.appName || undefined,
         hasLogo: !!setup.logoPath,
         hasFavicon: !!setup.faviconPath,
         aimeowEnabled: process.env.AIMEOW === "true",
@@ -320,8 +324,8 @@ export async function handleGetPublicSetup(req: Request): Promise<Response> {
 /**
  * Verify license key from request body or cookie
  */
-async function verifyLicenseKeyWithFallback(req: Request, bodyKey?: string): Promise<{ success: boolean; licenseKey: string | null }> {
-  let licenseKey = bodyKey;
+async function verifyLicenseKeyWithFallback(req: Request, bodyKey?: string | null): Promise<{ success: boolean; licenseKey: string | null }> {
+  let licenseKey: string | null | undefined = bodyKey;
 
   // If not in body, try cookie
   if (!licenseKey) {
@@ -374,7 +378,7 @@ export async function handleGetUsers(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const queryKey = url.searchParams.get("licenseKey");
 
-    const { success, licenseKey } = await verifyLicenseKeyWithFallback(req, queryKey);
+    const { success, licenseKey } = await verifyLicenseKeyWithFallback(req, queryKey || undefined);
 
     if (!success || !licenseKey) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
@@ -397,7 +401,7 @@ export async function handleGetUsers(req: Request): Promise<Response> {
  */
 export async function handleCreateUser(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { licenseKey?: unknown; email?: unknown; username?: unknown; password?: unknown; role?: unknown; tenant_id?: unknown };
     let { licenseKey, email, username, password, role, tenant_id } = body;
 
     // If license key not in body, try cookie
@@ -430,7 +434,7 @@ export async function handleCreateUser(req: Request): Promise<Response> {
     if (!adminUser) {
       try {
         // Use tenant_id from request if provided, otherwise auto-detect
-        let finalTenantId: number | null = tenant_id !== undefined ? tenant_id : null;
+        let finalTenantId: number | null = tenant_id !== undefined ? tenant_id as number : null;
 
         // If no tenant_id provided, ensure there's a default tenant
         if (finalTenantId === null) {
@@ -447,7 +451,10 @@ export async function handleCreateUser(req: Request): Promise<Response> {
               finalTenantId = tenant.id;
               logger.info({ finalTenantId }, "Created default tenant for first user");
             } else {
-              finalTenantId = tenants[0].id;
+              const firstTenant = tenants[0];
+              if (firstTenant) {
+                finalTenantId = firstTenant.id;
+              }
             }
           } catch (tenantError) {
             logger.warn({ error: tenantError }, "Could not create/query tenant, trying without tenant");
@@ -456,10 +463,10 @@ export async function handleCreateUser(req: Request): Promise<Response> {
 
         // Register the first user directly without requiring a parent user
         const result = await authService.register({
-          email,
-          username,
-          password,
-          role: role || "user",
+          email: email as string,
+          username: username as string,
+          password: password as string,
+          role: (role as 'admin' | 'user') || "user",
           tenant_id: finalTenantId,
         });
 
@@ -476,11 +483,11 @@ export async function handleCreateUser(req: Request): Promise<Response> {
 
     // Normal user creation with admin user as parent
     const newUser = await authService.createUser(adminUser.id, {
-      email,
-      username,
-      password,
-      role: role || "user",
-      tenant_id,
+      email: email as string,
+      username: username as string,
+      password: password as string,
+      role: (role as 'admin' | 'user') || "user",
+      tenant_id: tenant_id as number | undefined,
     });
 
     logger.info({ username, email, role, tenant_id }, "User created via admin-setup");
@@ -499,7 +506,7 @@ export async function handleCreateUser(req: Request): Promise<Response> {
  */
 export async function handleUpdateUser(req: Request, userId: string): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { licenseKey?: unknown; email?: unknown; username?: unknown; role?: unknown; password?: unknown; tenant_id?: unknown };
     let { licenseKey, email, username, role, password, tenant_id } = body;
 
     // If license key not in body, try cookie
@@ -537,7 +544,7 @@ export async function handleUpdateUser(req: Request, userId: string): Promise<Re
 
     // Update password if provided
     if (password) {
-      const passwordHash = await Bun.password.hash(password, {
+      const passwordHash = await Bun.password.hash(password as string, {
         algorithm: "bcrypt",
         cost: 10,
       });
@@ -563,7 +570,7 @@ export async function handleDeleteUser(req: Request, userId: string): Promise<Re
     const url = new URL(req.url);
     const queryKey = url.searchParams.get("licenseKey");
 
-    const { success, licenseKey } = await verifyLicenseKeyWithFallback(req, queryKey);
+    const { success, licenseKey } = await verifyLicenseKeyWithFallback(req, queryKey || undefined);
 
     if (!success || !licenseKey) {
       return Response.json({ success: false, error: "Invalid license key" }, { status: 401 });
@@ -627,7 +634,7 @@ export async function handleGetTenants(req: Request): Promise<Response> {
  */
 export async function handleCreateTenant(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { licenseKey?: unknown; name?: unknown; domain?: unknown };
     let { licenseKey, name, domain } = body;
 
     // If license key not in body, try cookie
@@ -652,8 +659,8 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
     await tenantStorage.initialize();
 
     const tenant = await tenantStorage.create({
-      name,
-      domain: domain || null,
+      name: name as string,
+      domain: domain ? domain as string : null,
     });
 
     logger.info({ name, domain }, "Tenant created via admin-setup");
@@ -672,7 +679,7 @@ export async function handleCreateTenant(req: Request): Promise<Response> {
  */
 export async function handleUpdateTenant(req: Request, tenantId: string): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { licenseKey?: unknown; name?: unknown; domain?: unknown };
     let { licenseKey, name, domain } = body;
 
     // If license key not in body, try cookie

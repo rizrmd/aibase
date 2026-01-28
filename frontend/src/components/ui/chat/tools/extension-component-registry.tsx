@@ -5,6 +5,8 @@
  * All components are loaded from backend API:
  * - Default UI: /api/extensions/:id/ui
  * - Project-specific UI: /api/extensions/:id/ui?projectId=xxx&tenantId=xxx
+ *
+ * Dependencies are automatically loaded before UI components.
  */
 
 import React from "react";
@@ -12,7 +14,7 @@ import ReactDOM from "react-dom";
 import ReactECharts from "echarts-for-react";
 import * as echarts from "echarts";
 import mermaid from "mermaid";
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { loadExtensionDependencies } from "@/lib/extension-dependency-loader";
 
 import type { ComponentType } from "react";
 import type { ToolInvocation } from "./types";
@@ -26,8 +28,6 @@ declare global {
       echarts: any;
       ReactECharts: any;
       mermaid: any;
-      jsx: any;
-      jsxs: any;
     };
   }
 }
@@ -98,14 +98,12 @@ async function loadComponentFromBackend(
           ReactDOM: ReactDOM,
           ReactECharts: ReactECharts,
           echarts: echarts,
-          mermaid: mermaid,
-          jsx: _jsx,
-          jsxs: _jsxs
+          mermaid: mermaid
         };
       }
 
       const moduleFactory = new Function(
-        'React', 'ReactDOM', 'ReactECharts', 'echarts', 'mermaid', 'jsx', 'jsxs',
+        'React', 'ReactDOM', 'ReactECharts', 'echarts', 'mermaid', 'extensionId',
         `
         "use strict";
         // Module exports object
@@ -118,19 +116,60 @@ async function loadComponentFromBackend(
             ReactDOM: ReactDOM,
             ReactECharts: ReactECharts,
             echarts: echarts,
-            mermaid: mermaid,
-            jsx: jsx,
-            jsxs: jsxs
+            mermaid: mermaid
           };
         }
 
+        // Wrap console to capture extension logs
+        const originalConsole = {
+          log: console.log.bind(console),
+          warn: console.warn.bind(console),
+          error: console.error.bind(console),
+          debug: console.debug.bind(console),
+        };
+
+        const sendLog = (level, args) => {
+          // Call original console
+          originalConsole[level](...args);
+
+          // Send to backend if projectId is available
+          if (typeof window !== 'undefined' && (window as any).__currentProjectId) {
+            const message = args.map(arg =>
+              typeof arg === 'string' ? arg : JSON.stringify(arg)
+            ).join(' ');
+
+            fetch('/api/projects/' + (window as any).__currentProjectId + '/extensions/' + extensionId + '/logs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ level, message, data: args.length > 1 ? args : undefined }),
+            }).catch(() => {});
+          }
+        };
+
+        console.log = (...args) => sendLog('info', args);
+        console.warn = (...args) => sendLog('warn', args);
+        console.error = (...args) => sendLog('error', args);
+        console.debug = (...args) => sendLog('debug', args);
+
         // Execute the bundled code
         ${bundledCode}
+
+        // Restore console
+        console.log = originalConsole.log;
+        console.warn = originalConsole.warn;
+        console.error = originalConsole.error;
+        console.debug = originalConsole.debug;
 
         // Return the module exports
         return module.exports;
         `
       );
+
+      // Set current project ID for logging
+      if (typeof window !== 'undefined' && projectId) {
+        (window as any).__currentProjectId = projectId;
+      }
 
       // Execute with actual dependencies as arguments
       const moduleExports = moduleFactory(
@@ -139,8 +178,7 @@ async function loadComponentFromBackend(
         ReactECharts,
         echarts,
         mermaid,
-        _jsx,
-        _jsxs
+        extensionId
       );
 
       // Get the named export we need (e.g., ShowChartMessage)
@@ -175,7 +213,8 @@ async function loadComponentFromBackend(
  * Priority:
  * 1. Backend registry (hardcoded components)
  * 2. Backend cache (previously loaded)
- * 3. Backend API (fresh load with project context)
+ * 3. Load dependencies from backend
+ * 4. Backend API (fresh load with project context)
  *
  * @param type - The visualization type
  * @param projectId - Optional project ID for project-specific UI
@@ -198,7 +237,15 @@ export async function getExtensionComponent(
     return backendComponentCache[cacheKey];
   }
 
-  // Try to load from backend API (with project context)
+  // NEW: Load dependencies first
+  try {
+    await loadExtensionDependencies(type, projectId, tenantId);
+  } catch (error) {
+    console.warn(`[ExtensionRegistry] Failed to load dependencies for ${type}:`, error);
+    // Continue anyway - dependencies might be optional
+  }
+
+  // Load component from backend API (with project context)
   const backendComponent = await loadComponentFromBackend(type, projectId, tenantId);
   if (backendComponent) {
     backendComponentCache[cacheKey] = backendComponent;

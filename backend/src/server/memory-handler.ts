@@ -106,7 +106,7 @@ export async function handleSetMemory(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const projectId = url.searchParams.get("projectId") || "A1";
 
-    const body = await req.json();
+    const body = await req.json() as { category?: unknown; key?: unknown; value?: unknown };
     const { category, key, value } = body;
 
     if (!category || !key) {
@@ -122,15 +122,18 @@ export async function handleSetMemory(req: Request): Promise<Response> {
     const memory = await loadMemory(projectId);
 
     // Ensure category exists
-    if (!memory[category]) {
-      memory[category] = {};
+    const cat = category as string;
+    if (!memory[cat]) {
+      memory[cat] = {};
     }
 
-    const oldValue = memory[category][key];
+    const oldValue = memory[cat]?.[key as string];
     const action = oldValue !== undefined ? "updated" : "created";
 
     // Set the value
-    memory[category][key] = value;
+    if (memory[cat]) {
+      memory[cat][key as string] = value;
+    }
 
     // Save to file
     await saveMemory(projectId, memory);

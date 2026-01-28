@@ -170,7 +170,7 @@ export function ShowTableMessage({ toolInvocation }: MessageProps) {
                     key={`${idx}-${col.key}`}
                     className="p-2 align-middle"
                   >
-                    {row[col.key]}
+                    {String(row[col.key] ?? '')}
                   </td>
                 ))}
               </tr>

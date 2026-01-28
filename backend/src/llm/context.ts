@@ -238,7 +238,7 @@ async function loadToolExamples(projectId?: string, tenantId?: number | string):
     // Extension contexts (project-specific)
     if (projectId && tenantId) {
       const { generateExtensionsContext } = await import("../tools/extensions/extension-context");
-      const extensionsContext = await generateExtensionsContext(projectId, tenantId);
+      const extensionsContext = await generateExtensionsContext(projectId);
       if (extensionsContext) {
         examples.push(extensionsContext);
       }
@@ -350,7 +350,7 @@ async function loadFiles(
 
         // Extract description from body (everything after the second ---)
         const bodyMatch = metaContent.match(/\n---\s*\n([\s\S]*)$/);
-        if (bodyMatch) {
+        if (bodyMatch && bodyMatch[1]) {
           description = bodyMatch[1].trim();
         }
       } catch {

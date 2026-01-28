@@ -59,6 +59,9 @@ interface TrinoRawResult {
   stats?: TrinoStats;
 }
 
+interface TrinoJSONResult extends TrinoResult {}
+
+
 interface TestConnectionOptions {
   catalog?: string;
   schema?: string;
@@ -334,7 +337,7 @@ const trinoExtension = {
               query: options.query,
               executionTime,
               rowCount: dataArray.length,
-              columns: dataArray.length > 0 ? Object.keys(dataArray[0]) : [],
+              columns: dataArray.length > 0 ? Object.keys(dataArray[0] as Record<string, unknown>) : [],
               sampleData: dataArray.slice(0, 3), // First 3 rows
               serverUrl: options.serverUrl,
               catalog: options.catalog,
@@ -392,7 +395,7 @@ const trinoExtension = {
 
       return {
         connected: true,
-        version: (result.data?.[0] as Record<string, unknown> | undefined)?.version as string | undefined,
+        version: ((result as TrinoJSONResult).data?.[0] as Record<string, unknown> | undefined)?.version as string | undefined,
       };
     } catch (error: unknown) {
       return {

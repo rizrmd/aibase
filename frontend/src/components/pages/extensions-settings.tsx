@@ -23,9 +23,12 @@ import {
 import {
   deleteExtension,
   getExtensions,
+  getExtensionDebugLogs,
   reloadExtension,
   resetExtensionsToDefaults,
   toggleExtension,
+  toggleExtensionDebug,
+  toggleExtensionSource,
   updateExtension,
 } from "@/lib/api/extensions";
 import { useProjectStore } from "@/stores/project-store";
@@ -33,8 +36,10 @@ import type { Category } from "@/types/category";
 import type { Extension } from "@/types/extension";
 import {
   ArrowUpDown,
+  Bug,
   ChevronDown,
   ChevronRight,
+  Copy,
   FolderOpen,
   PowerIcon,
   RefreshCw,
@@ -103,6 +108,12 @@ export function ExtensionsSettings() {
 
   // Reloading extensions state
   const [reloadingExtensions, setReloadingExtensions] = useState<Set<string>>(new Set());
+
+  // Debug logs state
+  const [expandedDebugLogs, setExpandedDebugLogs] = useState<Set<string>>(new Set());
+  const [debugLogsTab, setDebugLogsTab] = useState<Record<string, 'frontend' | 'backend'>>({});
+  const [backendLogs, setBackendLogs] = useState<Record<string, any[]>>({});
+  const [frontendLogs, setFrontendLogs] = useState<Record<string, any[]>>({});
 
   // Load data
   const loadData = useCallback(async () => {
@@ -205,6 +216,130 @@ export function ExtensionsSettings() {
         next.delete(extensionId);
         return next;
       });
+    }
+  };
+
+  // Handle toggle debug mode
+  const handleToggleDebug = async (extensionId: string) => {
+    if (!currentProject) return;
+
+    try {
+      const extension = extensions.find(e => e.metadata.id === extensionId);
+      if (!extension) return;
+
+      const newDebugState = !extension.metadata.debug;
+      const updated = await toggleExtensionDebug(currentProject.id, extensionId, newDebugState);
+
+      setExtensions((prev) =>
+        prev.map((ext) => (ext.metadata.id === extensionId ? updated : ext)),
+      );
+      setCategoryGroups((prev) =>
+        prev.map((group) => ({
+          ...group,
+          extensions: group.extensions.map((ext) =>
+            ext.metadata.id === extensionId ? updated : ext,
+          ),
+        })),
+      );
+
+      toast.success(
+        newDebugState ? "Debug mode enabled" : "Debug mode disabled",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to toggle debug mode",
+      );
+    }
+  };
+
+  // Handle toggle extension source (default/project)
+  const handleToggleSource = async (extensionId: string) => {
+    if (!currentProject) return;
+
+    try {
+      const extension = extensions.find(e => e.metadata.id === extensionId);
+      if (!extension) return;
+
+      // Determine target source (opposite of current)
+      const targetSource = extension.source === 'project' ? 'default' : 'project';
+
+      // Show confirmation for switching to default (deletes customizations)
+      if (targetSource === 'default') {
+        const confirmed = window.confirm(
+          `Switch to default version? Your customizations for "${extension.metadata.name}" will be removed.`
+        );
+        if (!confirmed) return;
+      }
+
+      const result = await toggleExtensionSource(currentProject.id, extensionId, targetSource);
+
+      // Reload data to get updated extension list
+      await loadData();
+
+      toast.success(result.data.message);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to toggle extension source",
+      );
+    }
+  };
+
+  // Handle toggle debug logs expansion
+  const handleToggleDebugLogs = async (extensionId: string) => {
+    const isExpanded = expandedDebugLogs.has(extensionId);
+
+    if (isExpanded) {
+      // Collapse
+      setExpandedDebugLogs(prev => {
+        const next = new Set(prev);
+        next.delete(extensionId);
+        return next;
+      });
+    } else {
+      // Expand and load logs
+      if (!currentProject) return;
+
+      setExpandedDebugLogs(prev => new Set(prev).add(extensionId));
+
+      // Set default tab if not set
+      setDebugLogsTab(prev => ({
+        ...prev,
+        [extensionId]: prev[extensionId] || 'backend',
+      }));
+
+      // Load all logs (both frontend and backend) from backend
+      try {
+        const logs = await getExtensionDebugLogs(currentProject.id, extensionId);
+
+        // Split logs by source
+        const frontendLogs = logs.filter(log => log.source === 'frontend');
+        const backendLogs = logs.filter(log => log.source === 'backend');
+
+        setFrontendLogs(prev => ({ ...prev, [extensionId]: frontendLogs }));
+        setBackendLogs(prev => ({ ...prev, [extensionId]: backendLogs }));
+      } catch (error) {
+        console.error('Failed to load debug logs:', error);
+      }
+    }
+  };
+
+  // Handle refresh debug logs
+  const handleRefreshDebugLogs = async (extensionId: string) => {
+    if (!currentProject) return;
+
+    try {
+      const logs = await getExtensionDebugLogs(currentProject.id, extensionId);
+
+      // Split logs by source
+      const frontendLogs = logs.filter(log => log.source === 'frontend');
+      const backendLogs = logs.filter(log => log.source === 'backend');
+
+      setFrontendLogs(prev => ({ ...prev, [extensionId]: frontendLogs }));
+      setBackendLogs(prev => ({ ...prev, [extensionId]: backendLogs }));
+
+      toast.success('Debug logs refreshed');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to refresh debug logs');
     }
   };
 
@@ -628,8 +763,18 @@ export function ExtensionsSettings() {
                                 <h4 className="font-semibold truncate">
                                   {extension.metadata.name}
                                 </h4>
-                                {extension.metadata.isDefault && (
-                                  <span className="text-xs bg-muted px-2 py-0.5 rounded flex-shrink-0">
+                                {extension.source === 'project' && (
+                                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded flex-shrink-0" title="Using project version (customizable)">
+                                    Custom
+                                  </span>
+                                )}
+                                {extension.source === 'default' && extension.hasProjectVersion && (
+                                  <span className="text-xs bg-muted px-2 py-0.5 rounded flex-shrink-0" title="Default version available, can customize">
+                                    Default
+                                  </span>
+                                )}
+                                {extension.source === 'default' && !extension.hasProjectVersion && (
+                                  <span className="text-xs bg-muted px-2 py-0.5 rounded flex-shrink-0" title="Default version (no project copy)">
                                     Default
                                   </span>
                                 )}
@@ -637,6 +782,24 @@ export function ExtensionsSettings() {
                                   <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded flex-shrink-0">
                                     Disabled
                                   </span>
+                                )}
+                                {extension.metadata.hasError && (
+                                  <button
+                                    onClick={() => handleToggleDebugLogs(extension.metadata.id)}
+                                    className="text-xs bg-destructive text-destructive px-2 py-0.5 rounded flex-shrink-0 hover:opacity-80 cursor-pointer"
+                                    title={`Error: ${extension.metadata.lastError}`}
+                                  >
+                                    Error
+                                  </button>
+                                )}
+                                {extension.metadata.debug && (
+                                  <button
+                                    onClick={() => handleToggleDebugLogs(extension.metadata.id)}
+                                    className="text-xs bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded flex-shrink-0 hover:opacity-80 cursor-pointer"
+                                    title="Debug mode enabled"
+                                  >
+                                    Debug
+                                  </button>
                                 )}
                               </div>
                               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
@@ -687,6 +850,36 @@ export function ExtensionsSettings() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() =>
+                                  handleToggleDebug(extension.metadata.id)
+                                }
+                                title={extension.metadata.debug ? "Disable debug mode" : "Enable debug mode"}
+                              >
+                                <Bug className={`w-4 h-4 ${extension.metadata.debug ? "text-blue-500" : "text-muted-foreground"}`} />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleToggleSource(extension.metadata.id)
+                                }
+                                title={
+                                  extension.source === 'project'
+                                    ? "Switch to default (removes customizations)"
+                                    : extension.hasProjectVersion
+                                    ? "Switch to project version (customizable)"
+                                    : "Copy to project (allows customization)"
+                                }
+                              >
+                                {extension.source === 'project' ? (
+                                  <RotateCw className="w-4 h-4 text-primary" />
+                                ) : (
+                                  <Copy className={`w-4 h-4 ${extension.hasProjectVersion ? "text-primary" : "text-muted-foreground"}`} />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
                                   openChangeCategoryDialog(extension)
                                 }
                                 title="Change category"
@@ -708,6 +901,152 @@ export function ExtensionsSettings() {
                               </Button>
                             </div>
                           </div>
+
+                          {/* Debug Logs Viewer (Inline Expansion) */}
+                          {expandedDebugLogs.has(extension.metadata.id) && (
+                            <div className="mt-4 border rounded-lg bg-background">
+                              {/* Tabs */}
+                              <div className="flex items-center gap-2 px-4 py-2 border-b">
+                                <button
+                                  onClick={() => setDebugLogsTab(prev => ({ ...prev, [extension.metadata.id]: 'frontend' }))}
+                                  className={`px-3 py-1 text-sm rounded ${
+                                    debugLogsTab[extension.metadata.id] === 'frontend'
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'bg-muted hover:bg-muted/70'
+                                  }`}
+                                >
+                                  Frontend
+                                </button>
+                                <button
+                                  onClick={() => setDebugLogsTab(prev => ({ ...prev, [extension.metadata.id]: 'backend' }))}
+                                  className={`px-3 py-1 text-sm rounded ${
+                                    debugLogsTab[extension.metadata.id] === 'backend'
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'bg-muted hover:bg-muted/70'
+                                  }`}
+                                >
+                                  Backend
+                                </button>
+                                <div className="flex-1" />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRefreshDebugLogs(extension.metadata.id)}
+                                  className="h-7"
+                                >
+                                  <RefreshCw className="w-3 h-3 mr-1" />
+                                  Refresh
+                                </Button>
+                              </div>
+
+                              {/* Log Content */}
+                              <div className="p-4 max-h-96 overflow-y-auto">
+                                {debugLogsTab[extension.metadata.id] === 'frontend' ? (
+                                  // Frontend Logs
+                                  <div className="text-sm">
+                                    {(frontendLogs[extension.metadata.id] || []).length === 0 ? (
+                                      <div className="text-center py-8 text-muted-foreground text-sm">
+                                        No frontend debug logs yet
+                                        <p className="text-xs mt-1">
+                                          Extension UI components can log errors using the extensionLogger utility
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {frontendLogs[extension.metadata.id].map((log, idx) => (
+                                          <div key={idx} className="border rounded p-3">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                                log.level === 'error' ? 'bg-destructive text-destructive' :
+                                                log.level === 'warn' ? 'bg-yellow-500/10 text-yellow-500' :
+                                                log.level === 'info' ? 'bg-blue-500/10 text-blue-500' :
+                                                'bg-muted text-muted-foreground'
+                                              }`}>
+                                                {log.level.toUpperCase()}
+                                              </span>
+                                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                                log.source === 'frontend' ? 'bg-purple-500/10 text-purple-500' : 'bg-green-500/10 text-green-500'
+                                              }`}>
+                                                {log.source === 'frontend' ? 'UI' : 'Worker'}
+                                              </span>
+                                              <span className="text-xs text-muted-foreground">
+                                                {new Date(log.timestamp).toLocaleTimeString()}
+                                              </span>
+                                            </div>
+                                            <div className="text-sm">
+                                              {log.message}
+                                            </div>
+                                            {log.data && (
+                                              <details className="mt-2">
+                                                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                                                  View details
+                                                </summary>
+                                                        <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-x-auto">
+                                                  {typeof log.data === 'object'
+                                                    ? JSON.stringify(log.data, null, 2)
+                                                    : String(log.data)}
+                                                </pre>
+                                              </details>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  // Backend Logs
+                                  <div className="text-sm">
+                                    {(backendLogs[extension.metadata.id] || []).length === 0 ? (
+                                      <div className="text-center py-8 text-muted-foreground text-sm">
+                                        No debug logs available
+                                        <p className="text-xs mt-1">
+                                          Enable debug mode to start logging extension execution
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {backendLogs[extension.metadata.id].map((log, idx) => (
+                                          <div key={idx} className="border rounded p-3">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                                log.level === 'error' ? 'bg-destructive text-destructive' :
+                                                log.level === 'warn' ? 'bg-yellow-500/10 text-yellow-500' :
+                                                log.level === 'info' ? 'bg-blue-500/10 text-blue-500' :
+                                                'bg-muted text-muted-foreground'
+                                              }`}>
+                                                {log.level.toUpperCase()}
+                                              </span>
+                                              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                                log.source === 'frontend' ? 'bg-purple-500/10 text-purple-500' : 'bg-green-500/10 text-green-500'
+                                              }`}>
+                                                {log.source === 'frontend' ? 'UI' : 'Worker'}
+                                              </span>
+                                              <span className="text-xs text-muted-foreground">
+                                                {new Date(log.timestamp).toLocaleTimeString()}
+                                              </span>
+                                            </div>
+                                            <div className="text-sm font-mono text-foreground">
+                                              {log.message}
+                                            </div>
+                                            {log.data && (
+                                              <details className="mt-2">
+                                                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                                                  View details
+                                                </summary>
+                                                <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-x-auto">
+                                                  {JSON.stringify(log.data, null, 2)}
+                                                </pre>
+                                              </details>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}

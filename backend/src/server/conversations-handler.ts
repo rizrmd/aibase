@@ -34,12 +34,12 @@ export async function handleGetConversations(req: Request): Promise<Response> {
       );
     }
 
-    // Get all conversation metadata
-    const conversations = await chatHistoryStorage.listAllConversations(projectId);
-
-    // Get tenantId from project
+    // Get tenantId from project first (needed for listAllConversations)
     const project = projectStorage.getById(projectId);
     const tenantId = project?.tenant_id ?? 'default';
+
+    // Get all conversation metadata
+    const conversations = await chatHistoryStorage.listAllConversations(projectId, tenantId);
 
     // Enrich with cached titles only - don't generate on list to avoid slow LLM calls
     const enrichedConversations = await Promise.all(
@@ -168,8 +168,12 @@ export async function handleDeleteConversation(
       );
     }
 
+    // Get tenantId from project
+    const project = projectStorage.getById(projectId);
+    const tenantId = project?.tenant_id ?? 'default';
+
     // Check if conversation exists
-    const metadata = await chatHistoryStorage.getChatHistoryMetadata(convId, projectId);
+    const metadata = await chatHistoryStorage.getChatHistoryMetadata(convId, projectId, tenantId);
 
     if (!metadata) {
       return Response.json(
@@ -182,10 +186,10 @@ export async function handleDeleteConversation(
     }
 
     // Delete conversation chat history
-    await chatHistoryStorage.deleteChatHistory(convId, projectId);
+    await chatHistoryStorage.deleteChatHistory(convId, projectId, tenantId);
 
     // Also delete all associated files
-    await fileStorage.deleteAllFiles(convId, projectId);
+    await fileStorage.deleteAllFiles(convId, projectId, tenantId);
 
     logger.info({ convId, projectId }, "Conversation and associated files deleted");
 
@@ -210,7 +214,7 @@ export async function handleDeleteConversation(
  */
 export async function handleCreateNewChat(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { projectId?: unknown; convId?: unknown };
     const { projectId, convId } = body;
 
     if (!projectId || !convId) {
@@ -223,11 +227,15 @@ export async function handleCreateNewChat(req: Request): Promise<Response> {
       );
     }
 
+    // Get tenantId from project
+    const project = projectStorage.getById(projectId as string);
+    const tenantId = project?.tenant_id ?? 'default';
+
     // Create new chat file with current timestamp
     const timestamp = Date.now();
 
     // Get the chat directory path
-    const chatDir = getConversationChatsDir(projectId, convId);
+    const chatDir = getConversationChatsDir(projectId as string, convId as string, tenantId);
 
     // Ensure directory exists
     await fs.mkdir(chatDir, { recursive: true });
@@ -361,7 +369,7 @@ export async function handleGetEmbedUserConversations(req: Request): Promise<Res
     const tenantId = project?.tenant_id ?? 'default';
 
     // Get all conversation metadata for this user
-    const conversations = await chatHistoryStorage.listUserConversations(projectId, userId);
+    const conversations = await chatHistoryStorage.listUserConversations(projectId, tenantId, userId);
 
     // Enrich with cached titles only - don't generate on list to avoid slow LLM calls
     const enrichedConversations = await Promise.all(

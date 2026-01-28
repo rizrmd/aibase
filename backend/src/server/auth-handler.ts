@@ -26,8 +26,12 @@ function extractToken(req: Request): string | null {
   const cookieHeader = req.headers.get("Cookie");
   if (cookieHeader) {
     const cookies = cookieHeader.split(";").reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split("=");
-      acc[key] = value;
+      const parts = cookie.trim().split("=");
+      if (parts.length === 2) {
+        const key = parts[0];
+        const value = parts[1];
+        if (key && value !== undefined) acc[key] = value;
+      }
       return acc;
     }, {} as Record<string, string>);
 
@@ -43,7 +47,7 @@ function extractToken(req: Request): string | null {
  */
 export async function handleRegister(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { email?: unknown; username?: unknown; password?: unknown };
 
     if (!body.email || !body.username || !body.password) {
       return Response.json(
@@ -53,9 +57,9 @@ export async function handleRegister(req: Request): Promise<Response> {
     }
 
     const result = await authService.register({
-      email: body.email,
-      username: body.username,
-      password: body.password,
+      email: body.email as string,
+      username: body.username as string,
+      password: body.password as string,
     });
 
     // Set session token in cookie
@@ -88,7 +92,7 @@ export async function handleRegister(req: Request): Promise<Response> {
  */
 export async function handleLogin(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
+    const body = await req.json() as { emailOrUsername?: unknown; password?: unknown };
 
     if (!body.emailOrUsername || !body.password) {
       return Response.json(
@@ -98,8 +102,8 @@ export async function handleLogin(req: Request): Promise<Response> {
     }
 
     const result = await authService.login({
-      emailOrUsername: body.emailOrUsername,
-      password: body.password,
+      emailOrUsername: body.emailOrUsername as string,
+      password: body.password as string,
     });
 
     // Set session token in cookie
@@ -216,7 +220,7 @@ export async function handleChangePassword(req: Request): Promise<Response> {
       );
     }
 
-    const body = await req.json();
+    const body = await req.json() as { currentPassword?: unknown; newPassword?: unknown };
 
     if (!body.currentPassword || !body.newPassword) {
       return Response.json(
@@ -227,8 +231,8 @@ export async function handleChangePassword(req: Request): Promise<Response> {
 
     await authService.changePassword(
       user.id,
-      body.currentPassword,
-      body.newPassword
+      body.currentPassword as string,
+      body.newPassword as string
     );
 
     return Response.json({ success: true });
@@ -262,7 +266,7 @@ export async function handleAdminCreateUser(req: Request): Promise<Response> {
       return Response.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const body = await req.json();
+    const body = await req.json() as { email?: unknown; username?: unknown; password?: unknown; role?: unknown; tenant_id?: unknown };
 
     if (!body.email || !body.username || !body.password) {
       return Response.json(
@@ -272,11 +276,11 @@ export async function handleAdminCreateUser(req: Request): Promise<Response> {
     }
 
     const newUser = await authService.createUser(currentUser.id, {
-      email: body.email,
-      username: body.username,
-      password: body.password,
-      role: body.role || 'user',
-      tenant_id: body.tenant_id,
+      email: body.email as string,
+      username: body.username as string,
+      password: body.password as string,
+      role: (body.role as 'admin' | 'user') || 'user',
+      tenant_id: body.tenant_id as number | undefined,
     });
 
     return Response.json({ user: newUser }, { status: 201 });

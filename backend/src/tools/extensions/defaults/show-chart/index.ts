@@ -3,11 +3,6 @@
  * Display interactive charts in the frontend
  */
 
-// Get the visualization collector from global scope (injected by ScriptRuntime)
-declare const globalThis: {
-  __registerVisualization?: (type: string, args: any) => any;
-};
-
 // Type definitions
 interface ChartSeries {
   name: string;
@@ -192,24 +187,17 @@ const showChartExtension = {
    * await showChart({
    *   title: 'Monthly Sales',
    *   chartType: 'bar',
-   *   data: {
-   *     xAxis: ['Jan', 'Feb', 'Mar'],
-   *     series: [{ name: 'Sales', data: [150, 230, 224] }]
-   *   }
+   *   xAxis: ['Jan', 'Feb', 'Mar'],
+   *   series: [{ name: 'Sales', data: [150, 230, 224] }]
    * });
    */
   showChart: async (args: ShowChartOptions | ChartJsOptions): Promise<ChartVisualizationResult> => {
     // Convert Chart.js format to internal format if needed
     const normalizedArgs = convertChartJsFormat(args);
 
-    // Register visualization with the script runtime
-    // This ensures charts are included in __visualizations array
-    if (globalThis.__registerVisualization) {
-      return globalThis.__registerVisualization("show-chart", normalizedArgs);
-    }
-
-    // Fallback for direct usage (not recommended)
-    const toolCallId = `call_${Date.now()}_chart`;
+    // Return visualization metadata directly
+    // ScriptRuntime will collect this into __visualizations array
+    const toolCallId = `viz_chart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     return {
       __visualization: {
         type: "show-chart",
@@ -220,4 +208,5 @@ const showChartExtension = {
   },
 };
 
+// @ts-expect-error - Extension loader wraps this code in an async function
 return showChartExtension;

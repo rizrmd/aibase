@@ -306,7 +306,7 @@ const clickhouseExtension = {
               query: options.query,
               executionTime,
               rowCount: dataArray.length,
-              columns: dataArray.length > 0 ? Object.keys(dataArray[0]) : [],
+              columns: dataArray.length > 0 ? Object.keys(dataArray[0] as Record<string, unknown>) : [],
               sampleData: dataArray.slice(0, 3), // First 3 rows
               serverUrl: options.serverUrl,
               database: options.database,
@@ -353,7 +353,7 @@ const clickhouseExtension = {
     database?: string;
     username?: string;
     password?: string;
-  }): Promise<{ connected: boolean; version?: string; error?: string }> {
+  }): Promise<{ connected: boolean; version?: string; error?: string }> => {
     try {
       const result = await clickhouseExtension.clickhouse({
         query: "SELECT version()",
@@ -365,7 +365,7 @@ const clickhouseExtension = {
 
       return {
         connected: true,
-        version: result.data?.[0]?.["version()"],
+        version: (result as ClickHouseJSONResult).data?.[0]?.["version()"] as string | undefined,
       };
     } catch (error: unknown) {
       return {

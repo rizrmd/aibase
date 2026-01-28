@@ -234,4 +234,5 @@ const postgresqlExtension = {
   },
 };
 
+// @ts-expect-error - Extension loader wraps this code in an async function
 return postgresqlExtension;

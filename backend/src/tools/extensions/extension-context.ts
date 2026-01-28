@@ -70,7 +70,7 @@ function extractExamplesFromJSDoc(code: string): ExampleEntry[] {
     if (comment.includes('@example')) {
       // Extract the example content
       const exampleMatch = comment.match(/@example\s+(.+?)(?=\s*\*\/|\s*@|\s*$)/s);
-      if (exampleMatch) {
+      if (exampleMatch && exampleMatch[1]) {
         const exampleContent = exampleMatch[1].trim();
 
         // Try to parse structured example
@@ -80,18 +80,22 @@ function extractExamplesFromJSDoc(code: string): ExampleEntry[] {
         // ```
         // Result: ...
         const titleMatch = exampleContent.match(/^([^\n-]+)(?:\s*-\s*(.+?))?\s*\n([\s\S]+)/);
-        if (titleMatch) {
+        if (titleMatch && titleMatch[1]) {
           const title = titleMatch[1].trim();
           const description = titleMatch[2]?.trim();
-          const body = titleMatch[3].trim();
+          const body = titleMatch[3]?.trim();
+
+          if (!body) {
+            return examples;
+          }
 
           // Extract code block
           const codeBlockMatch = body.match(/```(?:typescript|ts|javascript|js)?\s*\n([\s\S]+?)```/);
-          const code = codeBlockMatch ? codeBlockMatch[1].trim() : body;
+          const code = codeBlockMatch?.[1]?.trim() || body;
 
           // Extract result if present
           const resultMatch = body.match(/(?:Result|Output):\s*(.+?)(?:\n|$)/i);
-          const result = resultMatch ? resultMatch[1].trim() : undefined;
+          const result = resultMatch?.[1]?.trim();
 
           examples.push({ title, description, code, result });
         }
@@ -141,7 +145,9 @@ export function generateExtensionContext(extension: Extension): string {
     /(\w+)\s*:\s*(?:async\s+)?\([^)]*\)\s*(?::\s*[^,\n]+)?\s*=>/g
   );
 
-  const functions = Array.from(functionMatches).map(match => match[1]);
+  const functions = Array.from(functionMatches)
+    .map(match => match[1])
+    .filter((fn): fn is string => fn !== undefined);
 
   // Remove duplicates and filter out non-function properties
   const uniqueFunctions = [...new Set(functions)].filter(fn =>
