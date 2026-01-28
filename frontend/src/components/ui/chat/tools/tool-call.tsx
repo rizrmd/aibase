@@ -399,8 +399,15 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                   <div className="mt-2 mb-4">
                     {console.log('[ToolCall] Rendering visualizations, count:', scriptVisualizations.length)}
                     {scriptVisualizations.map((viz: any, vizIndex: number) => {
+                      // Debug: log each visualization before rendering
+                      console.log(`[ToolCall] Processing viz ${vizIndex}:`, viz);
+                      console.log(`[ToolCall] viz.type:`, viz.type, `viz.args:`, viz.args);
+                      console.log(`[ToolCall] viz.args.series:`, viz.args?.series);
+                      console.log(`[ToolCall] viz.args.datasets:`, viz.args?.datasets);
                       // Create wrapper component for each visualization
                       const VizComponentWrapper = () => {
+                        console.log(`[VizComponentWrapper] RENDER called - viz.type: ${viz.type}, vizIndex: ${vizIndex}`);
+
                         const [Comp, setComp] = React.useState<ComponentType<any> | null>(null);
                         const [error, setError] = React.useState<string | null>(null);
 
@@ -438,6 +445,9 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                         };
 
                         console.log(`[VizComponentWrapper] Rendering ${viz.type} with args:`, vizInvocation.result.args);
+                        console.log(`[VizComponentWrapper] Full viz object:`, viz);
+                        console.log(`[VizComponentWrapper] Has series?`, !!vizInvocation.result.args?.series, 'series:', vizInvocation.result.args?.series);
+                        console.log(`[VizComponentWrapper] Has datasets?`, !!vizInvocation.result.args?.datasets, 'datasets:', vizInvocation.result.args?.datasets);
 
                         try {
                           return <Comp toolInvocation={vizInvocation} />;

@@ -254,7 +254,17 @@ export default function ShowChartInspector({ data, error }: InspectorProps) {
  */
 export function ShowChartMessage({ toolInvocation }: MessageProps) {
   const theme = getChartTheme();
+
+  // Debug logging
+  console.log('[ShowChartMessage] toolInvocation:', toolInvocation);
+  console.log('[ShowChartMessage] toolInvocation.result:', toolInvocation.result);
+  console.log('[ShowChartMessage] toolInvocation.result.args:', toolInvocation.result?.args);
+  console.log('[ShowChartMessage] Full toolInvocation keys:', Object.keys(toolInvocation));
+
   const { title, description, chartType, xAxis, yAxis, series } = toolInvocation.result.args;
+
+  console.log('[ShowChartMessage] Destructured values:', { title, description, chartType, xAxis, yAxis, series });
+  console.log('[ShowChartMessage] series value:', series, 'series length:', series?.length);
 
   if (!series || series.length === 0) {
     return (

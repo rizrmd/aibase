@@ -1,6 +1,21 @@
 import type { Tool } from "../llm/conversation";
 import { peek, peekInfo } from "./shared/peek-output";
 import { ProjectStorage } from "../../storage/project-storage";
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Debug log file for visualization tracing
+const vizDebugLogPath = path.join(process.cwd(), 'data', 'logs', 'visualization-debug.log');
+
+function vizDebugLog(message: string, data?: any) {
+  try {
+    const timestamp = new Date().toISOString();
+    const logMessage = data ? `[${timestamp}] ${message} ${JSON.stringify(data, null, 2)}\n` : `[${timestamp}] ${message}\n`;
+    fs.appendFileSync(vizDebugLogPath, logMessage);
+  } catch (err) {
+    // Ignore logging errors
+  }
+}
 
 /**
  * Context documentation for core script runtime functionality
@@ -297,7 +312,20 @@ export class ScriptRuntime {
         args
       };
       this.collectedVisualizations.push(visualization);
+
+      // Debug logging to file
+      vizDebugLog('=== Visualization registered ===');
+      vizDebugLog('type:', type);
+      vizDebugLog('toolCallId:', toolCallId);
+      vizDebugLog('args:', args);
+      vizDebugLog('args keys:', Object.keys(args || {}));
+      vizDebugLog('total visualizations:', this.collectedVisualizations.length);
+      vizDebugLog('===============================');
+
+      // Console logging for immediate feedback
       console.log(`[ScriptRuntime] Registered visualization: type=${type}, total=${this.collectedVisualizations.length}`);
+      console.log(`[ScriptRuntime] Visualization args keys:`, Object.keys(args));
+      console.log(`[ScriptRuntime] Visualization args:`, JSON.stringify(args, null, 2));
       // Return the visualization object for backward compatibility
       return { __visualization: visualization };
     };

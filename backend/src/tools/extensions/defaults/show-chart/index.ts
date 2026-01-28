@@ -3,10 +3,26 @@
  * Display interactive charts in the frontend
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 // Get the visualization collector from global scope (injected by ScriptRuntime)
 declare const globalThis: {
   __registerVisualization?: (type: string, args: any) => any;
 };
+
+// Debug log file
+const debugLogPath = path.join(process.cwd(), 'data', 'logs', 'showchart-debug.log');
+
+function debugLog(message: string, data?: any) {
+  try {
+    const timestamp = new Date().toISOString();
+    const logMessage = data ? `[${timestamp}] ${message} ${JSON.stringify(data, null, 2)}\n` : `[${timestamp}] ${message}\n`;
+    fs.appendFileSync(debugLogPath, logMessage);
+  } catch (err) {
+    // Ignore logging errors
+  }
+}
 
 // Type definitions
 interface ChartSeries {
@@ -178,8 +194,19 @@ const showChartExtension = {
    * });
    */
   showChart: async (args: ShowChartOptions | ChartJsOptions): Promise<ChartVisualizationResult> => {
+    // Debug logging to file
+    debugLog('=== showChart called ===');
+    debugLog('Received args:', args);
+    debugLog('args.series:', args?.series);
+    debugLog('args.datasets:', args?.datasets);
+    debugLog('args keys:', Object.keys(args || {}));
+
     // Convert Chart.js format to internal format if needed
     const normalizedArgs = convertChartJsFormat(args);
+
+    debugLog('normalizedArgs:', normalizedArgs);
+    debugLog('normalizedArgs.series:', normalizedArgs?.series);
+    debugLog('=========================');
 
     // Register visualization with the script runtime
     // This ensures charts are included in __visualizations array
