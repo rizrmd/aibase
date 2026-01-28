@@ -2,23 +2,34 @@
  * Extension Creator
  * Create and modify extensions through natural language
  *
- * Always works with project extensions (data/{projectId}/extensions/)
+ * Always works with project extensions (data/projects/{tenantId}/{projectId}/extensions/)
  * Never touches default extensions (backend/src/tools/extensions/defaults/)
  */
+
+// Export to make this file a module (fixes global augmentation TypeScript error)
+export {};
 
 // Type definitions
 interface CreateOptions {
   description: string;
-  functions?: FunctionDescription[];
+  functions?: FunctionDescription[] | Record<string, FunctionDescription>;
+  code?: string;
   category?: string;
   author?: string;
   enabled?: boolean;
+  name?: string;
+  version?: string;
+  metadata?: Record<string, any>;
 }
 
 interface FunctionDescription {
   description: string;
   name?: string;
-  parameters?: string;
+  parameters?: string | {
+    type: string;
+    properties?: Record<string, any>;
+    required?: string[];
+  };
 }
 
 interface ModifyOptions {
@@ -184,10 +195,18 @@ const createOrUpdate = async (options: CreateOptions) => {
     throw new Error("Description is required");
   }
 
+  // Get projectId and tenantId from global context (set by script-runtime)
+  const projectId = (globalThis as any).projectId || "default";
+  const tenantId = (globalThis as any).tenantId || "default";
+
+  // Store in draft for later use
+  currentDraft.projectId = projectId;
+  currentDraft.tenantId = tenantId;
+
   // Initialize or update draft
   if (!currentDraft.extensionId) {
-    // Generate ID from description
-    const id = generateIdFromDescription(options.description);
+    // Generate ID from description or name
+    const id = generateIdFromDescription(options.name || options.description);
     currentDraft.extensionId = id;
   }
 
@@ -198,23 +217,30 @@ const createOrUpdate = async (options: CreateOptions) => {
 
   currentDraft.metadata = {
     ...currentDraft.metadata,
+    ...options.metadata,
     id: currentDraft.extensionId,
-    name: generateNameFromId(currentDraft.extensionId),
+    name: options.name || generateNameFromId(currentDraft.extensionId),
     description: options.description,
     category: options.category || inferCategory(options.description),
     author: options.author || "AIBase",
-    version: "1.0.0",
+    version: options.version || "1.0.0",
     enabled: options.enabled !== undefined ? options.enabled : true,
     isDefault: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
 
-  // Generate or update code
-  if (options.functions) {
+  // Handle code parameter - use directly if provided
+  if (options.code) {
+    currentDraft.code = options.code;
+  }
+  // Generate code from functions if provided
+  else if (options.functions) {
+    // Convert object format to array if needed
+    const functionsArray = normalizeFunctionsArray(options.functions);
     currentDraft.code = await generateCode({
       description: options.description,
-      functions: options.functions,
+      functions: functionsArray,
       metadata: currentDraft.metadata,
     });
   }
@@ -222,11 +248,18 @@ const createOrUpdate = async (options: CreateOptions) => {
   // Validate
   const validation = await validate();
 
+  // Auto-finalize to write to disk
+  const finalizeResult = await finalize();
+
   return {
     created: true,
     preview: generatePreview(),
     ready: validation.ok,
     issues: validation.errors,
+    extensionId: finalizeResult.extensionId,
+    files: finalizeResult.files,
+    message: finalizeResult.message,
+    path: `data/projects/${tenantId}/${projectId}/extensions/${currentDraft.extensionId}/`,
   };
 };
 
@@ -234,6 +267,14 @@ const createOrUpdate = async (options: CreateOptions) => {
  * Modify existing extension
  */
 const modify = async (instruction: string) => {
+  // Get projectId and tenantId from global context (set by script-runtime)
+  const projectId = (globalThis as any).projectId || "default";
+  const tenantId = (globalThis as any).tenantId || "default";
+
+  // Store in draft for later use
+  currentDraft.projectId = projectId;
+  currentDraft.tenantId = tenantId;
+
   if (!currentDraft.extensionId) {
     throw new Error(
       "No extension selected. Use createOrUpdate first, or specify which extension to modify.",
@@ -408,9 +449,11 @@ const finalize = async () => {
   const projectId = currentDraft.projectId ?? "default";
   const extensionId = currentDraft.extensionId ?? "unknown-extension";
 
+  // Correct path: data/projects/{tenantId}/{projectId}/extensions/{extensionId}
   const targetPath = path.join(
     process.cwd(),
     "data",
+    "projects",
     String(tenantId),
     projectId,
     "extensions",
@@ -454,20 +497,26 @@ const finalize = async () => {
       "No restart required (loaded automatically on next script execution)",
     ],
   };
-
-  return {
-    created: true,
-    extensionId,
-    files: createdFiles,
-    message: `Extension "${extensionId}" created successfully!`,
-    nextSteps: [
-      "Extension is now active for this project",
-      "No restart required (loaded automatically on next script execution)",
-    ],
-  };
 };
 
 // ==================== Helper Functions ====================
+
+/**
+ * Normalize functions to array format
+ * Handles both array format [{name, description, parameters}]
+ * and object format {getWeather: {name, description, parameters}}
+ */
+function normalizeFunctionsArray(functions: FunctionDescription[] | Record<string, FunctionDescription>): FunctionDescription[] {
+  if (Array.isArray(functions)) {
+    return functions;
+  }
+
+  // Convert object to array
+  return Object.entries(functions).map(([key, fn]) => ({
+    ...fn,
+    name: fn.name || key,
+  }));
+}
 
 /**
  * Generate kebab-case ID from description
@@ -619,17 +668,27 @@ function generateImplementation(fn: FunctionDescription, intent: any): string {
 }
 
 /**
- * Parse parameters string
+ * Parse parameters from string or OpenAI object format
  */
-function parseParameters(params: string): string {
+function parseParameters(params: string | any): string {
   if (!params) return "";
 
-  // Parse: "param1 (required), param2 (optional)" -> "param1, param2"
-  return params
-    .split(",")
-    .map((p) => p.trim())
-    .filter((p) => p)
-    .join(", ");
+  // If already a string, parse old format
+  if (typeof params === "string") {
+    // Parse: "param1 (required), param2 (optional)" -> "param1, param2"
+    return params
+      .split(",")
+      .map((p) => p.trim())
+      .filter((p) => p)
+      .join(", ");
+  }
+
+  // Handle OpenAI format: {type: "object", properties: {...}, required: [...]}
+  if (params.properties && typeof params.properties === "object") {
+    return Object.keys(params.properties).join(", ");
+  }
+
+  return "";
 }
 
 /**
@@ -689,10 +748,10 @@ async function applyChange(change: any) {
   switch (change.type) {
     case "renameFunction":
       if (currentDraft.code) {
-        currentDraft.code = currentDraft.code.replaceAll(
+        // Use split/join instead of replaceAll for broader compatibility
+        currentDraft.code = currentDraft.code.split(
           change.oldName,
-          change.newName,
-        );
+        ).join(change.newName);
       }
       break;
 
@@ -760,10 +819,11 @@ function camelize(str: string): string {
 async function loadExtension(extensionId: string): Promise<any> {
   const fs = await import('fs/promises');
   const path = await import('path');
-  // Try project first
+  // Try project first - correct path: data/projects/{tenantId}/{projectId}/extensions/{extensionId}
   const projectPath = path.join(
     process.cwd(),
     "data",
+    "projects",
     String(currentDraft.tenantId || "default"),
     currentDraft.projectId!,
     "extensions",
@@ -778,6 +838,7 @@ async function loadExtension(extensionId: string): Promise<any> {
     const codePath = path.join(
       process.cwd(),
       "data",
+      "projects",
       String(currentDraft.tenantId || "default"),
       currentDraft.projectId!,
       "extensions",
@@ -834,9 +895,11 @@ async function copyToProject(extension: {
 }): Promise<void> {
   const fs = await import('fs/promises');
   const path = await import('path');
+  // Correct path: data/projects/{tenantId}/{projectId}/extensions/{extensionId}
   const targetPath = path.join(
     process.cwd(),
     "data",
+    "projects",
     String(currentDraft.tenantId || "default"),
     currentDraft.projectId || "default",
     "extensions",
@@ -866,8 +929,8 @@ async function copyToProject(extension: {
  * Get context about current project (for internal use)
  */
 const getContext = () => ({
-  projectId: globalThis.__extensionProjectId,
-  tenantId: globalThis.__extensionTenantId,
+  projectId: (globalThis as any).projectId || globalThis.__extensionProjectId,
+  tenantId: (globalThis as any).tenantId || globalThis.__extensionTenantId,
 });
 
 /**
