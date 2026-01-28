@@ -424,13 +424,18 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
 
                         // Create toolInvocation in the format expected by the UI component
                         // The component expects: toolInvocation.result.args = chart data
+                        // For extensions like show-mermaid, args may be a string - wrap in { code: args }
+                        const normalizedArgs = typeof viz.args === 'string'
+                          ? { code: viz.args }
+                          : viz.args;
+
                         const vizInvocation = {
                           toolName: viz.type,
                           toolCallId: viz.toolCallId,
                           args: {},  // Empty args at root level
                           state: "result" as const,
                           result: {
-                            args: viz.args  // ← Chart data goes here, where component expects it
+                            args: normalizedArgs  // ← Chart data goes here, where component expects it
                           }
                         };
 

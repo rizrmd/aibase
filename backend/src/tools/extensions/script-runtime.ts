@@ -72,6 +72,16 @@ return { created: texts.length };
 - \`deps['package-name']\` - For packages with hyphens (e.g., deps['csv-parse'])
 - Example: \`const { groupBy } = deps.lodash; const { format } = deps['date-fns'];\`
 
+**VISUALIZATION FUNCTIONS (must use object parameters):**
+- \`showChart({ title, type, data: { labels, datasets } })\` - Line/bar/pie/doughnut charts
+- \`showTable({ title, columns, rows })\` - Data tables with columns and rows
+- \`showMermaid({ title, code })\` - Mermaid diagrams (code must be valid Mermaid syntax)
+- \`showMermaid({ title, code: \`graph TD; A-->B\` })\` - Example flowchart
+
+**IMPORTANT:** Always use object syntax for visualizations. DO NOT pass strings directly:
+- ✓ CORRECT: \`await showMermaid({ title: "Flow", code: "graph TD; A-->B" })\`
+- ✗ WRONG: \`await showMermaid("graph TD; A-->B")\` (will fail silently)
+
 **FILE ACTIONS:**
 - \`file({ action: 'write', path: 'filename.txt', content: '...' })\` - Write/create a file
 - \`file({ action: 'read', path: 'filename.txt' })\` - Read file (max 8000 chars ~2000 tokens)

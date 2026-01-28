@@ -19,6 +19,10 @@ import { loadExtensionDependencies } from "@/lib/extension-dependency-loader";
 import type { ComponentType } from "react";
 import type { ToolInvocation } from "./types";
 
+// Create React object with jsx/jsxs properties for bundled extension UIs
+// Extension UIs use `e.jsx` where `e = window.libs.React`, so we need to add these properties
+const ReactWithJSX = Object.assign(React, { jsx: _jsx, jsxs: _jsxs });
+
 // Type declaration for window.libs
 declare global {
   interface Window {
@@ -94,7 +98,7 @@ async function loadComponentFromBackend(
       // First, set up window.libs with actual imported values
       if (typeof window !== 'undefined') {
         window.libs = {
-          React: React,
+          React: ReactWithJSX,
           ReactDOM: ReactDOM,
           ReactECharts: ReactECharts,
           echarts: echarts,
@@ -173,7 +177,7 @@ async function loadComponentFromBackend(
 
       // Execute with actual dependencies as arguments
       const moduleExports = moduleFactory(
-        React,
+        ReactWithJSX,
         ReactDOM,
         ReactECharts,
         echarts,
