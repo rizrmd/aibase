@@ -12,6 +12,7 @@ import ReactDOM from "react-dom";
 import ReactECharts from "echarts-for-react";
 import * as echarts from "echarts";
 import mermaid from "mermaid";
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 
 import type { ComponentType } from "react";
 import type { ToolInvocation } from "./types";
@@ -25,6 +26,8 @@ declare global {
       echarts: any;
       ReactECharts: any;
       mermaid: any;
+      jsx: any;
+      jsxs: any;
     };
   }
 }
@@ -95,12 +98,14 @@ async function loadComponentFromBackend(
           ReactDOM: ReactDOM,
           ReactECharts: ReactECharts,
           echarts: echarts,
-          mermaid: mermaid
+          mermaid: mermaid,
+          jsx: _jsx,
+          jsxs: _jsxs
         };
       }
 
       const moduleFactory = new Function(
-        'React', 'ReactDOM', 'ReactECharts', 'echarts', 'mermaid',
+        'React', 'ReactDOM', 'ReactECharts', 'echarts', 'mermaid', 'jsx', 'jsxs',
         `
         "use strict";
         // Module exports object
@@ -113,7 +118,9 @@ async function loadComponentFromBackend(
             ReactDOM: ReactDOM,
             ReactECharts: ReactECharts,
             echarts: echarts,
-            mermaid: mermaid
+            mermaid: mermaid,
+            jsx: jsx,
+            jsxs: jsxs
           };
         }
 
@@ -131,7 +138,9 @@ async function loadComponentFromBackend(
         ReactDOM,
         ReactECharts,
         echarts,
-        mermaid
+        mermaid,
+        _jsx,
+        _jsxs
       );
 
       // Get the named export we need (e.g., ShowChartMessage)

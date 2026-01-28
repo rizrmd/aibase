@@ -170,7 +170,8 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
       minify: isProduction(),            // Minify in production
       sourcemap: !isProduction(),        // Source maps in development only
       // Externalize React dependencies - they'll be provided by window.libs at runtime
-      external: ['react', 'react/jsx-runtime', 'react-dom'],
+      // NOTE: react/jsx-runtime must NOT be external - we need jsx/jsxs bundled
+      external: ['react', 'react-dom'],
       write: false,
       outdir: 'out',
     });
