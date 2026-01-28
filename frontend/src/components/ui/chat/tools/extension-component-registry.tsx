@@ -14,6 +14,7 @@ import ReactDOM from "react-dom";
 import ReactECharts from "echarts-for-react";
 import * as echarts from "echarts";
 import mermaid from "mermaid";
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { loadExtensionDependencies } from "@/lib/extension-dependency-loader";
 
 import type { ComponentType } from "react";
