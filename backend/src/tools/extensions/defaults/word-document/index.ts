@@ -87,82 +87,70 @@ const context = () =>
   '- Does not support legacy .doc format (convert to .docx first)';
 
 /**
- * Word Document extension
- * Extract text and metadata from Word documents
+ * Extract text from Word document
  */
-const wordDocumentExtension = {
-  /**
-   * Extract text from Word document
-   *
-   * @param options - Extraction options
-   * @param options.filePath - Full path to the DOCX file
-   * @param options.fileId - File ID in conversation storage (alternative to filePath)
-   * @returns Extracted text content
-   */
-  extract: async (options: ExtractOptions) => {
-    if (!options || typeof options !== "object") {
-      throw new Error("extractDOCX requires an options object");
-    }
+const extract = async (options: ExtractOptions): Promise<ExtractResult> => {
+  if (!options || typeof options !== "object") {
+    throw new Error("extractDOCX requires an options object");
+  }
 
-    if (!options.filePath && !options.fileId) {
-      throw new Error("extractDOCX requires either 'filePath' or 'fileId' parameter");
-    }
+  if (!options.filePath && !options.fileId) {
+    throw new Error("extractDOCX requires either 'filePath' or 'fileId' parameter");
+  }
 
-    let filePath = options.filePath!;
+  let filePath = options.filePath!;
 
-    // If fileId is provided, resolve to actual file path
-    if (options.fileId) {
-      const convId = globalThis.convId || '';
-      const projectId = globalThis.projectId || '';
-      const tenantId = globalThis.tenantId || 'default';
-      const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
-      filePath = path.join(convFilesDir, options.fileId);
-
-      try {
-        await fs.access(filePath);
-      } catch {
-        const entries = await fs.readdir(convFilesDir, { withFileTypes: true });
-        const fileEntry = entries.find(e => e.name.startsWith(options.fileId!));
-        if (fileEntry) {
-          filePath = path.join(convFilesDir, fileEntry.name);
-        }
-      }
-    }
-
-    // Validate file is DOCX
-    if (!isDocxFile(filePath)) {
-      throw new Error("File is not a Word document (.docx)");
-    }
+  // If fileId is provided, resolve to actual file path
+  if (options.fileId) {
+    const convId = globalThis.convId || '';
+    const projectId = globalThis.projectId || '';
+    const tenantId = globalThis.tenantId || 'default';
+    const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
+    filePath = path.join(convFilesDir, options.fileId);
 
     try {
-      const text = await extractTextFromDocx(filePath);
-      return { text } as ExtractResult;
-    } catch (error: unknown) {
-      throw new Error(`DOCX extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+      await fs.access(filePath);
+    } catch {
+      const entries = await fs.readdir(convFilesDir, { withFileTypes: true });
+      const fileEntry = entries.find(e => e.name.startsWith(options.fileId!));
+      if (fileEntry) {
+        filePath = path.join(convFilesDir, fileEntry.name);
+      }
     }
-  },
+  }
 
-  /**
-   * Read Word document - alias for extract()
-   */
-  read: async (options: ExtractOptions) => {
-    return wordDocumentExtension.extract(options);
-  },
+  // Validate file is DOCX
+  if (!isDocxFile(filePath)) {
+    throw new Error("File is not a Word document (.docx)");
+  }
 
-  /**
-   * Convenience method - alias for extract()
-   */
-  extractDOCX: async (options: ExtractOptions) => {
-    return wordDocumentExtension.extract(options);
-  },
-
-  /**
-   * Convenience method - alias for read()
-   */
-  docxReader: async (options: ExtractOptions) => {
-    return wordDocumentExtension.read(options);
-  },
+  try {
+    const text = await extractTextFromDocx(filePath);
+    return { text };
+  } catch (error: unknown) {
+    throw new Error(`DOCX extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 };
 
+/**
+ * Read Word document - alias for extract()
+ */
+const read = async (options: ExtractOptions): Promise<ExtractResult> => extract(options);
+
+/**
+ * Convenience method - alias for extract()
+ */
+const extractDOCX = async (options: ExtractOptions): Promise<ExtractResult> => extract(options);
+
+/**
+ * Convenience method - alias for read()
+ */
+const docxReader = async (options: ExtractOptions): Promise<ExtractResult> => extract(options);
+
 // @ts-expect-error - Extension loader wraps this code in an async function
-return wordDocumentExtension;
+return {
+  extract,
+  read,
+  extractDOCX,
+  docxReader,
+};

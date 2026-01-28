@@ -87,81 +87,70 @@ const context = () =>
   '- For data analysis, consider using duckdb extension for SQL queries on Excel files';
 
 /**
- * Excel Document extension
- * Extract text and data from Excel spreadsheets
+ * Extract text from Excel spreadsheet
  */
-const excelDocumentExtension = {
-  /**
-   * Extract text from Excel spreadsheet
-   *
-   * @param filePath - Full path to the Excel file
-   * @param fileId - File ID in conversation storage (alternative to filePath)
-   * @returns Extracted text content from all sheets
-   */
-  extract: async (options: ExtractExcelOptions) => {
-    if (!options || typeof options !== "object") {
-      throw new Error("extractExcel requires an options object");
-    }
+const extract = async (options: ExtractExcelOptions): Promise<ExtractExcelResult> => {
+  if (!options || typeof options !== "object") {
+    throw new Error("extractExcel requires an options object");
+  }
 
-    if (!options.filePath && !options.fileId) {
-      throw new Error("extractExcel requires either 'filePath' or 'fileId' parameter");
-    }
+  if (!options.filePath && !options.fileId) {
+    throw new Error("extractExcel requires either 'filePath' or 'fileId' parameter");
+  }
 
-    let filePath = options.filePath!;
+  let filePath = options.filePath!;
 
-    // If fileId is provided, resolve to actual file path
-    if (options.fileId) {
-      const convId = globalThis.convId || '';
-      const projectId = globalThis.projectId || '';
-      const tenantId = globalThis.tenantId || 'default';
-      const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
-      filePath = path.join(convFilesDir, options.fileId);
-
-      try {
-        await fs.access(filePath);
-      } catch {
-        const entries = await fs.readdir(convFilesDir, { withFileTypes: true });
-        const fileEntry = entries.find(e => e.name.startsWith(options.fileId!));
-        if (fileEntry) {
-          filePath = path.join(convFilesDir, fileEntry.name);
-        }
-      }
-    }
-
-    // Validate file is Excel
-    if (!isExcelFile(filePath)) {
-      throw new Error("File is not an Excel spreadsheet (.xlsx, .xls)");
-    }
+  // If fileId is provided, resolve to actual file path
+  if (options.fileId) {
+    const convId = globalThis.convId || '';
+    const projectId = globalThis.projectId || '';
+    const tenantId = globalThis.tenantId || 'default';
+    const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
+    filePath = path.join(convFilesDir, options.fileId);
 
     try {
-      const text = await extractTextFromExcel(filePath);
-      return { text } as ExtractExcelResult;
-    } catch (error: unknown) {
-      throw new Error(`Excel extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+      await fs.access(filePath);
+    } catch {
+      const entries = await fs.readdir(convFilesDir, { withFileTypes: true });
+      const fileEntry = entries.find(e => e.name.startsWith(options.fileId!));
+      if (fileEntry) {
+        filePath = path.join(convFilesDir, fileEntry.name);
+      }
     }
-  },
+  }
 
-  /**
-   * Read Excel spreadsheet - alias for extract()
-   */
-  read: async (options: ExtractExcelOptions) => {
-    return excelDocumentExtension.extract(options);
-  },
+  // Validate file is Excel
+  if (!isExcelFile(filePath)) {
+    throw new Error("File is not an Excel spreadsheet (.xlsx, .xls)");
+  }
 
-  /**
-   * Convenience method - alias for extract()
-   */
-  extractXLSX: async (options: ExtractExcelOptions) => {
-    return excelDocumentExtension.extract(options);
-  },
-
-  /**
-   * Convenience method - alias for read()
-   */
-  xlsxReader: async (options: ExtractExcelOptions) => {
-    return excelDocumentExtension.read(options);
-  },
+  try {
+    const text = await extractTextFromExcel(filePath);
+    return { text };
+  } catch (error: unknown) {
+    throw new Error(`Excel extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 };
 
+/**
+ * Read Excel spreadsheet - alias for extract()
+ */
+const read = async (options: ExtractExcelOptions): Promise<ExtractExcelResult> => extract(options);
+
+/**
+ * Convenience method - alias for extract()
+ */
+const extractXLSX = async (options: ExtractExcelOptions): Promise<ExtractExcelResult> => extract(options);
+
+/**
+ * Convenience method - alias for read()
+ */
+const xlsxReader = async (options: ExtractExcelOptions): Promise<ExtractExcelResult> => extract(options);
+
 // @ts-expect-error - Extension loader wraps this code in an async function
-return excelDocumentExtension;
+return {
+  extract,
+  read,
+  extractXLSX,
+  xlsxReader,
+};

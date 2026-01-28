@@ -86,82 +86,70 @@ const context = () =>
   '- Use filePath for absolute system paths';
 
 /**
- * PowerPoint Document extension
- * Extract text and content from PowerPoint presentations
+ * Extract text from PowerPoint presentation
  */
-const powerpointDocumentExtension = {
-  /**
-   * Extract text from PowerPoint presentation
-   *
-   * @param options - Extraction options
-   * @param options.filePath - Full path to the PPTX file
-   * @param options.fileId - File ID in conversation storage (alternative to filePath)
-   * @returns Extracted text content from all slides
-   */
-  extract: async (options: ExtractOptions) => {
-    if (!options || typeof options !== "object") {
-      throw new Error("extractPowerPoint requires an options object");
-    }
+const extract = async (options: ExtractOptions): Promise<ExtractResult> => {
+  if (!options || typeof options !== "object") {
+    throw new Error("extractPowerPoint requires an options object");
+  }
 
-    if (!options.filePath && !options.fileId) {
-      throw new Error("extractPowerPoint requires either 'filePath' or 'fileId' parameter");
-    }
+  if (!options.filePath && !options.fileId) {
+    throw new Error("extractPowerPoint requires either 'filePath' or 'fileId' parameter");
+  }
 
-    let filePath = options.filePath!;
+  let filePath = options.filePath!;
 
-    // If fileId is provided, resolve to actual file path
-    if (options.fileId) {
-      const convId = globalThis.convId || '';
-      const projectId = globalThis.projectId || '';
-      const tenantId = globalThis.tenantId || 'default';
-      const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
-      filePath = path.join(convFilesDir, options.fileId);
-
-      try {
-        await fs.access(filePath);
-      } catch {
-        const entries = await fs.readdir(convFilesDir, { withFileTypes: true });
-        const fileEntry = entries.find(e => e.name.startsWith(options.fileId!));
-        if (fileEntry) {
-          filePath = path.join(convFilesDir, fileEntry.name);
-        }
-      }
-    }
-
-    // Validate file is PowerPoint
-    if (!isPowerPointFile(filePath)) {
-      throw new Error("File is not a PowerPoint presentation (.pptx, .ppt)");
-    }
+  // If fileId is provided, resolve to actual file path
+  if (options.fileId) {
+    const convId = globalThis.convId || '';
+    const projectId = globalThis.projectId || '';
+    const tenantId = globalThis.tenantId || 'default';
+    const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
+    filePath = path.join(convFilesDir, options.fileId);
 
     try {
-      const text = await extractTextFromPowerPoint(filePath);
-      return { text } as ExtractResult;
-    } catch (error: unknown) {
-      throw new Error(`PowerPoint extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+      await fs.access(filePath);
+    } catch {
+      const entries = await fs.readdir(convFilesDir, { withFileTypes: true });
+      const fileEntry = entries.find(e => e.name.startsWith(options.fileId!));
+      if (fileEntry) {
+        filePath = path.join(convFilesDir, fileEntry.name);
+      }
     }
-  },
+  }
 
-  /**
-   * Read PowerPoint presentation - alias for extract()
-   */
-  read: async (options: ExtractOptions) => {
-    return powerpointDocumentExtension.extract(options);
-  },
+  // Validate file is PowerPoint
+  if (!isPowerPointFile(filePath)) {
+    throw new Error("File is not a PowerPoint presentation (.pptx, .ppt)");
+  }
 
-  /**
-   * Convenience method - alias for extract()
-   */
-  extractPPTX: async (options: ExtractOptions) => {
-    return powerpointDocumentExtension.extract(options);
-  },
-
-  /**
-   * Convenience method - alias for read()
-   */
-  pptxReader: async (options: ExtractOptions) => {
-    return powerpointDocumentExtension.read(options);
-  },
+  try {
+    const text = await extractTextFromPowerPoint(filePath);
+    return { text };
+  } catch (error: unknown) {
+    throw new Error(`PowerPoint extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 };
 
+/**
+ * Read PowerPoint presentation - alias for extract()
+ */
+const read = async (options: ExtractOptions): Promise<ExtractResult> => extract(options);
+
+/**
+ * Convenience method - alias for extract()
+ */
+const extractPPTX = async (options: ExtractOptions): Promise<ExtractResult> => extract(options);
+
+/**
+ * Convenience method - alias for read()
+ */
+const pptxReader = async (options: ExtractOptions): Promise<ExtractResult> => extract(options);
+
 // @ts-expect-error - Extension loader wraps this code in an async function
-return powerpointDocumentExtension;
+return {
+  extract,
+  read,
+  extractPPTX,
+  pptxReader,
+};
