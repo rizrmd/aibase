@@ -6,6 +6,9 @@
 import { ProjectStorage } from "../storage/project-storage";
 import { Conversation } from "../llm/conversation";
 import { ChatHistoryStorage } from "../storage/chat-history-storage";
+import * as fs from "fs/promises";
+import * as path from "path";
+import { PATHS, getProjectDir } from "../config/paths";
 
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || "http://localhost:7031/api/v1";
 
@@ -397,6 +400,54 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
             url: messageData.fileUrl,
             mimeType: messageData.mimeType,
           });
+
+          // === SAVE IMAGE TO WHATSAPP FOLDER ===
+          // Save image to data/projects/[tenant]/[project]/whatsapp/[phone]/
+          (async () => {
+            try {
+              const tenantId = project.tenant_id ? String(project.tenant_id) : 'default';
+              const projectDir = getProjectDir(projectId, tenantId);
+              const whatsappFilesDir = path.join(projectDir, "whatsapp", whatsappNumber);
+              
+              // Ensure directory exists
+              await fs.mkdir(whatsappFilesDir, { recursive: true });
+
+              // Determine extension
+              let ext = ".jpg";
+              if (messageData.mimeType === "image/png") ext = ".png";
+              else if (messageData.mimeType === "image/webp") ext = ".webp";
+              else if (messageData.mimeType === "image/jpeg") ext = ".jpg";
+
+              // Use message ID for filename if available, otherwise timestamp
+              const filename = `${messageData.id || Date.now()}${ext}`;
+              const filePath = path.join(whatsappFilesDir, filename);
+
+              console.log(`[WhatsApp] saving image to: ${filePath}`);
+
+              // Download file
+              const imgResponse = await fetch(messageData.fileUrl);
+              if (imgResponse.ok) {
+                 const arrayBuffer = await imgResponse.arrayBuffer();
+                 await fs.writeFile(filePath, Buffer.from(arrayBuffer));
+                 console.log(`[WhatsApp] Image saved successfully: ${filename}`);
+                 
+                 // Optional: Save metadata
+                 const metaPath = filePath + ".meta.json";
+                 await fs.writeFile(metaPath, JSON.stringify({
+                   id: messageData.id,
+                   timestamp: new Date().toISOString(),
+                   sender: whatsappNumber,
+                   caption: messageData.caption,
+                   mimeType: messageData.mimeType,
+                   originalUrl: messageData.fileUrl
+                 }, null, 2));
+              } else {
+                 console.error(`[WhatsApp] Failed to download image from ${messageData.fileUrl}: ${imgResponse.status}`);
+              }
+            } catch (err) {
+              console.error("[WhatsApp] Error saving image file:", err);
+            }
+          })();
         }
         break;
 
@@ -449,6 +500,51 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
         // For self-chat or other types, try to get text content
         messageText = messageData.text || messageData.caption || "Sent a message";
         break;
+    }
+
+    // === HANDLER KHUSUS UNTUK LOCATION MESSAGE ===
+    // Respons instan tanpa AI untuk menghindari timeout dan rate limit
+    if (messageData.type === "location" || messageData.type === "live_location") {
+      const lat = messageData.latitude;
+      const lng = messageData.longitude;
+      const locationName = messageData.name || "";
+      const locationAddress = messageData.address || "";
+      
+      // Format timestamp dalam bahasa Indonesia
+      const now = new Date();
+      const options: Intl.DateTimeFormatOptions = { 
+        day: 'numeric', 
+        month: 'long', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Jakarta'
+      };
+      const formattedTime = now.toLocaleDateString('id-ID', options) + ' WIB';
+      
+      // Template respons untuk pengaduan
+      let autoReply = `📍 *Lokasi kejadian diterima!*\n\n`;
+      
+      if (locationName) {
+        autoReply += `📌 Nama: ${locationName}\n`;
+      }
+      if (locationAddress) {
+        autoReply += `🏠 Alamat: ${locationAddress}\n`;
+      }
+      
+      autoReply += `🌐 Koordinat: ${lat}, ${lng}\n`;
+      autoReply += `🕐 Waktu: ${formattedTime}\n`;
+      autoReply += `🗺️ Maps: https://maps.google.com/?q=${lat},${lng}\n\n`;
+      autoReply += `_Lokasi ini akan dilampirkan dalam laporan pengaduan Anda._`;
+      
+      console.log("[WhatsApp] Location handler: Sending instant response for location message");
+      
+      // Kirim respons langsung tanpa AI
+      sendWhatsAppMessage(projectId, whatsappNumber, { text: autoReply })
+        .then(() => console.log("[WhatsApp] Location auto-reply sent successfully"))
+        .catch((err) => console.error("[WhatsApp] Error sending location auto-reply:", err));
+      
+      return Response.json({ success: true, convId, uid, handledBy: "location_handler" });
     }
 
     // Process the message through the AI system
@@ -527,6 +623,12 @@ function cleanWhatsAppResponse(response: string): string {
   // Be more aggressive for obvious JSON dumps
   cleaned = cleaned.replace(/^\s*\{[\s\S]*"[a-zA-Z_]+"\s*:[\s\S]*\}\s*$/gm, '');
 
+  // Remove empty or whitespace-only markdown code blocks (```json\n\n```, ```\n```, etc.)
+  cleaned = cleaned.replace(/```[a-z]*\s*\n*\s*```/gi, '');
+  
+  // Remove code blocks that only contain whitespace or very short content
+  cleaned = cleaned.replace(/```[a-z]*\s*\n\s*\n*```/gi, '');
+
   // Remove multiple newlines (compress to max 2)
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
@@ -584,12 +686,15 @@ async function processWhatsAppMessageWithAI(
     console.log("[WhatsApp] Stream started. Waiting for first chunk...");
     let chunkCount = 0;
     
-    // Create a timeout promise
+    // Create a timeout promise - increased to 60s for slow networks
     let isComplete = false;
+    const TIMEOUT_MS = 60000; // 60 seconds
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
-        if (!isComplete && chunkCount === 0) reject(new Error("AI Response Timeout (No chunks received in 30s)"));
-      }, 30000);
+        if (!isComplete && chunkCount === 0) {
+          reject(new Error(`AI Response Timeout (No chunks received in ${TIMEOUT_MS / 1000}s)`));
+        }
+      }, TIMEOUT_MS);
     });
 
     const streamPromise = (async () => {
@@ -602,6 +707,7 @@ async function processWhatsAppMessageWithAI(
           if (chunkCount % 50 === 0) console.log(`[WhatsApp] Received ${chunkCount} chunks...`);
         }
       } catch (err) {
+        console.error("[WhatsApp] Error during AI streaming:", err);
         throw err;
       }
     })();
