@@ -1037,7 +1037,7 @@ function normalizeDependencyConfig(
   frontendDeps?: string[] | Record<string, string>,
   metadataDeps?: DependencyConfig
 ): DependencyConfig | undefined {
-  const merged: DependencyConfig = {
+  const merged: Required<DependencyConfig> = {
     frontend: {},
     backend: {},
   };
@@ -1060,8 +1060,8 @@ function normalizeDependencyConfig(
     Object.assign(merged.frontend, normalizedFrontend);
   }
 
-  const hasFrontend = merged.frontend && Object.keys(merged.frontend).length > 0;
-  const hasBackend = merged.backend && Object.keys(merged.backend).length > 0;
+  const hasFrontend = Object.keys(merged.frontend).length > 0;
+  const hasBackend = Object.keys(merged.backend).length > 0;
 
   if (!hasFrontend && !hasBackend) {
     return undefined;
@@ -1103,6 +1103,140 @@ function normalizeFrontendDependencies(
   }
 
   return Object.keys(frontendDeps).length > 0 ? frontendDeps : undefined;
+}
+
+function normalizeUIContent(ui: string | Record<string, string>): string {
+  if (typeof ui === "string") {
+    return ui;
+  }
+
+  if (ui["ui.tsx"]) {
+    return ui["ui.tsx"];
+  }
+
+  const firstKey = Object.keys(ui)[0];
+  if (firstKey && ui[firstKey]) {
+    return ui[firstKey];
+  }
+
+  return "";
+}
+
+function generateDefaultUI(input: {
+  description?: string;
+  metadata?: Record<string, any>;
+  dependencies?: DependencyConfig;
+}): {
+  ui: string;
+  messageUI?: Record<string, any>;
+  inspectionUI?: Record<string, any>;
+} {
+  const id = String(input.metadata?.id || "extension");
+  const pascalId = toPascalCase(id);
+  const messageComponent = `${pascalId}Message`;
+  const inspectorComponent = `${pascalId}Inspector`;
+
+  return {
+    ui: buildGenericUI(messageComponent, inspectorComponent, id),
+    messageUI: {
+      componentName: messageComponent,
+      visualizationType: id,
+      uiFile: "ui.tsx",
+    },
+    inspectionUI: {
+      tabLabel: "Details",
+      componentName: inspectorComponent,
+      uiFile: "ui.tsx",
+      showByDefault: true,
+    },
+  };
+}
+
+function toPascalCase(value: string): string {
+  return value
+    .split(/[^a-zA-Z0-9]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+}
+
+function buildGenericUI(
+  messageComponent: string,
+  inspectorComponent: string,
+  extensionId: string,
+): string {
+  return `import React from "react";
+
+interface MessageProps {
+  toolInvocation?: { result?: { args?: any } };
+}
+
+interface InspectorProps {
+  data?: any;
+  error?: string;
+}
+
+export function ${messageComponent}({ toolInvocation }: MessageProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="text-sm font-semibold">${extensionId}</div>
+      <div className="text-xs text-muted-foreground">
+        Message UI for ${extensionId}.
+      </div>
+    </div>
+  );
+}
+
+export default function ${inspectorComponent}({ data, error }: InspectorProps) {
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-red-600 dark:text-red-400">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 text-sm">
+      <div className="font-semibold mb-2">Inspector</div>
+      <pre className="text-xs whitespace-pre-wrap">
+{JSON.stringify(data ?? {}, null, 2)}
+      </pre>
+    </div>
+  );
+}
+`;
+}
+
+function shouldGenerateUI(
+  description?: string,
+  metadata?: Record<string, any>,
+  dependencies?: DependencyConfig,
+): boolean {
+  if (metadata?.messageUI || metadata?.inspectionUI || metadata?.uiConfig) return true;
+  if (metadata?.extensionType === "ui") return true;
+  if (dependencies?.frontend && Object.keys(dependencies.frontend).length > 0) return true;
+
+  if (!description) return false;
+  const desc = description.toLowerCase();
+  const uiHints = [
+    "ui",
+    "interface",
+    "dashboard",
+    "panel",
+    "visual",
+    "visualize",
+    "chart",
+    "graph",
+    "table",
+    "diagram",
+    "renderer",
+    "viewer",
+    "preview",
+    "inspector",
+  ];
+
+  return uiHints.some((hint) => desc.includes(hint));
 }
 
 /**
@@ -1348,7 +1482,9 @@ async function checkSyntax(
  */
 function extractFunctions(code: string): string[] {
   const matches = code.matchAll(/(\w+)\s*:\s*async\s*\(/g);
-  return Array.from(matches).map((match) => match[1]).filter(Boolean);
+  return Array.from(matches)
+    .map((match) => match[1])
+    .filter((name): name is string => Boolean(name));
 }
 
 /**
