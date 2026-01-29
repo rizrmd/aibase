@@ -1,9 +1,9 @@
 {
   "id": "duckdb",
   "name": "DuckDB Query",
-  "description": "Query CSV, Excel, Parquet, and JSON files using SQL via DuckDB",
+  "description": "Query CSV, Excel, Parquet, and JSON files using SQL. Auto-extracts structure on file upload.",
   "author": "AIBase",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "category": "database-tools",
   "enabled": true,
   "isDefault": true,
