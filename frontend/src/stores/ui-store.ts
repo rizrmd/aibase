@@ -10,15 +10,6 @@ interface ScriptDetails {
   inspectionData?: Record<string, any>; // extensionId -> inspection data
 }
 
-interface FileToolDetails {
-  action: string;
-  path?: string;
-  newPath?: string;
-  state: "call" | "executing" | "progress" | "result" | "error";
-  result?: any;
-  error?: string;
-}
-
 interface GenericToolDetails {
   toolName: string;
   args?: Record<string, any>;
@@ -30,7 +21,6 @@ interface GenericToolDetails {
 interface UIStore {
   // Dialog states
   selectedScript: ScriptDetails | null;
-  selectedFileTool: FileToolDetails | null;
   selectedGenericTool: GenericToolDetails | null;
   showInterruptPrompt: boolean;
 
@@ -47,7 +37,6 @@ interface UIStore {
 
   // Actions for dialogs
   setSelectedScript: (script: ScriptDetails | null) => void;
-  setSelectedFileTool: (fileTool: FileToolDetails | null) => void;
   setSelectedGenericTool: (tool: GenericToolDetails | null) => void;
   setShowInterruptPrompt: (show: boolean) => void;
   closeAllDialogs: () => void;
@@ -67,7 +56,6 @@ interface UIStore {
 export const useUIStore = create<UIStore>((set) => ({
   // Initial state
   selectedScript: null,
-  selectedFileTool: null,
   selectedGenericTool: null,
   showInterruptPrompt: false,
   isReasoningOpen: false,
@@ -78,12 +66,10 @@ export const useUIStore = create<UIStore>((set) => ({
 
   // Dialog actions
   setSelectedScript: (script) => set({ selectedScript: script }),
-  setSelectedFileTool: (fileTool) => set({ selectedFileTool: fileTool }),
   setSelectedGenericTool: (tool) => set({ selectedGenericTool: tool }),
   setShowInterruptPrompt: (show) => set({ showInterruptPrompt: show }),
   closeAllDialogs: () => set({
     selectedScript: null,
-    selectedFileTool: null,
     selectedGenericTool: null,
     showInterruptPrompt: false
   }),

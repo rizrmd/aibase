@@ -208,7 +208,6 @@ async function loadToolExamples(projectId?: string, tenantId?: number | string, 
   try {
     // Import context functions from tool definition files
     const scriptTool = await import("../tools/definition/script-tool");
-    const fileTool = await import("../tools/definition/file-tool");
     const todoTool = await import("../tools/definition/todo-tool");
     const memoryTool = await import("../tools/definition/memory-tool");
 
@@ -218,26 +217,6 @@ async function loadToolExamples(projectId?: string, tenantId?: number | string, 
     // Script tool examples (most comprehensive)
     if (scriptTool.context) {
       examples.push(await scriptTool.context());
-    }
-
-    // File tool examples + available files list
-    if (fileTool.context) {
-      let fileContext = await fileTool.context();
-
-      // Append available files if we have project info
-      if (projectId && tenantId) {
-        const files = await loadProjectLevelFiles(projectId, tenantId);
-        if (files && files.length > 0) {
-          fileContext += "\n\n### Available Files in Project:\n";
-          for (const file of files) {
-            fileContext += `  • ${file.name} (${file.sizeHuman}, type: .${file.type})\n`;
-          }
-        } else {
-          fileContext += "\n\n### Available Files in Project:\n  No files uploaded yet.\n";
-        }
-      }
-
-      examples.push(fileContext);
     }
 
     // Todo tool examples

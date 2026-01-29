@@ -11,7 +11,6 @@ import * as path from 'path';
 import { extensionHookRegistry } from '../tools/extensions/extension-hooks';
 import { ExtensionLoader } from '../tools/extensions/extension-loader';
 import type { WSServer } from '../ws/entry';
-import { FileTool } from '../tools/definition/file-tool';
 import { getProjectFilesDir } from '../config/paths';
 
 const logger = createLogger('Upload');

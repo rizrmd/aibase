@@ -8,7 +8,7 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { chatBubbleVariants } from "../shared/variants";
 import { dataUrlToUint8Array } from "../shared/utils";
 import { ReasoningBlock } from "./reasoning-block";
-import { ToolCall, MemoryToolGroup, FileToolGroup } from "../tools";
+import { ToolCall, MemoryToolGroup } from "../tools";
 import type {
   ChatMessageProps,
   MessagePart,
@@ -142,40 +142,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }
 
   if (parts && parts.length > 0) {
-    // Group adjacent memory and file tool invocations in parts
+    // Group adjacent memory tool invocations in parts
     const groupedParts: Array<MessagePart | MessagePart[]> = [];
     let currentMemoryParts: ToolInvocationPart[] = [];
-    let currentFileParts: ToolInvocationPart[] = [];
 
     parts.forEach((part) => {
       if (
         part.type === "tool-invocation" &&
         part.toolInvocation.toolName === "memory"
       ) {
-        // Flush file parts if any
-        if (currentFileParts.length > 0) {
-          groupedParts.push(
-            currentFileParts.length === 1
-              ? currentFileParts[0]
-              : currentFileParts,
-          );
-          currentFileParts = [];
-        }
         currentMemoryParts.push(part as ToolInvocationPart);
-      } else if (
-        part.type === "tool-invocation" &&
-        part.toolInvocation.toolName === "file"
-      ) {
-        // Flush memory parts if any
-        if (currentMemoryParts.length > 0) {
-          groupedParts.push(
-            currentMemoryParts.length === 1
-              ? currentMemoryParts[0]
-              : currentMemoryParts,
-          );
-          currentMemoryParts = [];
-        }
-        currentFileParts.push(part as ToolInvocationPart);
       } else {
         // If we have accumulated memory parts, push them as a group
         if (currentMemoryParts.length > 0) {
@@ -186,21 +162,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           );
           currentMemoryParts = [];
         }
-        // If we have accumulated file parts, push them as a group
-        if (currentFileParts.length > 0) {
-          groupedParts.push(
-            currentFileParts.length === 1
-              ? currentFileParts[0]
-              : currentFileParts,
-          );
-          currentFileParts = [];
-        }
         // Push the other part
         groupedParts.push(part);
       }
     });
 
-    // Don't forget to push any remaining groups
+    // Don't forget to push any remaining memory groups
     if (currentMemoryParts.length > 0) {
       groupedParts.push(
         currentMemoryParts.length === 1
@@ -208,16 +175,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           : currentMemoryParts,
       );
     }
-    if (currentFileParts.length > 0) {
-      groupedParts.push(
-        currentFileParts.length === 1 ? currentFileParts[0] : currentFileParts,
-      );
-    }
 
     return (
       <>
         {groupedParts.map((partOrGroup, index) => {
-          // Handle tool groups (memory or file)
+          // Handle tool groups (memory)
 
           if (Array.isArray(partOrGroup)) {
             const invocations = partOrGroup.map((p) => {
@@ -233,13 +195,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               return (
                 <MemoryToolGroup
                   key={`memory-group-${index}`}
-                  invocations={invocations}
-                />
-              );
-            } else if (toolName === "file") {
-              return (
-                <FileToolGroup
-                  key={`file-group-${index}`}
                   invocations={invocations}
                 />
               );

@@ -1,5 +1,4 @@
 import { ScriptDetailsDialog } from "@/components/ui/script-details-dialog";
-import { FileToolDetailsDialog } from "@/components/ui/file-tool-details-dialog";
 import { GenericToolDetailsDialog } from "@/components/ui/generic-tool-details-dialog";
 import { useUIStore } from "@/stores/ui-store";
 import type { ToolInvocation } from "./types";
@@ -18,10 +17,8 @@ export function GlobalToolDialogs({
   toolInvocations?: ToolInvocation[];
 }) {
   const selectedScript = useUIStore((state) => state.selectedScript);
-  const selectedFileTool = useUIStore((state) => state.selectedFileTool);
   const selectedGenericTool = useUIStore((state) => state.selectedGenericTool);
   const setSelectedScript = useUIStore((state) => state.setSelectedScript);
-  const setSelectedFileTool = useUIStore((state) => state.setSelectedFileTool);
   const setSelectedGenericTool = useUIStore((state) => state.setSelectedGenericTool);
 
   // Collect all progress messages for script tools
@@ -57,16 +54,6 @@ export function GlobalToolDialogs({
         result={selectedScript?.result}
         error={selectedScript?.error}
         inspectionData={selectedScript?.inspectionData}
-      />
-      <FileToolDetailsDialog
-        open={!!selectedFileTool}
-        onOpenChange={(open) => !open && setSelectedFileTool(null)}
-        action={selectedFileTool?.action || ""}
-        path={selectedFileTool?.path}
-        newPath={selectedFileTool?.newPath}
-        state={selectedFileTool?.state || "call"}
-        result={selectedFileTool?.result}
-        error={selectedFileTool?.error}
       />
       <GenericToolDetailsDialog
         open={!!selectedGenericTool}

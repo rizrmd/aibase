@@ -13,7 +13,6 @@ async function loadToolExamples(): Promise<string> {
   try {
     // Import context functions from tool definition files
     const scriptTool = await import("../tools/definition/script-tool");
-    const fileTool = await import("../tools/definition/file-tool");
     const todoTool = await import("../tools/definition/todo-tool");
     const memoryTool = await import("../tools/definition/memory-tool");
 
@@ -24,11 +23,6 @@ async function loadToolExamples(): Promise<string> {
     if (scriptTool.context) {
       const scriptContext = await scriptTool.context();
       examples.push(scriptContext);
-    }
-
-    if (fileTool.context) {
-      const fileContext = await fileTool.context();
-      examples.push(fileContext);
     }
 
     if (todoTool.context) {

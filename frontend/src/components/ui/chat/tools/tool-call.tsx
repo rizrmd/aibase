@@ -6,7 +6,6 @@ import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 import { MemoryToolGroup } from "./memory-tool-group";
-import { FileToolGroup } from "./file-tool-group";
 import type { ToolInvocation } from "./types";
 import { getExtensionComponent } from "./extension-component-registry";
 
@@ -22,43 +21,23 @@ interface ToolCallProps {
 }
 
 export function ToolCall({ toolInvocations }: ToolCallProps) {
-  const { setSelectedScript, setSelectedFileTool, setSelectedGenericTool } =
+  const { setSelectedScript, setSelectedGenericTool } =
     useUIStore(
       useShallow((state) => ({
         setSelectedScript: state.setSelectedScript,
-        setSelectedFileTool: state.setSelectedFileTool,
         setSelectedGenericTool: state.setSelectedGenericTool,
       }))
     );
 
   if (!toolInvocations?.length) return null;
 
-  // Group adjacent memory and file tool calls
+  // Group adjacent memory tool calls
   const groupedInvocations: Array<ToolInvocation | ToolInvocation[]> = [];
   let currentMemoryGroup: ToolInvocation[] = [];
-  let currentFileGroup: ToolInvocation[] = [];
 
   toolInvocations.forEach((invocation) => {
     if (invocation.toolName === "memory") {
-      // Flush file group if any
-      if (currentFileGroup.length > 0) {
-        groupedInvocations.push(
-          currentFileGroup.length === 1 ? currentFileGroup[0] : currentFileGroup
-        );
-        currentFileGroup = [];
-      }
       currentMemoryGroup.push(invocation);
-    } else if (invocation.toolName === "file") {
-      // Flush memory group if any
-      if (currentMemoryGroup.length > 0) {
-        groupedInvocations.push(
-          currentMemoryGroup.length === 1
-            ? currentMemoryGroup[0]
-            : currentMemoryGroup
-        );
-        currentMemoryGroup = [];
-      }
-      currentFileGroup.push(invocation);
     } else {
       // If we have accumulated memory tools, push them as a group
       if (currentMemoryGroup.length > 0) {
@@ -69,19 +48,12 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
         );
         currentMemoryGroup = [];
       }
-      // If we have accumulated file tools, push them as a group
-      if (currentFileGroup.length > 0) {
-        groupedInvocations.push(
-          currentFileGroup.length === 1 ? currentFileGroup[0] : currentFileGroup
-        );
-        currentFileGroup = [];
-      }
       // Push the other tool
       groupedInvocations.push(invocation);
     }
   });
 
-  // Don't forget to push any remaining groups
+  // Don't forget to push any remaining memory groups
   if (currentMemoryGroup.length > 0) {
     groupedInvocations.push(
       currentMemoryGroup.length === 1
@@ -89,29 +61,17 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
         : currentMemoryGroup
     );
   }
-  if (currentFileGroup.length > 0) {
-    groupedInvocations.push(
-      currentFileGroup.length === 1 ? currentFileGroup[0] : currentFileGroup
-    );
-  }
 
   return (
     <div className="flex flex-col gap-1.5 items-start">
       {groupedInvocations.map((invocationOrGroup, index) => {
-        // Handle tool groups (memory or file)
+        // Handle tool groups (memory)
         if (Array.isArray(invocationOrGroup)) {
           const toolName = invocationOrGroup[0]?.toolName;
           if (toolName === "memory") {
             return (
               <MemoryToolGroup
                 key={`memory-group-${index}`}
-                invocations={invocationOrGroup}
-              />
-            );
-          } else if (toolName === "file") {
-            return (
-              <FileToolGroup
-                key={`file-group-${index}`}
                 invocations={invocationOrGroup}
               />
             );
@@ -123,7 +83,6 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
         const invocation = invocationOrGroup;
 
         const isScript = invocation.toolName === "script";
-        const isFileTool = invocation.toolName === "file";
         const isChart = invocation.toolName === "show-chart";
         const isTable = invocation.toolName === "show-table";
         const isMermaid = invocation.toolName === "show-mermaid";
@@ -220,25 +179,9 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
           }
         };
 
-        const handleFileToolClick = () => {
-          if (isFileTool && invocation.args?.action) {
-            setSelectedFileTool({
-              action: invocation.args.action,
-              path: invocation.args.path,
-              newPath: invocation.args.newPath,
-              state:
-                invocation.state === "partial-call"
-                  ? "call"
-                  : invocation.state,
-              result: "result" in invocation ? invocation.result : undefined,
-              error: "error" in invocation ? invocation.error : undefined,
-            });
-          }
-        };
-
         const handleGenericToolClick = () => {
-          // For all other tool types (not script or file)
-          if (!isScript && !isFileTool) {
+          // For all other tool types (not script)
+          if (!isScript) {
             setSelectedGenericTool({
               toolName: invocation.toolName,
               args: invocation.args,
@@ -256,8 +199,6 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
         const handleClick = () => {
           if (isScript) {
             handleScriptClick();
-          } else if (isFileTool) {
-            handleFileToolClick();
           } else {
             handleGenericToolClick();
           }

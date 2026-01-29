@@ -1,5 +1,4 @@
 import { Tool } from "../llm/conversation";
-import { FileTool } from "./definition/file-tool";
 import { TodoTool } from "./definition/todo-tool";
 import { ScriptTool } from "./definition/script-tool";
 import { MemoryTool } from "./definition/memory-tool";
@@ -13,10 +12,6 @@ export function getBuiltinTools(
   tenantId: number | string = "default",
   userId?: string
 ): Tool[] {
-  const fileTool = new FileTool();
-  fileTool.setConvId(convId);
-  fileTool.setProjectId(projectId);
-
   const todoTool = new TodoTool();
   todoTool.setConvId(convId);
   todoTool.setProjectId(projectId);
@@ -30,5 +25,5 @@ export function getBuiltinTools(
   const memoryTool = new MemoryTool();
   memoryTool.setProjectId(projectId);
 
-  return [fileTool, todoTool, scriptTool, memoryTool];
+  return [todoTool, scriptTool, memoryTool];
 }
