@@ -142,12 +142,15 @@ export function generateExtensionContext(extension: Extension): string {
       extractedContext = extractedContext
         .split('\n')
         .map(line => {
-          // Remove leading/trailing quotes and plus signs
-          return line
-            .replace(/^\s*'?'\s*\+\s*/g, '')  // Remove starting quote and plus
-            .replace(/\s*\+\s*'?'\s*$/g, '')   // Remove ending quote and plus
-            .replace(/''\s*\+\s*'/g, '')       // Remove empty strings in concatenation
+          // Pattern: 'CONTENT' +
+          // Remove the wrapping quotes and trailing plus, then trim
+          let cleaned = line
+            .replace(/^'\s*\+\s*/g, '')               // Remove initial quote-plus from lines like "' + CONTENT"
+            .replace(/^\s*'(.*)'\s*\+\s*$/g, '$1')  // Remove wrapping quotes and trailing plus
+            .replace(/^'(.*)'/g, '$1')                // Remove wrapping quotes (no plus)
+            .replace(/''\s*\+\s*'/g, '')              // Remove empty strings in concatenation
             .trim();
+          return cleaned;
         })
         .filter(line => line.length > 0)  // Remove empty lines
         .join('\n');
