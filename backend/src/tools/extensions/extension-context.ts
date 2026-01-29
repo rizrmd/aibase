@@ -140,12 +140,23 @@ export function generateExtensionContext(extension: Extension): string {
 
   // Try to extract the context from the code
   // Pattern: const context = () => `...` or export const context = () => `...` (multi-line string concatenation)
+  // Or: const context = () => { return `...`; }
   // First try the exported version (for backwards compatibility)
   let contextMatch = code.match(/export\s+const\s+context\s*=\s*\(\)\s*=>\s*`([\s\S]+?)`/);
 
   // If not found, try the non-exported version with template string
   if (!contextMatch) {
     contextMatch = code.match(/const\s+context\s*=\s*\(\)\s*=>\s*`([\s\S]+?)`/);
+  }
+
+  // If not found, try function body with return statement
+  if (!contextMatch) {
+    contextMatch = code.match(/const\s+context\s*=\s*\(\)\s*=>\s*\{\s*return\s+`([\s\S]+?)`;/);
+  }
+
+  // If not found, try exported version with return statement
+  if (!contextMatch) {
+    contextMatch = code.match(/export\s+const\s+context\s*=\s*\(\)\s*=>\s*\{\s*return\s+`([\s\S]+?)`;/);
   }
 
   // If not found, try the non-exported version with string concatenation (single quotes)
