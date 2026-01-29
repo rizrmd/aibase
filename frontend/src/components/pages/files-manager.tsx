@@ -279,13 +279,9 @@ export function FilesManagerPage() {
 
   const handleGoToConversation = (file: FileInfo) => {
     if (!projectId) return;
-    
+
     clearMessages();
     navigate(`/projects/${projectId}/chat`);
-  };
-
-    const conversation = conversations.find((c) => c.convId === convId);
-    return conversation?.title || "Unknown Conversation";
   };
 
   // Upload handlers
