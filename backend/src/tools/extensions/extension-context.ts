@@ -5,6 +5,7 @@
 
 import { ExtensionStorage, type Extension, type ExampleEntry } from "../../storage/extension-storage";
 import { CategoryStorage } from "../../storage/category-storage";
+import { ExtensionLoader } from "../extensions/extension-loader";
 
 /**
  * Parse function signature from TypeScript code
@@ -108,8 +109,13 @@ function extractExamplesFromJSDoc(code: string): ExampleEntry[] {
 
 /**
  * Generate context for a single extension
+ *
+ * Attempts to get context by:
+ * 1. Evaluating the extension and calling its context() function (with timeout guardrails)
+ * 2. Falling back to regex parsing if evaluation fails
+ * 3. Generating from code analysis as last resort
  */
-export function generateExtensionContext(extension: Extension): string {
+export async function generateExtensionContext(extension: Extension): Promise<string> {
   const { metadata, code } = extension;
 
   // Use same namespace logic as extension-loader
@@ -137,6 +143,24 @@ export function generateExtensionContext(extension: Extension): string {
       namespace = firstWord; // Use one-word namespace (excel, postgresql, etc.)
     }
   }
+
+  // PRIORITY 1: Try to evaluate the extension and call its context() function
+  // This is the correct way - execute the function instead of parsing with regex
+  try {
+    const loader = new ExtensionLoader();
+    const evaluatedContext = await loader.extractExtensionContext(extension, 3000);
+
+    if (evaluatedContext && evaluatedContext.trim()) {
+      console.log(`[ExtensionContext] ✓ Successfully evaluated context function for ${metadata.id}`);
+      return evaluatedContext.trim();
+    }
+  } catch (error) {
+    console.log(`[ExtensionContext] Context evaluation failed for ${metadata.id}, falling back to regex: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // PRIORITY 2: Fall back to regex parsing if evaluation fails
+  // This handles cases where evaluation is not possible or times out
+  console.log(`[ExtensionContext] Using regex fallback for ${metadata.id}`);
 
   // Try to extract the context from the code
   // Pattern: const context = () => `...` or export const context = () => `...` (multi-line string concatenation)
@@ -190,13 +214,13 @@ export function generateExtensionContext(extension: Extension): string {
     }
 
     if (extractedContext && extractedContext.trim()) {
-      console.log(`[ExtensionContext] Using exported context for ${metadata.id}`);
+      console.log(`[ExtensionContext] Using regex-parsed context for ${metadata.id}`);
       return extractedContext.trim();
     }
   }
 
-  // Fallback: Generate context from code analysis
-  console.log(`[ExtensionContext] No exported context found for ${metadata.id}, generating from code`);
+  // PRIORITY 3: Generate context from code analysis (last resort)
+  console.log(`[ExtensionContext] No context found for ${metadata.id}, generating from code`);
 
   // Find all function definitions in the extension object
   // Pattern: functionName: async (params) => { or functionName: (params) => {
@@ -352,13 +376,17 @@ export async function generateExtensionsContext(projectId: string): Promise<stri
 
   // Generate context by category
   let context = '\n\n## 🧩 Project Extensions\n\n';
-  context += `The following extensions are available in this project:\n\n`;
+  context += `⚠️ **IMPORTANT**: All extension functions below are **ONLY available inside the \`script\` tool**.\n`;
+  context += `Do NOT call extension functions directly (e.g., \`excel.query()\` is NOT a standalone tool).\n\n`;
+  context += `**Correct usage**:\n`;
+  context += `\`\`\`json\n{\n  "tool": "script",\n  "params": {\n    "purpose": "Query Excel file",\n    "code": "const result = await excel.query({ fileId: 'data.xlsx', query: 'SELECT * FROM data' }); return result;"\n  }\n}\n\`\`\`\n\n`;
+  context += `The following extensions are available:\n\n`;
 
   for (const [category, exts] of grouped.entries()) {
     context += `### ${category}\n\n`;
 
     for (const ext of exts) {
-      context += generateExtensionContext(ext);
+      context += await generateExtensionContext(ext);
     }
   }
 

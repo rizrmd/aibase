@@ -92,7 +92,7 @@ export class FileStorage {
   ): Promise<void> {
     const metaPath = this.getMetaFilePath(fileName, projectId, tenantId);
 
-    // Build frontmatter (metadata only, description goes in body)
+    // Build frontmatter (metadata only, description goes in body, title goes in frontmatter)
     const frontmatter = Object.entries(meta)
       .filter(([key, value]) => key !== 'description' && value !== undefined)
       .map(([key, value]) => {

@@ -456,6 +456,62 @@ export class ExtensionLoader {
   }
 
   /**
+   * Safely extract context from an extension by evaluating its context() function
+   *
+   * SECURITY CONSIDERATIONS:
+   * - Extensions are already executed during script tool usage, so this doesn't introduce new attack surface
+   * - Context function should only return static strings, but we guard against malicious implementations
+   * - Added timeout to prevent DoS via infinite loops
+   * - Catch all errors to prevent extension bugs from breaking context generation
+   *
+   * @param extension - Extension to extract context from
+   * @param timeoutMs - Maximum time to allow context function to run (default: 5 seconds)
+   * @returns Context string, or empty string if evaluation fails
+   */
+  async extractExtensionContext(extension: Extension, timeoutMs: number = 5000): Promise<string> {
+    try {
+      console.log(`[ExtensionLoader] Evaluating context for extension '${extension.metadata.id}'`);
+
+      // Wrap evaluation in timeout
+      const contextPromise = this.evaluateExtension(extension);
+
+      // Race between evaluation and timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Context evaluation timeout after ${timeoutMs}ms`)), timeoutMs);
+      });
+
+      const exports = await Promise.race([contextPromise, timeoutPromise]);
+
+      // Check if context function exists and is callable
+      if (exports.context && typeof exports.context === 'function') {
+        // Execute context function with timeout
+        const contextResultPromise = Promise.resolve(exports.context());
+
+        const contextTimeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Context function timeout after ${timeoutMs}ms`)), timeoutMs);
+        });
+
+        const contextString = await Promise.race([contextResultPromise, contextTimeoutPromise]);
+
+        if (typeof contextString === 'string') {
+          console.log(`[ExtensionLoader] Successfully evaluated context for '${extension.metadata.id}' (${contextString.length} chars)`);
+          return contextString;
+        } else {
+          console.warn(`[ExtensionLoader] Context function for '${extension.metadata.id}' did not return a string, got ${typeof contextString}`);
+          return '';
+        }
+      } else {
+        console.log(`[ExtensionLoader] Extension '${extension.metadata.id}' has no context function, will use regex fallback`);
+        return '';
+      }
+    } catch (error: any) {
+      // Log error but don't fail - caller will fall back to regex parsing
+      console.warn(`[ExtensionLoader] Failed to evaluate context for '${extension.metadata.id}': ${error.message}`);
+      return '';
+    }
+  }
+
+  /**
    * Reset extensions for a project (copy defaults again)
    */
   async resetToDefaults(projectId: string): Promise<void> {
