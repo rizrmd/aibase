@@ -299,7 +299,37 @@ export async function generateExtensionsContext(projectId: string): Promise<stri
   const tenantId = project?.tenant_id ?? 'default';
 
   // Get all enabled extensions
-  const extensions = await extensionStorage.getEnabled(projectId, tenantId);
+  // Check if USE_DEFAULT_EXTENSIONS is enabled
+  const useDefaults = process.env.USE_DEFAULT_EXTENSIONS === 'true';
+  let extensions: Extension[];
+
+  if (useDefaults) {
+    // Development mode: Load from defaults directory with project overrides
+    const ExtensionLoader = (await import('../extensions/extension-loader')).ExtensionLoader;
+    const loader = new ExtensionLoader();
+    extensions = await loader.loadDefaults();
+
+    // Load project extensions that override defaults
+    const projectExts = await extensionStorage.getAll(projectId, tenantId);
+    const projectMap = new Map(projectExts.map(p => [p.metadata.id, p]));
+
+    // Override defaults with project versions
+    extensions = extensions.map(d => {
+      const override = projectMap.get(d.metadata.id);
+      if (override) {
+        return override;
+      }
+      return d;
+    });
+
+    // Add project-only extensions
+    const defaultIds = new Set(extensions.map(d => d.metadata.id));
+    const projectOnly = projectExts.filter(p => !defaultIds.has(p.metadata.id) && p.metadata.enabled);
+    extensions.push(...projectOnly);
+  } else {
+    // Production mode: Load from project's extensions folder
+    extensions = await extensionStorage.getEnabled(projectId, tenantId);
+  }
 
   if (extensions.length === 0) {
     return '';
