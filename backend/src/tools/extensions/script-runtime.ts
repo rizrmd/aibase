@@ -63,6 +63,15 @@ return { total: list.items.length };
   - **Note:** Only works with http/https URLs, NOT for file system paths or backend endpoints
   - **For reading files:** Use project extensions like \`excelDocument.summarize()\` instead
 
+**IMPORTANT:** Project extension functions are also available! See the "## Project Extensions" section below for extension functions like:
+- extensionCreator.createOrUpdate() - Create/update staging for extensions
+- extensionCreator.modify({ extensionId, instruction }) - Modify staging for an extension
+- extensionCreator.finalize({ extensionId }) - Promote staging to active extension
+- postgresql() - Query PostgreSQL databases
+- duckdb() - Query CSV/Excel/Parquet/JSON files
+- webSearch() - Search the web
+- And more project-specific extensions
+
 - **progress(message, data)** - Send progress updates to the UI
   - **When to use:** Keep users informed during long-running operations
   - **How to use:** \`progress('Processing data...'); progress('Step 1 of 3');\`
