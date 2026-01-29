@@ -89,8 +89,8 @@ interface ImageSearchResult {
 /**
  * Context documentation for the search extension
  */
-const context = () =>
-  `
+function context() {
+  return `
 ### Search Extension
 
 Search the web and find images using Brave Search API.
