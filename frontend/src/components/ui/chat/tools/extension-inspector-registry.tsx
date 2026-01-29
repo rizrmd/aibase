@@ -7,6 +7,7 @@
  */
 
 import type { ComponentType } from "react";
+import { loadExtensionDependencies } from "@/lib/extension-dependency-loader";
 
 export interface InspectorComponentProps {
   data: any;
@@ -39,7 +40,9 @@ export function registerInspector(
  * @returns The component or null if not found
  */
 export async function getInspector(
-  extensionId: string
+  extensionId: string,
+  projectId?: string,
+  tenantId?: string | number
 ): Promise<ComponentType<InspectorComponentProps> | null> {
   // Check registry first (hardcoded inspectors)
   if (inspectorComponents[extensionId]) {
@@ -47,15 +50,25 @@ export async function getInspector(
   }
 
   // Check cache
-  if (inspectorCache[extensionId]) {
-    return inspectorCache[extensionId];
+  const cacheKey = projectId ? `${extensionId}-${projectId}` : extensionId;
+  if (inspectorCache[cacheKey]) {
+    return inspectorCache[cacheKey];
+  }
+
+  // Load dependencies first (if any)
+  try {
+    const tenantParam = tenantId !== undefined ? String(tenantId) : undefined;
+    await loadExtensionDependencies(extensionId, projectId, tenantParam);
+  } catch (error) {
+    console.warn(`[ExtensionInspectorRegistry] Failed to load dependencies for ${extensionId}:`, error);
+    // Continue anyway - dependencies might be optional
   }
 
   // Try to load from API
   try {
-    const component = await loadInspectorFromAPI(extensionId);
+    const component = await loadInspectorFromAPI(extensionId, projectId, tenantId);
     if (component) {
-      inspectorCache[extensionId] = component;
+      inspectorCache[cacheKey] = component;
       return component;
     }
   } catch (error) {
@@ -71,13 +84,20 @@ export async function getInspector(
  * @returns The component or null if not found
  */
 async function loadInspectorFromAPI(
-  extensionId: string
+  extensionId: string,
+  projectId?: string,
+  tenantId?: string | number
 ): Promise<ComponentType<InspectorComponentProps> | null> {
   try {
     console.log(`[ExtensionInspectorRegistry] Loading inspector for ${extensionId} from API`);
 
     // Fetch bundled UI from backend
-    const response = await fetch(`/api/extensions/${extensionId}/ui`);
+    const url = new URL(`/api/extensions/${extensionId}/ui`, window.location.origin);
+    if (projectId && tenantId !== undefined) {
+      url.searchParams.set('projectId', projectId);
+      url.searchParams.set('tenantId', String(tenantId));
+    }
+    const response = await fetch(url.toString());
 
     if (!response.ok) {
       console.warn(`[ExtensionInspectorRegistry] API returned ${response.status} for ${extensionId}`);
@@ -88,13 +108,13 @@ async function loadInspectorFromAPI(
 
     // Create module from code
     const blob = new Blob([bundledCode], { type: 'application/javascript' });
-    const url = URL.createObjectURL(blob);
+    const blobUrl = URL.createObjectURL(blob);
 
     // Dynamic import
-    const module = await import(/* @vite-ignore */ url);
+    const module = await import(/* @vite-ignore */ blobUrl);
 
     // Clean up blob URL
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(blobUrl);
 
     // Get default export or named export
     const component = module.default || module.PostgreSQLInspector || module[Object.keys(module)[0]];

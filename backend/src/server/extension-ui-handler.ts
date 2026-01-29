@@ -78,7 +78,7 @@ function transformBundledCode(code: string): string {
  * Get transpiled & bundled extension UI component
  *
  * Priority:
- * 1. Project-specific: data/{projectId}/extensions/{extensionId}/ui.tsx
+ * 1. Project-specific: data/projects/{tenantId}/{projectId}/extensions/{extensionId}/ui.tsx
  * 2. Global default: backend/src/tools/extensions/defaults/{extensionId}/ui.tsx
  */
 export async function handleGetExtensionUI(req: Request, extensionId: string): Promise<Response> {
@@ -94,7 +94,15 @@ export async function handleGetExtensionUI(req: Request, extensionId: string): P
 
     if (projectId && tenantId) {
       // Check project-specific extension first
-      const projectExtDir = path.join(process.cwd(), 'data', projectId, 'extensions', extensionId);
+      const projectExtDir = path.join(
+        process.cwd(),
+        'data',
+        'projects',
+        tenantId,
+        projectId,
+        'extensions',
+        extensionId
+      );
       const projectUIPath = path.join(projectExtDir, 'ui.tsx');
 
       try {
@@ -439,7 +447,8 @@ export async function preBundleExtensionUIs(): Promise<void> {
  */
 export async function clearExtensionCache(
   extensionId: string,
-  projectId?: string
+  projectId?: string,
+  tenantId?: number | string
 ): Promise<number> {
   let deletedCount = 0;
 
@@ -447,8 +456,11 @@ export async function clearExtensionCache(
     // Generate possible cache keys to delete
     const cacheKeysToDelete: string[] = [];
 
-    // 1. Project-specific cache key: data-{projectId}-extensions-{extensionId}-ui
+    // 1. Project-specific cache keys (current + legacy)
     if (projectId) {
+      const tenantSegment = tenantId ?? 'default';
+      cacheKeysToDelete.push(`data-projects-${tenantSegment}-${projectId}-extensions-${extensionId}-ui`);
+      // Legacy (pre-tenant) key: data-{projectId}-extensions-{extensionId}-ui
       cacheKeysToDelete.push(`data-${projectId}-extensions-${extensionId}-ui`);
     }
 

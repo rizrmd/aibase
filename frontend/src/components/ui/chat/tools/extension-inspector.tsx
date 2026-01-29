@@ -10,6 +10,7 @@ import type { ComponentType } from "react";
 import type { InspectorComponentProps } from "./extension-inspector-registry";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useProjectStore } from "@/stores/project-store";
 
 interface ExtensionInspectorProps {
   extensionId: string;
@@ -73,6 +74,7 @@ function InspectorLoadingSkeleton() {
 }
 
 export function ExtensionInspector({ extensionId, data, error }: ExtensionInspectorProps) {
+  const currentProject = useProjectStore((state) => state.currentProject);
   const [InspectorComponent, setInspectorComponent] = useState<ComponentType<InspectorComponentProps> | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -85,7 +87,13 @@ export function ExtensionInspector({ extensionId, data, error }: ExtensionInspec
       setLoading(true);
       setLoadError(null);
 
-      const component = await getInspector(extensionId);
+      const component = await getInspector(
+        extensionId,
+        currentProject?.id,
+        currentProject?.tenant_id !== null && currentProject?.tenant_id !== undefined
+          ? String(currentProject.tenant_id)
+          : undefined
+      );
 
       if (!cancelled) {
         if (component) {
@@ -109,7 +117,7 @@ export function ExtensionInspector({ extensionId, data, error }: ExtensionInspec
     return () => {
       cancelled = true;
     };
-  }, [extensionId]);
+  }, [extensionId, currentProject?.id, currentProject?.tenant_id]);
 
   useEffect(() => {
     loadInspector();

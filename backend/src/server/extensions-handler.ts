@@ -861,7 +861,7 @@ export async function handleReloadExtension(
     // Clear caches
     // 1. Delete disk cache files for both project-specific and global default
     const { clearExtensionCache } = await import('./extension-ui-handler');
-    const cleared = await clearExtensionCache(extensionId, projectId);
+    const cleared = await clearExtensionCache(extensionId, projectId, tenantId);
 
     // 2. Clear in-memory metadata cache is handled by the clearExtensionCache function
 

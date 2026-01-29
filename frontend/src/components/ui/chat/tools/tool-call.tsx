@@ -5,6 +5,7 @@ import type { ComponentType } from "react";
 
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
+import { useProjectStore } from "@/stores/project-store";
 import { MemoryToolGroup } from "./memory-tool-group";
 import type { ToolInvocation } from "./types";
 import { getExtensionComponent } from "./extension-component-registry";
@@ -28,6 +29,10 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
         setSelectedGenericTool: state.setSelectedGenericTool,
       }))
     );
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const projectId = currentProject?.id;
+  const tenantId = currentProject?.tenant_id ?? "default";
+  const tenantParam = tenantId !== undefined ? String(tenantId) : undefined;
 
   if (!toolInvocations?.length) return null;
 
@@ -109,10 +114,10 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
             const [Comp, setComp] = React.useState<ComponentType<any> | null>(null);
 
             React.useEffect(() => {
-              getExtensionComponent(invocation.toolName).then(comp => {
+              getExtensionComponent(invocation.toolName, projectId, projectId ? tenantParam : undefined).then(comp => {
                 setComp(() => comp || (() => <div className="p-4 text-sm text-muted-foreground">UI component not found</div>));
               });
-            }, [invocation.toolName]);
+            }, [invocation.toolName, projectId, tenantId]);
 
             if (!Comp) return <div className="h-[300px] w-full animate-pulse bg-muted rounded-xl" />;
 
@@ -345,7 +350,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                         const [error, setError] = React.useState<string | null>(null);
 
                         React.useEffect(() => {
-                          getExtensionComponent(viz.type).then(comp => {
+                          getExtensionComponent(viz.type, projectId, projectId ? tenantParam : undefined).then(comp => {
                             if (comp) {
                               setComp(() => comp);
                             } else {
@@ -355,7 +360,7 @@ export function ToolCall({ toolInvocations }: ToolCallProps) {
                             console.error(`[VizComponentWrapper] Error loading component for ${viz.type}:`, err);
                             setError(`Failed to load component: ${err.message}`);
                           });
-                        }, [viz.type, vizIndex]);
+                        }, [viz.type, vizIndex, projectId, tenantId]);
 
                         if (error) {
                           return <div className="p-4 text-sm text-red-600 dark:text-red-400">Error: {error}</div>;

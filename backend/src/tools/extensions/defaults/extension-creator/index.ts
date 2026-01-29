@@ -14,12 +14,17 @@ interface CreateOptions {
   description: string;
   functions?: FunctionDescription[] | Record<string, FunctionDescription>;
   code?: string;
+  ui?: string | Record<string, string>;
   category?: string;
   author?: string;
   enabled?: boolean;
   name?: string;
+  id?: string;
+  extensionId?: string;
   version?: string;
   metadata?: Record<string, any>;
+  dependencies?: DependencyConfig;
+  frontendDependencies?: string[] | Record<string, string>;
 }
 
 interface FunctionDescription {
@@ -45,6 +50,11 @@ interface ExtensionDraft {
   extensionId?: string;
 }
 
+interface DependencyConfig {
+  frontend?: Record<string, string>;
+  backend?: Record<string, string>;
+}
+
 // Extend globalThis for context
 declare global {
   var __extensionProjectId: string | undefined;
@@ -63,7 +73,7 @@ const context = () =>
   "### Extension Creator\n" +
   "Create and modify extensions through natural language.\n" +
   "\n" +
-  "**IMPORTANT:** Extension Creator always works with project extensions (data/{projectId}/extensions/). It never modifies default extensions.\n" +
+  "**IMPORTANT:** Extension Creator always works with project extensions (data/projects/{tenantId}/{projectId}/extensions/). It never modifies default extensions.\n" +
   "\n" +
   "**Debugging and Output:**\n" +
   "- Use `progress(message)` to send status updates that you WILL see in the response\n" +
@@ -89,6 +99,10 @@ const context = () =>
   "**Parameters:**\n" +
   "- `description` (required): What the extension does\n" +
   "- `functions` (optional): Array of functions to create\n" +
+  "- `ui` (optional): ui.tsx source for message/inspector UI\n" +
+  "- `id` / `extensionId` (optional): Force extension ID (kebab-case)\n" +
+  "- `dependencies` (optional): { frontend: { pkg: version }, backend: { pkg: version } }\n" +
+  "- `frontendDependencies` (optional): Array or map of frontend packages (normalized into metadata.dependencies.frontend)\n" +
   "- `category` (optional): Category ID (inferred if not provided)\n" +
   '- `author` (optional): Author name (default: "AIBase")\n' +
   "- `enabled` (optional): Enable extension (default: true)\n" +
@@ -175,12 +189,25 @@ const context = () =>
   "`" +
   "\n" +
   "**Important Notes:**\n" +
-  "- Extensions are created in data/{projectId}/extensions/ (project folder)\n" +
+  "- Extensions are created in data/projects/{tenantId}/{projectId}/extensions/ (project folder)\n" +
   "- Modifying a default extension automatically copies it to project first\n" +
   "- Default extensions are never modified directly\n" +
   "- Use the Extension Settings UI to manage default vs project versions\n" +
   "- progress() messages are visible to you during execution\n" +
-  "- console.log() goes to server logs only (for developer debugging)\n";
+  "- console.log() goes to server logs only (for developer debugging)\n" +
+  "- **Do NOT use the file tool to create/modify extensions** (it writes to conversation files)\n" +
+  "- Always use createOrUpdate()/finalize() to write extension files\n" +
+  "\n" +
+  "**UI Components (ui.tsx):**\n" +
+  "- If the extension needs a custom UI (message UI and/or inspector UI), provide `ui` in createOrUpdate().\n" +
+  "- Add UI metadata in `metadata`:\n" +
+  "  - messageUI: { componentName: \"MyExtensionMessage\", visualizationType: \"my-extension\", uiFile: \"ui.tsx\" }\n" +
+  "  - inspectionUI: { tabLabel: \"Details\", componentName: \"MyExtensionInspector\", uiFile: \"ui.tsx\", showByDefault: true }\n" +
+  "- Message UI must export a named component `${PascalCaseId}Message` (e.g., show-chart -> ShowChartMessage).\n" +
+  "- Inspector UI should be the default export (e.g., export default function MyExtensionInspector()).\n" +
+  "- If you need npm packages for UI, declare them in metadata.dependencies.frontend and access them via window.libs.\n" +
+  "  Example metadata.dependencies.frontend: { \"canvas-confetti\": \"^1.9.2\" }\n" +
+  "  Example ui.tsx usage: const ReactECharts = window.libs.ReactECharts; const echarts = window.libs.echarts;\n";
 
 /**
  * Session state for the current extension being created/modified
@@ -206,7 +233,7 @@ const createOrUpdate = async (options: CreateOptions) => {
   // Initialize or update draft
   if (!currentDraft.extensionId) {
     // Generate ID from description or name
-    const id = generateIdFromDescription(options.name || options.description);
+    const id = options.extensionId || options.id || generateIdFromDescription(options.name || options.description);
     currentDraft.extensionId = id;
   }
 
@@ -214,6 +241,12 @@ const createOrUpdate = async (options: CreateOptions) => {
   if (!currentDraft.metadata) {
     currentDraft.metadata = {};
   }
+
+  const normalizedDeps = normalizeDependencyConfig(
+    options.dependencies,
+    options.frontendDependencies,
+    options.metadata?.dependencies
+  );
 
   currentDraft.metadata = {
     ...currentDraft.metadata,
@@ -228,6 +261,7 @@ const createOrUpdate = async (options: CreateOptions) => {
     isDefault: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    ...(normalizedDeps ? { dependencies: normalizedDeps } : {}),
   };
 
   // Handle code parameter - use directly if provided
@@ -243,6 +277,27 @@ const createOrUpdate = async (options: CreateOptions) => {
       functions: functionsArray,
       metadata: currentDraft.metadata,
     });
+  }
+
+  if (options.ui) {
+    currentDraft.ui = normalizeUIContent(options.ui);
+  }
+  if (!currentDraft.ui) {
+    const shouldGenerate = shouldGenerateUI(options.description, currentDraft.metadata, normalizedDeps);
+    if (shouldGenerate) {
+      const uiResult = generateDefaultUI({
+        description: options.description,
+        metadata: currentDraft.metadata,
+        dependencies: normalizedDeps,
+      });
+      currentDraft.ui = uiResult.ui;
+      if (uiResult.messageUI && !currentDraft.metadata.messageUI) {
+        currentDraft.metadata.messageUI = uiResult.messageUI;
+      }
+      if (uiResult.inspectionUI && !currentDraft.metadata.inspectionUI) {
+        currentDraft.metadata.inspectionUI = uiResult.inspectionUI;
+      }
+    }
   }
 
   // Validate
@@ -369,6 +424,13 @@ const validate = async () => {
   }
   if (!currentDraft.metadata.category) {
     errors.push("Category is required");
+  }
+
+  if (
+    (currentDraft.metadata.messageUI || currentDraft.metadata.inspectionUI) &&
+    !currentDraft.ui
+  ) {
+    errors.push("UI metadata provided but ui.tsx is missing");
   }
 
   // Check code syntax
@@ -516,6 +578,345 @@ function normalizeFunctionsArray(functions: FunctionDescription[] | Record<strin
     ...fn,
     name: fn.name || key,
   }));
+}
+
+/**
+ * Normalize dependency config from multiple input shapes
+ */
+function normalizeDependencyConfig(
+  deps?: DependencyConfig,
+  frontendDeps?: string[] | Record<string, string>,
+  metadataDeps?: DependencyConfig
+): DependencyConfig | undefined {
+  const merged: DependencyConfig = {
+    frontend: {},
+    backend: {},
+  };
+
+  const normalizedMetadata = normalizeDependencyShape(metadataDeps);
+
+  const normalizedFrontend = normalizeFrontendDependencies(frontendDeps);
+
+  const sources = [normalizedMetadata, deps];
+  for (const source of sources) {
+    if (!source) continue;
+    if (source.frontend) {
+      Object.assign(merged.frontend, normalizeFrontendDependencies(source.frontend) || source.frontend);
+    }
+    if (source.backend) {
+      Object.assign(merged.backend, source.backend);
+    }
+  }
+
+  if (normalizedFrontend) {
+    Object.assign(merged.frontend, normalizedFrontend);
+  }
+
+  const hasFrontend = merged.frontend && Object.keys(merged.frontend).length > 0;
+  const hasBackend = merged.backend && Object.keys(merged.backend).length > 0;
+
+  if (!hasFrontend && !hasBackend) {
+    return undefined;
+  }
+
+  return merged;
+}
+
+function normalizeDependencyShape(
+  deps?: DependencyConfig
+): DependencyConfig | undefined {
+  if (!deps) return undefined;
+
+  const normalized: DependencyConfig = {};
+
+  if (deps.frontend) {
+    normalized.frontend = normalizeFrontendDependencies(deps.frontend) || deps.frontend;
+  }
+  if (deps.backend) {
+    normalized.backend = deps.backend;
+  }
+
+  return normalized;
+}
+
+function normalizeFrontendDependencies(
+  frontendDeps?: string[] | Record<string, string>
+): Record<string, string> | undefined {
+  if (!frontendDeps) return undefined;
+
+  if (Array.isArray(frontendDeps)) {
+    const result: Record<string, string> = {};
+    for (const name of frontendDeps) {
+      if (typeof name === "string" && name.trim()) {
+        result[name.trim()] = "latest";
+      }
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  return Object.keys(frontendDeps).length > 0 ? frontendDeps : undefined;
+}
+
+function normalizeUIContent(
+  ui: string | Record<string, string>
+): string {
+  if (typeof ui === "string") {
+    return ui;
+  }
+
+  if (ui["ui.tsx"]) {
+    return ui["ui.tsx"];
+  }
+
+  const firstKey = Object.keys(ui)[0];
+  if (firstKey && ui[firstKey]) {
+    return ui[firstKey];
+  }
+
+  return "";
+}
+
+function shouldGenerateUI(
+  description: string,
+  metadata: any,
+  dependencies?: DependencyConfig
+): boolean {
+  if (metadata?.messageUI || metadata?.inspectionUI) return true;
+  if (metadata?.uiConfig || metadata?.extensionType === "ui") return true;
+
+  const desc = description.toLowerCase();
+  const uiHints = [
+    "ui",
+    "chat",
+    "message",
+    "visual",
+    "widget",
+    "component",
+    "interface",
+    "confetti",
+    "chart",
+    "table",
+    "diagram",
+    "mermaid",
+    "graph",
+  ];
+  if (uiHints.some((hint) => desc.includes(hint))) {
+    return true;
+  }
+
+  const frontendDeps = Object.keys(dependencies?.frontend || {});
+  return frontendDeps.length > 0;
+}
+
+function generateDefaultUI(input: {
+  description: string;
+  metadata: any;
+  dependencies?: DependencyConfig;
+}): {
+  ui: string;
+  messageUI?: Record<string, any>;
+  inspectionUI?: Record<string, any>;
+} {
+  const id = String(input.metadata?.id || "extension");
+  const pascalId = toPascalCase(id);
+  const messageComponent = `${pascalId}Message`;
+  const inspectorComponent = `${pascalId}Inspector`;
+
+  const frontendDeps = Object.keys(input.dependencies?.frontend || {});
+  const isConfetti = frontendDeps.includes("canvas-confetti") || input.description.toLowerCase().includes("confetti");
+
+  if (isConfetti) {
+    return {
+      ui: buildConfettiUI(messageComponent, inspectorComponent),
+      messageUI: {
+        componentName: messageComponent,
+        visualizationType: id,
+        uiFile: "ui.tsx",
+      },
+      inspectionUI: {
+        tabLabel: "Confetti",
+        componentName: inspectorComponent,
+        uiFile: "ui.tsx",
+        showByDefault: true,
+      },
+    };
+  }
+
+  return {
+    ui: buildGenericUI(messageComponent, inspectorComponent, id),
+    messageUI: {
+      componentName: messageComponent,
+      visualizationType: id,
+      uiFile: "ui.tsx",
+    },
+    inspectionUI: {
+      tabLabel: "Details",
+      componentName: inspectorComponent,
+      uiFile: "ui.tsx",
+      showByDefault: true,
+    },
+  };
+}
+
+function toPascalCase(value: string): string {
+  return value
+    .split(/[^a-zA-Z0-9]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+}
+
+function buildConfettiUI(messageComponent: string, inspectorComponent: string): string {
+  return `import React, { useState } from "react";
+import confetti from "canvas-confetti";
+
+interface MessageProps {
+  toolInvocation?: { result?: { args?: any } };
+}
+
+interface InspectorProps {
+  data?: any;
+  error?: string;
+}
+
+export function ${messageComponent}({ toolInvocation }: MessageProps) {
+  const defaults = {
+    particleCount: 150,
+    spread: 70,
+    origin: { y: 0.6 },
+  };
+
+  const trigger = () => {
+    confetti(defaults);
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="text-sm font-semibold">Confetti</div>
+      <div className="text-xs text-muted-foreground">
+        Click to celebrate in chat.
+      </div>
+      <button
+        onClick={trigger}
+        className="w-fit rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+      >
+        Celebrate
+      </button>
+    </div>
+  );
+}
+
+export default function ${inspectorComponent}({ data, error }: InspectorProps) {
+  const [particleCount, setParticleCount] = useState(150);
+  const [spread, setSpread] = useState(70);
+  const [originY, setOriginY] = useState(0.6);
+
+  const preview = () => {
+    confetti({
+      particleCount,
+      spread,
+      origin: { y: originY },
+    });
+  };
+
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-red-600 dark:text-red-400">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="text-sm font-semibold">Confetti Settings</div>
+      <div className="space-y-2 text-xs">
+        <label className="flex flex-col gap-1">
+          Particle Count: {particleCount}
+          <input
+            type="range"
+            min={10}
+            max={500}
+            value={particleCount}
+            onChange={(e) => setParticleCount(Number(e.target.value))}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          Spread: {spread}
+          <input
+            type="range"
+            min={10}
+            max={180}
+            value={spread}
+            onChange={(e) => setSpread(Number(e.target.value))}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          Origin Y: {originY.toFixed(2)}
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={originY}
+            onChange={(e) => setOriginY(Number(e.target.value))}
+          />
+        </label>
+      </div>
+      <button
+        onClick={preview}
+        className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+      >
+        Preview
+      </button>
+    </div>
+  );
+}
+`;
+}
+
+function buildGenericUI(messageComponent: string, inspectorComponent: string, extensionId: string): string {
+  return `import React from "react";
+
+interface MessageProps {
+  toolInvocation?: { result?: { args?: any } };
+}
+
+interface InspectorProps {
+  data?: any;
+  error?: string;
+}
+
+export function ${messageComponent}({ toolInvocation }: MessageProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="text-sm font-semibold">${extensionId}</div>
+      <div className="text-xs text-muted-foreground">
+        Message UI for ${extensionId}.
+      </div>
+    </div>
+  );
+}
+
+export default function ${inspectorComponent}({ data, error }: InspectorProps) {
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-red-600 dark:text-red-400">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 text-sm">
+      <div className="font-semibold mb-2">Inspector</div>
+      <pre className="text-xs whitespace-pre-wrap">
+{JSON.stringify(data ?? {}, null, 2)}
+      </pre>
+    </div>
+  );
+}
+`;
 }
 
 /**
