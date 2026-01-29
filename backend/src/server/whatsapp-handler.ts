@@ -511,6 +511,22 @@ function cleanWhatsAppResponse(response: string): string {
   // Remove JSON objects that look like tool results
   cleaned = cleaned.replace(/\{[^}]*"error"[^}]*\}/g, '');
 
+  // Remove webhook/message JSON patterns (clientId, message, timestamp, etc.)
+  cleaned = cleaned.replace(/\{"clientId"\s*:\s*"[^"]*"[^}]*\}/gs, '');
+  
+  // Remove message payload JSON patterns
+  cleaned = cleaned.replace(/\{"message"\s*:\s*\{[^}]*\}[^}]*\}/gs, '');
+  
+  // Remove standalone JSON objects with common webhook fields
+  cleaned = cleaned.replace(/\{[^}]*"timestamp"\s*:\s*\d+[^}]*\}/g, '');
+  
+  // Remove location-related JSON patterns
+  cleaned = cleaned.replace(/\{[^}]*"latitude"\s*:\s*[0-9.-]+[^}]*"longitude"\s*:\s*[0-9.-]+[^}]*\}/g, '');
+  
+  // Remove any remaining JSON-like structures that start with { and contain quoted keys
+  // Be more aggressive for obvious JSON dumps
+  cleaned = cleaned.replace(/^\s*\{[\s\S]*"[a-zA-Z_]+"\s*:[\s\S]*\}\s*$/gm, '');
+
   // Remove multiple newlines (compress to max 2)
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
