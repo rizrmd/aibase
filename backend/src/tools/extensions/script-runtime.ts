@@ -61,9 +61,11 @@ return { total: list.items.length };
   - **When to use:** Call external APIs, download data, interact with web services
   - **How to use:** \`const res = await fetch('https://api.example.com/data'); const data = await res.json();\`
 
-- **progress(message)** - Send progress updates to the UI
+- **progress(message, data)** - Send progress updates to the UI
   - **When to use:** Keep users informed during long-running operations
   - **How to use:** \`progress('Processing data...'); progress('Step 1 of 3');\`
+  - **Limit:** 3KB max for data payload (large data gets summarized)
+  - **Best practice:** Keep \`message\` short, \`data\` small (numbers, small objects)
 
 - **memory.read(category, key)** - Read stored values synchronously
   - **When to use:** Retrieve credentials, API keys, configuration stored in memory
@@ -299,15 +301,75 @@ export class ScriptRuntime {
    * Create the progress function for sending status updates
    */
   private createProgressFunction() {
+    const MAX_PROGRESS_SIZE = 3 * 1024; // 3KB limit for progress data
+
     return (message: string, data?: any) => {
+      const payload = { message, data };
+      let payloadSize = 0;
+      let truncatedData = data;
+
+      try {
+        payloadSize = Buffer.byteLength(JSON.stringify(payload), 'utf-8');
+      } catch (error) {
+        // If serialization fails, send message only
+        console.warn('[ScriptRuntime] Could not serialize progress data, sending message only:', error);
+        truncatedData = undefined;
+      }
+
+      // Check if payload exceeds limit
+      if (truncatedData !== undefined && payloadSize > MAX_PROGRESS_SIZE) {
+        console.warn(`[ScriptRuntime] Progress data too large (${payloadSize} bytes > ${MAX_PROGRESS_SIZE} bytes), truncating data`);
+
+        // Try to send a summary instead
+        try {
+          const summary = this.summarizeLargeData(data, payloadSize);
+          truncatedData = {
+            _truncated: true,
+            _originalSize: payloadSize,
+            _summary: summary,
+          };
+        } catch (error) {
+          // If summarization fails, send message only
+          console.warn('[ScriptRuntime] Could not summarize progress data:', error);
+          truncatedData = undefined;
+        }
+      }
+
       this.context.broadcast("tool_call", {
         toolCallId: this.context.toolCallId,
         toolName: "script",
         args: { purpose: this.context.purpose, code: this.context.code },
         status: "progress",
-        result: { message, data },
+        result: { message, data: truncatedData },
       });
     };
+  }
+
+  /**
+   * Summarize large data for progress updates
+   */
+  private summarizeLargeData(data: any, size: number): string {
+    if (Array.isArray(data)) {
+      return `[Array with ${data.length} items, ${this.formatBytes(size)}]`;
+    } else if (typeof data === 'string') {
+      return `[String with ${data.length} characters, ${this.formatBytes(size)}]`;
+    } else if (typeof data === 'object' && data !== null) {
+      const keys = Object.keys(data);
+      return `[Object with ${keys.length} keys, ${this.formatBytes(size)}]`;
+    } else {
+      return `[${typeof data}, ${this.formatBytes(size)}]`;
+    }
+  }
+
+  /**
+   * Format bytes to human-readable string
+   */
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   }
 
   /**
