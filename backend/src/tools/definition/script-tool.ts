@@ -140,6 +140,60 @@ Example (multi-line):
   }
 
   /**
+   * Deep truncate a value to fit within size limits
+   * Recursively processes objects, arrays, and strings
+   */
+  private deepTruncate(value: any, maxStringLen: number = 500, maxArrayItems: number = 5, maxObjectKeys: number = 5, depth: number = 0): any {
+    // Prevent infinite recursion
+    if (depth > 10) return "[Maximum depth reached]";
+
+    // Handle primitives
+    if (value === null || value === undefined) return value;
+    if (typeof value === "boolean" || typeof value === "number") return value;
+
+    // Handle strings - truncate if too long
+    if (typeof value === "string") {
+      if (value.length > maxStringLen) {
+        return value.substring(0, maxStringLen) + `... [truncated, was ${value.length} chars]`;
+      }
+      return value;
+    }
+
+    // Handle arrays - limit items and recurse
+    if (Array.isArray(value)) {
+      if (value.length === 0) return value;
+      const truncated = value.slice(0, maxArrayItems).map(item =>
+        this.deepTruncate(item, maxStringLen, maxArrayItems, maxObjectKeys, depth + 1)
+      );
+      if (value.length > maxArrayItems) {
+        (truncated as any)._truncated = true;
+        (truncated as any)._note = `[Array: showing ${maxArrayItems} of ${value.length} items]`;
+      }
+      return truncated;
+    }
+
+    // Handle objects - limit keys and recurse
+    if (typeof value === "object") {
+      const keys = Object.keys(value);
+      if (keys.length === 0) return value;
+
+      const truncated: any = {};
+      for (let i = 0; i < Math.min(keys.length, maxObjectKeys); i++) {
+        const key = keys[i];
+        truncated[key] = this.deepTruncate(value[key], maxStringLen, maxArrayItems, maxObjectKeys, depth + 1);
+      }
+
+      if (keys.length > maxObjectKeys) {
+        truncated._truncated = true;
+        truncated._note = `[Object: showing ${maxObjectKeys} of ${keys.length} keys]`;
+      }
+      return truncated;
+    }
+
+    return value;
+  }
+
+  /**
    * Check if result is too large and truncate if needed
    */
   private async handleLargeResult(result: any): Promise<any> {
@@ -173,36 +227,20 @@ Example (multi-line):
 
     const metadata = await storeOutput(result, this.convId, this.currentToolCallId!);
 
-    // Create truncated summary based on data type
-    let truncatedData: any;
-    let summary: string;
+    // Create deeply truncated preview for immediate viewing
+    const truncatedData = this.deepTruncate(result, 500, 5, 5);
 
+    // Generate summary based on original data type
+    let summary: string;
     if (Array.isArray(result)) {
-      // For arrays: show first N items
-      const itemsToShow = Math.floor(maxSize / (size / result.length));
-      truncatedData = result.slice(0, itemsToShow);
-      summary = `[Array truncated: showing ${itemsToShow} of ${result.length} items]`;
+      summary = `[Array truncated: showing preview of ${result.length} items]`;
     } else if (typeof result === "string") {
-      // For strings: show beginning
-      const charsToShow = Math.floor(maxSize / 2); // Rough estimate
-      truncatedData = result.substring(0, charsToShow) + "...";
-      summary = `[String truncated: showing ${charsToShow} of ${result.length} characters]`;
+      summary = `[String truncated: showing preview of ${result.length} characters]`;
     } else if (typeof result === "object" && result !== null) {
-      // For objects: show structure with sample keys
       const keys = Object.keys(result);
-      const keysToShow = Math.min(5, keys.length);
-      truncatedData = {};
-      for (let i = 0; i < keysToShow; i++) {
-        const key = keys[i];
-        if (key !== undefined) {
-          truncatedData[key] = (result as Record<string, any>)[key];
-        }
-      }
-      summary = `[Object truncated: showing ${keysToShow} of ${keys.length} keys]`;
+      summary = `[Object truncated: showing preview of ${keys.length} keys]`;
     } else {
-      // For primitives: shouldn't happen but handle it
-      truncatedData = result;
-      summary = "";
+      summary = `[Output truncated: showing preview]`;
     }
 
     return {
@@ -339,9 +377,21 @@ Example (multi-line):
       // Return result directly without extra nesting
       return result;
     } catch (error: any) {
+      // Extract error message - handle both Error objects and primitive values
+      let errorMessage: string;
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error === undefined || error === null) {
+        errorMessage = 'Unknown error (undefined or null thrown)';
+      } else {
+        errorMessage = String(error);
+      }
+
       const errorResult = {
         __error: true,
-        error: error.message,
+        error: errorMessage,
         purpose: args.purpose,
       };
 

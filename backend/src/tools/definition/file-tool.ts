@@ -336,7 +336,7 @@ ${frontmatter}
     try {
       switch (args.action) {
         case "list":
-          return await this.listFiles(args.path, args.scope);
+          return await this.listFiles(args.path, args.scope, args.limit);
         case "search":
           if (!args.pattern) {
             throw new Error("pattern is required for search action");
@@ -401,12 +401,12 @@ ${frontmatter}
     }
   }
 
-  private async listFiles(dirPath?: string, scope?: FileScope): Promise<string> {
+  private async listFiles(dirPath?: string, scope?: FileScope, limit: number = 30): Promise<string> {
     const baseDir = this.getBaseDir();
 
     // If no path provided, list all files in all */files/* directories
     if (!dirPath) {
-      return await this.listAllProjectFiles(scope);
+      return await this.listAllProjectFiles(scope, limit);
     }
 
     // If path provided, list files in that specific directory
@@ -458,44 +458,25 @@ ${frontmatter}
     );
   }
 
-  private async listAllProjectFiles(scope?: FileScope): Promise<string> {
+  private async listAllProjectFiles(scope?: FileScope, limit: number = 30): Promise<string> {
     const baseDir = this.getBaseDir();
-    await fs.mkdir(baseDir, { recursive: true });
+    const filesDir = path.join(baseDir, "files");
+    await fs.mkdir(filesDir, { recursive: true });
 
     const allFiles: any[] = [];
 
     try {
-      // List all conversation directories in the project's files folder
-      const filesDir = path.join(baseDir, "files");
-      const entries = await fs.readdir(filesDir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-
-        const convId = entry.name;
-        const convFilesDir = path.join(filesDir, convId);
-
-        // Check if files directory exists for this conversation
-        try {
-          await fs.access(convFilesDir);
-          const stats = await fs.stat(convFilesDir);
-
-          if (stats.isDirectory()) {
-            // Recursively list all files in this conversation's files directory
-            const files = await this.listFilesRecursive(convFilesDir, baseDir, scope);
-            allFiles.push(...files);
-          }
-        } catch (error) {
-          // Files directory doesn't exist for this conversation, skip it
-          continue;
-        }
-      }
+      // Flat structure: files are stored directly in files/ directory
+      const files = await this.listFilesRecursive(filesDir, baseDir, scope);
+      allFiles.push(...files.slice(0, limit));
 
       return JSON.stringify(
         {
           baseDirectory: baseDir,
           totalFiles: allFiles.length,
           scope: scope || "all",
+          limit,
+          truncated: allFiles.length >= limit,
           files: allFiles,
         },
         null,

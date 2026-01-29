@@ -90,7 +90,7 @@ function escapeSqlString(str: string): string {
 /**
  * Execute DuckDB query and parse CSV result
  */
-async function executeDuckDB(query: string): Promise<DuckDBQueryResult> {
+async function executeDuckDB(query: string): Promise<DuckDBQueryResult | null> {
   const { $ } = await import('bun');
 
   try {
@@ -114,7 +114,8 @@ async function executeDuckDB(query: string): Promise<DuckDBQueryResult> {
     return { columns, rows };
   } catch (error) {
     console.error('[ExcelDocument] DuckDB query failed:', error);
-    return { columns: [], rows: [] };
+    // Return null to indicate DuckDB is not available
+    return null;
   }
 }
 
@@ -153,9 +154,68 @@ function parseCSVLine(line: string): string[] {
 }
 
 /**
+ * Get comprehensive Excel file structure using XLSX library
+ */
+async function getExcelStructureXLSX(filePath: string): Promise<ExcelStructure> {
+  try {
+    const createRequire = (moduleUrl: string) => {
+      const module = require('module');
+      const require = module.createRequire(import.meta.url);
+      return require;
+    };
+    const require = createRequire(import.meta.url);
+    const XLSX = require('xlsx');
+
+    // Read the Excel file
+    const buffer = await fs.readFile(filePath);
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    const sheets: SheetInfo[] = [];
+
+    // Process each sheet
+    workbook.SheetNames.forEach((sheetName: string) => {
+      const worksheet = workbook.Sheets[sheetName];
+
+      // Convert sheet to JSON with header: 1 to get array of arrays
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+      if (data.length > 0) {
+        // First row contains headers
+        const headers = data[0].map(cell => String(cell || ''));
+
+        // Count data rows (excluding header)
+        const rowCount = Math.max(0, data.length - 1);
+
+        sheets.push({
+          name: sheetName,
+          rowCount: rowCount,
+          columns: headers,
+        });
+      }
+    });
+
+    const totalRows = sheets.reduce((sum, sheet) => sum + sheet.rowCount, 0);
+
+    return {
+      sheets,
+      totalRows,
+      totalSheets: sheets.length,
+    };
+  } catch (error) {
+    console.error('[ExcelDocument] XLSX structure extraction failed:', error);
+    return {
+      sheets: [],
+      totalRows: 0,
+      totalSheets: 0,
+    };
+  }
+}
+
+/**
  * Get comprehensive Excel file structure
  */
 async function getExcelStructure(filePath: string): Promise<ExcelStructure> {
+  // First, try DuckDB for efficient structure discovery
   const escapedPath = escapeSqlString(filePath);
 
   // Try to query the file to discover structure
@@ -168,13 +228,16 @@ async function getExcelStructure(filePath: string): Promise<ExcelStructure> {
 
   const columnsResult = await executeDuckDB(columnsQuery);
 
-  if (!columnsResult || columnsResult.columns.length === 0) {
-    // File might be empty or have no data
-    return {
-      sheets: [],
-      totalRows: 0,
-      totalSheets: 0,
-    };
+  // If DuckDB is not available or failed, fall back to XLSX library
+  if (!columnsResult) {
+    console.log('[ExcelDocument] DuckDB not available, falling back to XLSX library');
+    return await getExcelStructureXLSX(filePath);
+  }
+
+  if (columnsResult.columns.length === 0) {
+    // File might be empty or have no data, try XLSX library as fallback
+    console.log('[ExcelDocument] DuckDB found no columns, trying XLSX library');
+    return await getExcelStructureXLSX(filePath);
   }
 
   // Get total row count
@@ -184,6 +247,13 @@ async function getExcelStructure(filePath: string): Promise<ExcelStructure> {
   `;
 
   const countResult = await executeDuckDB(countQuery);
+
+  // If count query failed, fall back to XLSX library
+  if (!countResult) {
+    console.log('[ExcelDocument] DuckDB count query failed, falling back to XLSX library');
+    return await getExcelStructureXLSX(filePath);
+  }
+
   const totalRows = parseInt(countResult.rows[0]?.[0] || '0', 10);
 
   // Create a single sheet entry (DuckDB reads all sheets by default)
@@ -203,6 +273,46 @@ async function getExcelStructure(filePath: string): Promise<ExcelStructure> {
 }
 
 /**
+ * Get preview data for a sheet using XLSX library
+ */
+async function getSheetPreviewXLSX(filePath: string, sheetName: string, maxRows: number = 10): Promise<string[][]> {
+  try {
+    const createRequire = (moduleUrl: string) => {
+      const module = require('module');
+      const require = module.createRequire(import.meta.url);
+      return require;
+    };
+    const require = createRequire(import.meta.url);
+    const XLSX = require('xlsx');
+
+    // Read the Excel file
+    const buffer = await fs.readFile(filePath);
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    // Find the requested sheet
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) {
+      console.warn(`[ExcelDocument] Sheet "${sheetName}" not found`);
+      return [];
+    }
+
+    // Convert sheet to JSON with header: 1 to get array of arrays
+    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+    // Limit rows (add 1 to include header)
+    const limitedData = data.slice(0, maxRows + 1);
+
+    // Convert all cells to strings
+    return limitedData.map(row =>
+      row.map(cell => String(cell || ''))
+    );
+  } catch (error) {
+    console.error('[ExcelDocument] XLSX preview failed:', error);
+    return [];
+  }
+}
+
+/**
  * Get preview data for a sheet
  */
 async function getSheetPreview(filePath: string, sheetName: string, maxRows: number = 10): Promise<string[][]> {
@@ -216,6 +326,12 @@ async function getSheetPreview(filePath: string, sheetName: string, maxRows: num
   `;
 
   const result = await executeDuckDB(previewQuery);
+
+  // If DuckDB is not available or failed, fall back to XLSX library
+  if (!result) {
+    console.log('[ExcelDocument] DuckDB preview failed, falling back to XLSX library');
+    return await getSheetPreviewXLSX(filePath, sheetName, maxRows);
+  }
 
   // Combine header and rows
   const allData: string[][] = [result.columns, ...result.rows];

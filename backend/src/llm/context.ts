@@ -204,7 +204,7 @@ async function loadContextTemplate(projectId: string, tenantId: number | string)
 /**
  * Load tool examples from tool definition files
  */
-async function loadToolExamples(projectId?: string, tenantId?: number | string): Promise<string> {
+async function loadToolExamples(projectId?: string, tenantId?: number | string, convId?: string): Promise<string> {
   try {
     // Import context functions from tool definition files
     const scriptTool = await import("../tools/definition/script-tool");
@@ -220,9 +220,24 @@ async function loadToolExamples(projectId?: string, tenantId?: number | string):
       examples.push(await scriptTool.context());
     }
 
-    // File tool examples
+    // File tool examples + available files list
     if (fileTool.context) {
-      examples.push(await fileTool.context());
+      let fileContext = await fileTool.context();
+
+      // Append available files if we have project info
+      if (projectId && tenantId) {
+        const files = await loadProjectLevelFiles(projectId, tenantId);
+        if (files && files.length > 0) {
+          fileContext += "\n\n### Available Files in Project:\n";
+          for (const file of files) {
+            fileContext += `  • ${file.name} (${file.sizeHuman}, type: .${file.type})\n`;
+          }
+        } else {
+          fileContext += "\n\n### Available Files in Project:\n  No files uploaded yet.\n";
+        }
+      }
+
+      examples.push(fileContext);
     }
 
     // Todo tool examples
@@ -253,6 +268,76 @@ async function loadToolExamples(projectId?: string, tenantId?: number | string):
 }
 
 /**
+ * Load all files at project level (flat structure)
+ */
+async function loadProjectLevelFiles(
+  projectId: string,
+  tenantId: number | string
+): Promise<FileInfo[] | null> {
+  const filesDir = getProjectFilesDir(projectId, tenantId);
+
+  try {
+    await fs.access(filesDir);
+  } catch {
+    // Files directory doesn't exist
+    return null;
+  }
+
+  try {
+    const entries = await fs.readdir(filesDir, { withFileTypes: true });
+    const files: FileInfo[] = [];
+
+    for (const entry of entries) {
+      // Skip metadata files and directories
+      if (entry.name.startsWith('.') || entry.isDirectory()) {
+        continue;
+      }
+
+      const fullPath = path.join(filesDir, entry.name);
+      const stats = await fs.stat(fullPath);
+
+      // Load metadata to get scope
+      let scope: 'user' | 'public' = 'user';
+      const metaPath = path.join(filesDir, `.${entry.name}.meta.md`);
+      try {
+        const metaContent = await fs.readFile(metaPath, 'utf-8');
+        const frontmatterMatch = metaContent.match(/^---\n([\s\S]*?)\n---/);
+        if (frontmatterMatch && frontmatterMatch[1]) {
+          const scopeMatch = frontmatterMatch[1].match(/scope:\s*["']?(user|public)["']?/);
+          if (scopeMatch) {
+            scope = scopeMatch[1] as 'user' | 'public';
+          }
+        }
+      } catch {
+        // No metadata file, use default
+      }
+
+      files.push({
+        name: entry.name,
+        path: entry.name,
+        type: entry.name.split('.').pop() || 'unknown',
+        size: stats.size,
+        sizeHuman: formatBytes(stats.size),
+        modified: stats.mtime.toISOString(),
+        scope,
+      });
+    }
+
+    // Sort by modified date (newest first)
+    files.sort((a, b) => {
+      const dateA = a.modified ? new Date(a.modified).getTime() : 0;
+      const dateB = b.modified ? new Date(b.modified).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    return files;
+  } catch (error: any) {
+    // Failed to read directory
+    return null;
+  }
+}
+
+/**
  * Replace placeholders in template with dynamic content
  */
 async function injectDynamicContent(
@@ -261,7 +346,8 @@ async function injectDynamicContent(
   todoList: TodoList | null,
   urlParams: Record<string, string> | null = null,
   projectId?: string,
-  tenantId?: number | string
+  tenantId?: number | string,
+  convId?: string
 ): Promise<string> {
   let context = template;
 
@@ -284,7 +370,7 @@ async function injectDynamicContent(
   }
 
   // Replace tool context placeholder (now includes extensions if projectId provided)
-  const toolContext = await loadToolExamples(projectId, tenantId);
+  const toolContext = await loadToolExamples(projectId, tenantId, convId);
   context = context.replace("{{TOOL_CONTEXT}}", toolContext);
 
   // Append memory if it exists
@@ -303,10 +389,10 @@ async function injectDynamicContent(
 }
 
 /**
- * Get the path to the files directory for a conversation
+ * Get the path to the files directory for a conversation (flat structure, shared across conversations)
  */
 function getFilesDirectory(convId: string, projectId: string, tenantId: number | string): string {
-  return getProjectFilesDir(projectId, convId, tenantId);
+  return getProjectFilesDir(projectId, tenantId);
 }
 
 /**
@@ -460,7 +546,7 @@ export const defaultContext = async (
   const files = await loadFiles(convId, projectId, tenantId);
 
   // Inject dynamic content into template (URL params, tool context, memory, todos, extensions)
-  let context = await injectDynamicContent(template, memory, todoList, urlParams || null, projectId, tenantId);
+  let context = await injectDynamicContent(template, memory, todoList, urlParams || null, projectId, tenantId, convId);
 
   // Append files if they exist
   if (files && files.length > 0) {
