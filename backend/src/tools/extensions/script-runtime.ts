@@ -67,6 +67,11 @@ return { total: list.items.length };
 - extensionCreator.createOrUpdate() - Create/update staging for extensions
 - extensionCreator.modify({ extensionId, instruction }) - Modify staging for an extension
 - extensionCreator.finalize({ extensionId }) - Promote staging to active extension
+- **Extension Creator validation loop (MANDATORY):**
+  - After createOrUpdate()/modify(), ALWAYS call validate({ extensionId })
+  - If validate() fails: fix staging with createOrUpdate()/modify(), then validate() again
+  - NEVER call finalize() when validate() is failing
+  - If validation keeps failing after a few attempts, return the errors to the user
 - postgresql() - Query PostgreSQL databases
 - duckdb() - Query CSV/Excel/Parquet/JSON files
 - webSearch() - Search the web

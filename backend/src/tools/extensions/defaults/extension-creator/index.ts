@@ -240,6 +240,15 @@ const context = () =>
   "- **Do NOT use the file tool to create/modify extensions** (it writes to conversation files)\n" +
   "- Use finalize({ extensionId }) or createOrUpdate(..., { finalize: true }) to write extension files\n" +
   "\n" +
+  "**Validation Feedback Loop (MANDATORY):**\n" +
+  "- After any createOrUpdate()/modify(), ALWAYS call validate({ extensionId }).\n" +
+  "- If validate() returns errors:\n" +
+  "  1) Fix the staging snapshot with createOrUpdate()/modify() using the errors as guidance.\n" +
+  "  2) validate() again.\n" +
+  "  3) Repeat until ok, then finalize().\n" +
+  "- NEVER call finalize() when validate() is failing.\n" +
+  "- If repeated attempts fail (e.g., 3 tries), return the validation errors to the user instead of finalizing.\n" +
+  "\n" +
   "**UI Components (ui.tsx):**\n" +
   "- If the extension needs a custom UI (message UI and/or inspector UI), provide `ui` in createOrUpdate().\n" +
   "- Add UI metadata in `metadata`:\n" +
@@ -682,6 +691,8 @@ const createOrUpdate = async (options: CreateOptions, control?: CreateOrUpdateCo
           preview: generatePreviewFromSnapshot(snapshot),
           extensionId,
           message: "Validation failed. Not finalized.",
+          nextAction:
+            "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
         };
       }
 
@@ -707,6 +718,12 @@ const createOrUpdate = async (options: CreateOptions, control?: CreateOrUpdateCo
       message: validation.ok
         ? "Staging updated. Call finalize() to write files."
         : "Staging has validation issues. Fix and retry.",
+      ...(validation.ok
+        ? {}
+        : {
+            nextAction:
+              "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
+          }),
       path: `data/projects/${tenantId}/${projectId}/extensions/${extensionId}/`,
     };
   } finally {
@@ -786,6 +803,12 @@ const modify = async (input: string | ModifyOptions) => {
       message: finalizeFlag
         ? "Validation failed. Not finalized."
         : "Staging updated. Call finalize() to write files.",
+      ...(validation.ok
+        ? {}
+        : {
+            nextAction:
+              "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
+          }),
     };
   } finally {
     await releaseExtensionLock(projectId, tenantId, extensionId);
@@ -832,13 +855,21 @@ const validate = async (input?: string | { extensionId?: string; id?: string }) 
   const extensionId =
     typeof input === "string" ? input : input?.extensionId || input?.id;
   if (!extensionId) {
-    return { ok: false, errors: ["extensionId is required to validate staging"] };
+    return {
+      ok: false,
+      errors: ["extensionId is required to validate staging"],
+      nextAction: "Provide extensionId to validate staging.",
+    };
   }
 
   const { projectId, tenantId } = getRuntimeContext();
   const snapshot = await loadStagingSnapshot(projectId, tenantId, extensionId);
   if (!snapshot) {
-    return { ok: false, errors: [`No staging data found for "${extensionId}"`] };
+    return {
+      ok: false,
+      errors: [`No staging data found for "${extensionId}"`],
+      nextAction: "Use createOrUpdate() or modify() to create staging data first.",
+    };
   }
 
   return await validateSnapshot(snapshot);
@@ -897,6 +928,8 @@ const finalize = async (input?: {
       created: false,
       error: "Cannot create extension with validation errors",
       issues: validation.errors,
+      nextAction:
+        "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
     };
   }
 
