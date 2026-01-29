@@ -12,8 +12,9 @@
  * │       ├── conversations/
  * │       │   └── {convId}/
  * │       │       ├── chats/
- * │       │       ├── files/
  * │       │       └── info.json
+ * │       ├── files/
+ * │       │   └── {convId}/
  * │       └── extensions/
  * │           └── {extensionId}/
  * ├── logs/             # All logs consolidated
@@ -110,10 +111,17 @@ export function getConversationChatsDir(projectId: string, convId: string, tenan
 }
 
 /**
- * Get conversation files directory
+ * Get project files directory (files are now stored at project level, organized by conversation)
  */
-export function getConversationFilesDir(projectId: string, convId: string, tenantId: number | string): string {
-  return join(getConversationDir(projectId, convId, tenantId), "files");
+export function getProjectFilesDir(projectId: string, convId: string, tenantId: number | string): string {
+  return join(getProjectDir(projectId, tenantId), "files", convId);
+}
+
+/**
+ * Get project-level files directory (for files uploaded via file manager without conversation context)
+ */
+export function getProjectLevelFilesDir(projectId: string, tenantId: number | string): string {
+  return join(getProjectDir(projectId, tenantId), "files", `project-files-${projectId}`);
 }
 
 /**

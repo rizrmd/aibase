@@ -7,7 +7,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { extractTextFromDocx, isDocxFile } from '../../../../utils/document-extractor';
-import { getConversationFilesDir } from '../../../../config/paths';
+import { getProjectFilesDir } from '../../../../config/paths';
 
 // Type definitions
 interface ExtractOptions {
@@ -105,7 +105,7 @@ const extract = async (options: ExtractOptions): Promise<ExtractResult> => {
     const convId = globalThis.convId || '';
     const projectId = globalThis.projectId || '';
     const tenantId = globalThis.tenantId || 'default';
-    const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
+    const convFilesDir = getProjectFilesDir(projectId, convId, tenantId);
     filePath = path.join(convFilesDir, options.fileId);
 
     try {

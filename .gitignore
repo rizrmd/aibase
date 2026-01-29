@@ -41,3 +41,6 @@ bins/aimeow/aimeow*
 bins/aimeow/*.exe
 bins/aimeow/*.linux
 bins/aimeow/*.macos
+bins/duckdb/duckdb-manager
+bins/duckdb/duckdb-manager.exe
+bins/duckdb/bin/

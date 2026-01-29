@@ -55,13 +55,14 @@ export async function handleGetProjectFiles(req: Request): Promise<Response> {
     }
     const tenantId = project.tenant_id ?? 'default';
 
-    // Get all conversation directories for the project (including those without chat history)
+    // Get all conversation directories for the project (from the files folder)
     const { getProjectDir } = await import('../config/paths');
     const projectDir = getProjectDir(projectId, tenantId);
+    const filesBaseDir = path.join(projectDir, "files");
 
-    // Check if project directory exists
+    // Check if files directory exists
     try {
-      await fs.access(projectDir);
+      await fs.access(filesBaseDir);
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         return Response.json({
@@ -72,14 +73,18 @@ export async function handleGetProjectFiles(req: Request): Promise<Response> {
       throw error;
     }
 
-    // Read all conversation directories
-    const entries = await fs.readdir(projectDir, { withFileTypes: true });
+    // Read all conversation directories in the files folder
+    const entries = await fs.readdir(filesBaseDir, { withFileTypes: true });
     const convDirs = entries.filter(entry => entry.isDirectory());
+
+    logger.info({ projectId, convDirCount: convDirs.length, convDirs: convDirs.map(d => d.name) }, 'Found conversation directories in files folder');
 
     // Get files for each conversation directory
     const filesPromises = convDirs.map(async (convDir) => {
       const convId = convDir.name;
       const files = await fileStorage.listFiles(convId, projectId, tenantId);
+
+      logger.info({ convId, fileCount: files.length, files: files.map(f => f.name) }, 'Files in conversation');
 
       return files.map(file => ({
         name: file.name,
@@ -95,6 +100,8 @@ export async function handleGetProjectFiles(req: Request): Promise<Response> {
 
     const filesArrays = await Promise.all(filesPromises);
     const allFiles = filesArrays.flat();
+
+    logger.info({ projectId, totalFiles: allFiles.length }, 'Total files found');
 
     // Sort by upload date (most recent first)
     allFiles.sort((a, b) => b.uploadedAt - a.uploadedAt);

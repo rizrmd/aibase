@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import React from "react";
 
 import { FilePreviewDialog } from "@/components/ui/file-preview-dialog";
-import { useConvId } from "@/lib/conv-id";
+import { ConvIdManager, useConvId } from "@/lib/conv-id";
 import {
   deleteFile,
   fetchProjectFiles,
@@ -38,6 +38,7 @@ import {
   renameFile,
   type FileInfo,
 } from "@/lib/files-api";
+import { uploadFilesWithProgress, type UploadProgress } from "@/lib/file-upload";
 import { useChatStore } from "@/stores/chat-store";
 import { useConversationStore } from "@/stores/conversation-store";
 import {
@@ -58,10 +59,13 @@ import {
   Trash2,
   X,
   Eye,
+  Upload,
+  Loader2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { AnimatePresence, motion } from "framer-motion";
 
 // Error Boundary component to catch rendering errors
 class FilesErrorBoundary extends React.Component<
@@ -125,6 +129,14 @@ export function FilesManagerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
+
+  // Upload state
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+  const [showConversationDialog, setShowConversationDialog] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -282,6 +294,96 @@ export function FilesManagerPage() {
     return conversation?.title || "Unknown Conversation";
   };
 
+  // Upload handlers
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setPendingFiles(Array.from(files));
+      setShowConversationDialog(true);
+    }
+    // Reset input value to allow selecting the same files again
+    e.target.value = "";
+  };
+
+  const handleUploadToConversation = async (convId: string) => {
+    if (!projectId || !pendingFiles) {
+      toast.error("Project ID is required");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setShowConversationDialog(false);
+
+    // Temporarily set the conversation ID for upload
+    ConvIdManager.setConvId(convId);
+
+    try {
+      // Upload files with progress tracking
+      await uploadFilesWithProgress(pendingFiles, {
+        projectId,
+        onProgress: (progress: UploadProgress) => {
+          setUploadProgress(progress.percentage);
+        },
+      });
+
+      toast.success("Files uploaded successfully");
+
+      // Refresh conversations to get updated data
+      await loadConversations(projectId);
+
+      // Refresh files list with cache-busting
+      const freshFiles = await fetchProjectFiles(projectId, true);
+      const validFiles = freshFiles.filter((file) => {
+        return (
+          file &&
+          typeof file === "object" &&
+          file.name &&
+          typeof file.name === "string" &&
+          file.size &&
+          typeof file.size === "number" &&
+          file.convId &&
+          typeof file.convId === "string"
+        );
+      });
+      setFiles(validFiles);
+    } catch (error) {
+      console.error("Error uploading files:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to upload files"
+      );
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setPendingFiles(null);
+    }
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const onDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      setPendingFiles(files);
+      setShowConversationDialog(true);
+    }
+  };
+
   const getFileTypeCategory = (
     fileName: string,
   ): "image" | "video" | "audio" | "document" | "code" | "other" => {
@@ -360,7 +462,12 @@ export function FilesManagerPage() {
 
   return (
     <FilesErrorBoundary>
-      <div className="flex flex-col h-full">
+      <div
+        className="flex flex-col h-full"
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
         <div className="w-full flex-1 flex flex-col pt-0">
           <div className="flex flex-col sticky top-0 z-20 px-5 bg-white pt-3 space-y-2 md:flex-row md:items-center md:justify-between md:space-y-0">
             {/* Breadcrumbs */}
@@ -384,7 +491,7 @@ export function FilesManagerPage() {
 
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value as any)}
+                onChange={(e) => setFilterType(e.target.value as "all" | "image" | "video" | "audio" | "document" | "code")}
                 className="h-9 px-3 rounded-md border border-input bg-background text-sm"
               >
                 <option value="all">All Types</option>
@@ -394,6 +501,32 @@ export function FilesManagerPage() {
                 <option value="document">Documents</option>
                 <option value="code">Code</option>
               </select>
+
+              <Button
+                onClick={handleUploadClick}
+                disabled={isUploading}
+                className="h-9"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {uploadProgress > 0 ? `${uploadProgress}%` : "Uploading..."}
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload
+                  </>
+                )}
+              </Button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileInputChange}
+              />
 
               <div className="hidden md:flex border rounded-md">
                 <Button
@@ -778,8 +911,16 @@ export function FilesManagerPage() {
                   No files uploaded yet
                 </h3>
                 <p className="mt-2 text-sm text-muted-foreground text-center max-w-sm">
-                  Upload files in your conversations to see them here
+                  Upload files directly here or in your conversations
                 </p>
+                <Button
+                  className="mt-4"
+                  onClick={handleUploadClick}
+                  disabled={isUploading}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Files
+                </Button>
               </div>
             )}
           </div>
@@ -855,6 +996,83 @@ export function FilesManagerPage() {
           onOpenChange={setPreviewOpen}
           getConversationTitle={getConversationTitle}
         />
+
+        {/* Drag and Drop Overlay */}
+        <AnimatePresence>
+          {isDragging && (
+            <motion.div
+              className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center space-x-2 bg-background/80 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              aria-hidden
+            >
+              <Upload className="h-8 w-8 text-primary" />
+              <span className="text-lg font-medium">Drop files here to upload</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Conversation Selection Dialog */}
+        <Dialog
+          open={showConversationDialog}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowConversationDialog(false);
+              setPendingFiles(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Select Conversation</DialogTitle>
+              <DialogDescription>
+                Choose a conversation to upload {pendingFiles?.length || 0} file{pendingFiles && pendingFiles.length > 1 ? "s" : ""} to, or create a new one.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 max-h-[300px] overflow-y-auto">
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    const newConvId = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                    handleUploadToConversation(newConvId);
+                  }}
+                >
+                  <Folder className="h-4 w-4 mr-2" />
+                  Create new conversation
+                </Button>
+                <div className="text-xs text-muted-foreground px-2 pt-2">
+                  Or select existing conversation:
+                </div>
+                {conversations.map((conv) => (
+                  <Button
+                    key={conv.convId}
+                    variant="ghost"
+                    className="w-full justify-start"
+                    onClick={() => handleUploadToConversation(conv.convId)}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    <span className="truncate">{conv.title}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowConversationDialog(false);
+                  setPendingFiles(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </FilesErrorBoundary>
   );

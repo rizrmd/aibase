@@ -7,7 +7,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { extractTextFromPdf, isPdfFile } from '../../../../utils/document-extractor';
-import { getConversationFilesDir } from '../../../../config/paths';
+import { getProjectFilesDir } from '../../../../config/paths';
 
 // Type definitions
 interface ExtractPDFOptions {
@@ -119,7 +119,7 @@ const extract = async (options: ExtractPDFOptions): Promise<ExtractPDFResult> =>
     const convId = globalThis.convId || '';
     const projectId = globalThis.projectId || '';
     const tenantId = globalThis.tenantId || 'default';
-    const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
+    const convFilesDir = getProjectFilesDir(projectId, convId, tenantId);
     filePath = path.join(convFilesDir, options.fileId);
 
     // Try to find file by ID if not directly accessible
@@ -178,7 +178,7 @@ const read = async (options: ReadPDFOptions): Promise<ReadPDFResult> => {
         const convId = globalThis.convId || '';
         const projectId = globalThis.projectId || '';
         const tenantId = globalThis.tenantId || 'default';
-        const convFilesDir = getConversationFilesDir(projectId, convId, tenantId);
+        const convFilesDir = getProjectFilesDir(projectId, convId, tenantId);
         filePath = path.join(convFilesDir, options.fileId);
 
         try {

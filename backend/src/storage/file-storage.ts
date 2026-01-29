@@ -1,11 +1,11 @@
 /**
  * File storage service for handling uploaded files
- * Stores files in data/projects/[proj-id]/conversations/[conv-id]/files/
+ * Stores files in data/projects/[proj-id]/files/[conv-id]/
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { getConversationFilesDir } from '../config/paths';
+import { getProjectFilesDir } from '../config/paths';
 
 export type FileScope = 'user' | 'public';
 
@@ -57,10 +57,10 @@ export class FileStorage {
   }
 
   /**
-   * Get the directory path for a conversation
+   * Get the directory path for a conversation's files
    */
   private getConvDir(convId: string, projectId: string, tenantId: number | string): string {
-    return getConversationFilesDir(projectId, convId, tenantId);
+    return getProjectFilesDir(projectId, convId, tenantId);
   }
 
   /**

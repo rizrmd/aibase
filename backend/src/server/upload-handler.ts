@@ -12,7 +12,7 @@ import { extensionHookRegistry } from '../tools/extensions/extension-hooks';
 import { ExtensionLoader } from '../tools/extensions/extension-loader';
 import type { WSServer } from '../ws/entry';
 import { FileTool } from '../tools/definition/file-tool';
-import { getConversationFilesDir } from '../config/paths';
+import { getProjectFilesDir } from '../config/paths';
 
 const logger = createLogger('Upload');
 
@@ -124,7 +124,7 @@ async function generateThumbnail(
     const tenantId = project.tenant_id ?? 'default';
 
     // Use centralized path config to ensure consistency
-    const thumbnailPath = path.join(getConversationFilesDir(projectId, convId, tenantId), thumbnailFileName);
+    const thumbnailPath = path.join(getProjectFilesDir(projectId, convId, tenantId), thumbnailFileName);
 
     // Resize and save thumbnail
     await image
@@ -253,7 +253,7 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
       const fileId = `file_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
       // Use centralized path config to ensure consistency with tenant-based structure
-      const filePath = path.join(getConversationFilesDir(projectId, convId, tenantId), storedFile.name);
+      const filePath = path.join(getProjectFilesDir(projectId, convId, tenantId), storedFile.name);
 
       // Wait for extension hooks to complete (blocking)
       // This ensures the description is available when the AI responds

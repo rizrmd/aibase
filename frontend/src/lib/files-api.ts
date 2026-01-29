@@ -21,11 +21,16 @@ export interface FileInfo {
 
 /**
  * Fetch all files for a project
+ * @param bustCache - Add timestamp to bust browser cache (default: false)
  */
 export async function fetchProjectFiles(
-  projectId: string
+  projectId: string,
+  bustCache: boolean = false
 ): Promise<FileInfo[]> {
-  const response = await fetch(`${API_BASE_URL}/api/files?projectId=${projectId}`);
+  const url = bustCache
+    ? `${API_BASE_URL}/api/files?projectId=${projectId}&_t=${Date.now()}`
+    : `${API_BASE_URL}/api/files?projectId=${projectId}`;
+  const response = await fetch(url);
   const data = await response.json();
 
   if (!data.success) {

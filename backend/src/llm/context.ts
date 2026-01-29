@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import { getConversationDir, getProjectDir, getConversationFilesDir } from "../config/paths";
+import { getConversationDir, getProjectDir, getProjectFilesDir } from "../config/paths";
 
 interface TodoItem {
   id: string;
@@ -306,7 +306,7 @@ async function injectDynamicContent(
  * Get the path to the files directory for a conversation
  */
 function getFilesDirectory(convId: string, projectId: string, tenantId: number | string): string {
-  return getConversationFilesDir(projectId, convId, tenantId);
+  return getProjectFilesDir(projectId, convId, tenantId);
 }
 
 /**

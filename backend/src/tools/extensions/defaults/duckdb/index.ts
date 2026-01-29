@@ -3,6 +3,8 @@
  * Query CSV, Excel, Parquet, and JSON files using SQL
  */
 
+import { getDuckDBPath } from "../../../../binaries/duckdb";
+
 // Type definitions
 interface DuckDBOptions {
   query: string;
@@ -166,17 +168,20 @@ const duckdbExtension = {
       // Import $ dynamically
       const { $ } = await import('bun');
 
+      // Get the DuckDB executable path
+      const duckdbExecutable = await getDuckDBPath();
+
       // Build DuckDB command
       let command;
 
       if (options.database) {
         command = [
-          "duckdb",
+          duckdbExecutable,
           readonly ? "-readonly" : "",
           options.database,
         ].filter(Boolean);
       } else {
-        command = ["duckdb", ":memory:"];
+        command = [duckdbExecutable, ":memory:"];
       }
 
       // DuckDB CLI flags based on format
