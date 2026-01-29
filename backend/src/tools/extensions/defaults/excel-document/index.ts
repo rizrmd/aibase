@@ -396,15 +396,40 @@ const context = () =>
   '' +
   '**Examples:**' +
   '' +
-  '1. **Check file structure first (recommended):**' +
+  '1. **Get total row count and column names (most common):**' +
+  '`' + '`' + '`' + 'typescript' +
+  'const result = await excelDocument.read({' +
+  '  fileId: "Product.xlsx",' +
+  '  includeStructure: true' +
+  '});' +
+  'return {' +
+  '  totalRows: result.structure.totalRows,' +
+  '  columns: result.structure.sheets[0].columns,' +
+  '  sheetName: result.structure.sheets[0].name' +
+  '};' +
+  '`' + '`' + '`' +
+  '' +
+  '2. **Parse text data to get rows as arrays:**' +
+  '`' + '`' + '`' + 'typescript' +
+  'const result = await excelDocument.read({' +
+  '  fileId: "data.xlsx",' +
+  '  limit: 100' +
+  '});' +
+  'const lines = result.text.split("\\n");' +
+  'const headers = lines[0].split(" | ");' +
+  'const rows = lines.slice(1).map(line => line.split(" | "));' +
+  'return { headers, totalRows: rows.length, sampleRows: rows.slice(0, 5) };' +
+  '`' + '`' + '`' +
+  '' +
+  '3. **Check file structure first (recommended for large files):**' +
   'When a file is uploaded, check its metadata to see available sheets and columns, then query precisely using the duckdb extension.' +
   '' +
   'Example: Query specific sheet' +
   '  await duckdb({ query: "SELECT * FROM read_xlsx(FILE_PATH, sheet=SHEET_NAME, all_varchar=true) LIMIT 100" });' +
   '' +
-  '2. **Extract specific sheets with row limit:**' +
+  '4. **Extract specific sheets with row limit:**' +
   '`' + '`' + '`' + 'typescript' +
-  'const result = await excelDocument.extract({' +
+  'const result = await excelDocument.read({' +
   '  fileId: "sales_data.xlsx",' +
   '  sheets: ["Q1", "Q2"],' +
   '  limit: 50' +
@@ -412,9 +437,9 @@ const context = () =>
   'return result.text;' +
   '`' + '`' + '`' +
   '' +
-  '3. **Get structure only for exploration:**' +
+  '5. **Get structure only for exploration:**' +
   '`' + '`' + '`' + 'typescript' +
-  'const info = await excelDocument.extract({' +
+  'const info = await excelDocument.read({' +
   '  filePath: "/data/report.xlsx",' +
   '  limit: 0,' +
   '  includeStructure: true' +
