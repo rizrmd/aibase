@@ -135,8 +135,12 @@ async function executeDuckDB(query: string): Promise<DuckDBQueryResult> {
 
   try {
     const duckdbExecutable = await getDuckDBPath();
+    // Load extensions required for Excel support
+    // read_xlsx is provided by the excel extension in DuckDB
+    const extensionLoad = "INSTALL excel; LOAD excel;";
+    const combinedQuery = `${extensionLoad} ${query}`;
     const result =
-      await $`${duckdbExecutable} :memory: -csv -c ${query}`.text();
+      await $`${duckdbExecutable} :memory: -csv -c ${combinedQuery}`.text();
 
     if (!result.trim()) {
       return { columns: [], rows: [] };
@@ -794,8 +798,13 @@ async function query(options: {
 
     const formatFlag = formatFlags[format] || "-json";
 
+    // Load extensions required for Excel support
+    // read_xlsx is provided by the excel extension in DuckDB
+    const extensionLoad = "INSTALL excel; LOAD excel;";
+    const combinedQuery = `${extensionLoad} ${finalQuery}`;
+
     // Execute DuckDB query using Bun.$
-    const result = await $`${command} ${formatFlag} -c ${finalQuery}`.text();
+    const result = await $`${command} ${formatFlag} -c ${combinedQuery}`.text();
 
     const executionTime = Date.now() - startTime;
 
