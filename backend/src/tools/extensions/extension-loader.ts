@@ -242,7 +242,7 @@ export class ExtensionLoader {
   /**
    * Load extensions directly from defaults directory
    */
-  private async loadDefaults(): Promise<Extension[]> {
+  async loadDefaults(): Promise<Extension[]> {
     try {
       const entries = await fs.readdir(this.defaultsPath, { withFileTypes: true });
       const extensionDirs = entries.filter(entry => entry.isDirectory());
@@ -290,7 +290,7 @@ export class ExtensionLoader {
    * Extensions use top-level return to export their API, which is not valid in ES modules.
    * We work around this by converting the top-level return to a variable assignment before transpiling.
    */
-  private async transpileExtension(code: string, extensionId: string): Promise<string> {
+  async transpileExtension(code: string, extensionId: string): Promise<string> {
     try {
       // Convert top-level return to a variable assignment
       // This allows esbuild to transpile the code without ESM errors
@@ -415,6 +415,9 @@ export class ExtensionLoader {
         // Get require from arguments (passed as third parameter)
         const require = arguments[2];
 
+        // Get common utilities from arguments (passed as fourth parameter)
+        const utils = arguments[3] || {};
+
         // Execute extension code (already transpiled to JavaScript)
         let extensionResult;
         let errorMsg;
@@ -445,8 +448,16 @@ export class ExtensionLoader {
       // Import the real extensionHookRegistry singleton
       const { extensionHookRegistry } = await import('../extensions/extension-hooks');
 
-      // Evaluate the extension (pass the real hook registry)
-      const result = await fn(extensionHookRegistry, loadedDeps, require);
+      // Import common utilities
+      const { generateTitle } = await import('../../utils/title-generator');
+
+      // Common utilities object to inject into extensions
+      const commonUtils = {
+        generateTitle,
+      };
+
+      // Evaluate the extension (pass hook registry, deps, require, and utils)
+      const result = await fn(extensionHookRegistry, loadedDeps, require, commonUtils);
 
       return result || {};
     } catch (error: any) {

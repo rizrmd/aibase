@@ -530,6 +530,45 @@ interface MessageProps {
     };
   };
 }
+
+// Hook-related interfaces
+interface ExtensionHookRegistry {
+  registerHook(
+    hookType: string,
+    extensionId: string,
+    handler: (context: FileUploadContext) => Promise<FileUploadResult | void>
+  ): void;
+}
+
+interface FileUploadContext {
+  convId: string;
+  projectId: string;
+  fileName: string;
+  filePath: string;
+  fileType: string;
+  fileSize: number;
+}
+
+interface FileUploadResult {
+  description?: string;  // Detailed file analysis (shown to AI)
+  title?: string;        // Short 3-8 word title (displayed in UI)
+  [key: string]: any;    // Additional metadata
+}
+
+// Injected utilities (available in all extensions)
+interface ExtensionUtils {
+  generateTitle: (options: {
+    systemPrompt?: string;
+    content: string;
+    label?: string;
+    timeoutMs?: number;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => Promise<string | undefined>;
+}
+
+declare const utils: ExtensionUtils;
 ```
 
 ## Using Visualization Libraries
@@ -1149,12 +1188,112 @@ if (typeof extensionHookRegistry !== 'undefined') {
     async (context) => {
       const { fileName, filePath, fileType } = context;
       // Process file...
-      return { description: 'Processed successfully' };
+      return {
+        description: 'Detailed analysis of the file content...'
+      };
     }
   );
 }
 
 return myExtension;
+```
+
+**Complete Example with Title Generation:**
+
+```typescript
+// No imports needed for generateTitle - it's injected as utils.generateTitle!
+
+const myExtension = {
+  myFunction: async (options) => { /* ... */ }
+};
+
+// Register hook with AI-powered title generation
+if (typeof extensionHookRegistry !== 'undefined') {
+  extensionHookRegistry.registerHook(
+    'afterFileUpload',
+    'my-extension',
+    async (context) => {
+      const { fileName, filePath, fileType } = context;
+
+      // Only process specific file types
+      if (!fileType.includes('pdf')) {
+        return; // Skip other file types
+      }
+
+      // Generate description (your file processing logic)
+      const description = await processPdfFile(filePath);
+
+      // Generate title using injected helper
+      const title = await utils.generateTitle({
+        systemPrompt: "Generate a concise 3-8 word title for a PDF document. Return only the title.",
+        content: `File: ${fileName}\n\nContent preview:\n${description.substring(0, 500)}`,
+        label: 'MyExtension',
+      });
+
+      return { description, title };
+    }
+  );
+}
+
+return myExtension;
+```
+
+**Key Points:**
+- Hook registration must be before the `return` statement
+- Check `typeof extensionHookRegistry !== 'undefined'` for safety
+- Return `undefined` or empty object `{}` to skip file processing
+- Both `description` and `title` are optional (return what you can generate)
+- Title generation gracefully fails to `undefined` on timeout/error
+
+#### Hook Result Format
+
+The `afterFileUpload` hook can return the following fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `description` | `string` | Yes | Detailed analysis of the file content (shown to AI) |
+| `title` | `string` | No | Short 3-8 word title for the file (displayed in UI) |
+
+**Example: AI-Powered Title Generation**
+
+Use the injected `utils.generateTitle` helper (available in all extensions):
+
+```typescript
+// Inside your hook - no import needed!
+const title = await utils.generateTitle({
+  systemPrompt: "Generate a concise 3-8 word title for a [file type] based on its content. Return only the title, no quotes.",
+  content: `File: ${fileName}\n\nContent preview:\n${contentPreview}`,
+  label: 'MyExtension', // For logging (e.g., "MyDocument", "MyExtension")
+});
+
+return { description, title };
+```
+
+**Available Injected Utilities:**
+
+- `utils.generateTitle()` - Generate AI-powered titles for files
+
+The `utils` object is automatically injected into the extension context - no imports needed!
+
+The `generateTitle` helper handles:
+- OpenAI client initialization
+- Timeout (default: 8 seconds)
+- Error handling (returns `undefined` on failure)
+- Logging (with the provided label)
+- Response validation (removes quotes, checks length)
+
+**Optional Parameters:**
+
+```typescript
+const title = await generateTitle({
+  systemPrompt: "Custom system prompt...",
+  content: "File content...",
+  label: "MyExtension",
+  timeoutMs: 15000,           // Custom timeout (default: 8000ms)
+  model: "gpt-4o-mini",        // Override model
+  temperature: 0.7,            // Custom temperature (default: 0.5)
+  maxTokens: 30,               // Custom max tokens (default: 25)
+});
 ```
 
 #### Hook Types

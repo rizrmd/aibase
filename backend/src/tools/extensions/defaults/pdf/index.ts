@@ -6,9 +6,23 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import OpenAI from 'openai';
 import { extractTextFromPdf, isPdfFile } from '../../../../utils/document-extractor';
 import { getProjectFilesDir } from '../../../../config/paths';
+
+// Type definition for injected utilities
+interface ExtensionUtils {
+  generateTitle: (options: {
+    systemPrompt?: string;
+    content: string;
+    label?: string;
+    timeoutMs?: number;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => Promise<string | undefined>;
+}
+
+declare const utils: ExtensionUtils;
 
 // Type definitions
 interface ExtractPDFOptions {
@@ -285,48 +299,12 @@ ${preview}
 
 Full Text Length: ${text.length} characters`;
 
-        // Generate title using AI (with timeout)
-        let title: string | undefined;
-        try {
-          const openai = new OpenAI({
-            baseURL: process.env.OPENAI_BASE_URL,
-            apiKey: process.env.OPENAI_API_KEY,
-          });
-
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('Title generation timeout')), 8000);
-          });
-
-          const titleModel = process.env.TITLE_GENERATION_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
-          const response = await Promise.race([
-            openai.chat.completions.create({
-              model: titleModel,
-              messages: [
-                {
-                  role: "system",
-                  content: "Generate a concise 3-8 word title for a PDF document based on its content. Return only the title, no quotes.",
-                },
-                {
-                  role: "user",
-                  content: `File: ${_context.fileName}\n\nFirst 500 characters of content:\n${preview}`,
-                },
-              ],
-              temperature: 0.5,
-              max_tokens: 25,
-            }),
-            timeoutPromise,
-          ]);
-
-          title = response.choices[0]?.message?.content?.trim();
-          if (title && title.length > 0 && title.length < 100) {
-            // Remove any surrounding quotes
-            title = title.replace(/^["']|["']$/g, '');
-            console.log('[PdfDocument] Generated title:', title);
-          }
-        } catch (titleError) {
-          console.warn('[PdfDocument] Failed to generate title:', titleError);
-          // Continue without title
-        }
+        // Generate title using AI helper (injected utility)
+        const title = await utils.generateTitle({
+          systemPrompt: "Generate a concise 3-8 word title for a PDF document based on its content. Return only the title, no quotes.",
+          content: `File: ${_context.fileName}\n\nFirst 500 characters of content:\n${preview}`,
+          label: "PdfDocument",
+        });
 
         console.log('[PdfDocument] Generated description for:', _context.fileName, 'text length:', text.length);
 

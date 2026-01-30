@@ -9,6 +9,21 @@ import * as path from 'path';
 import { extractTextFromDocx, isDocxFile } from '../../../../utils/document-extractor';
 import { getProjectFilesDir } from '../../../../config/paths';
 
+// Type definition for injected utilities
+interface ExtensionUtils {
+  generateTitle: (options: {
+    systemPrompt?: string;
+    content: string;
+    label?: string;
+    timeoutMs?: number;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => Promise<string | undefined>;
+}
+
+declare const utils: ExtensionUtils;
+
 // Type definitions
 interface ExtractOptions {
   filePath?: string;
@@ -190,9 +205,16 @@ Full Text Length: ${text.length} characters
 Word Count: ${wordCount}
 Paragraph Count: ${paragraphCount}`;
 
+        // Generate title using AI helper (injected utility)
+        const title = await utils.generateTitle({
+          systemPrompt: "Generate a concise 3-8 word title for a Word document based on its content. Return only the title, no quotes.",
+          content: `File: ${_context.fileName}\n\nFirst 500 characters of content:\n${preview}`,
+          label: "WordDocument",
+        });
+
         console.log('[WordDocument] Generated description for:', _context.fileName, 'text length:', text.length);
 
-        return { description };
+        return { description, title };
       } catch (error) {
         console.error('[WordDocument] Hook failed:', error);
         console.error('[WordDocument] Error stack:', error instanceof Error ? error.stack : String(error));

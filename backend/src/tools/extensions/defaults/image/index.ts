@@ -12,6 +12,21 @@ interface ExtensionHookRegistry {
   registerHook(hookType: string, name: string, handler: (context: HookContext) => Promise<HookResult | undefined>): void;
 }
 
+interface ExtensionUtils {
+  generateTitle: (options: {
+    systemPrompt?: string;
+    content: string;
+    label?: string;
+    timeoutMs?: number;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => Promise<string | undefined>;
+}
+
+declare const extensionHookRegistry: ExtensionHookRegistry | undefined;
+declare const utils: ExtensionUtils;
+
 interface HookContext {
   fileName: string;
   filePath: string;
@@ -373,7 +388,15 @@ if (hookRegistry) {
 
       if (description) {
         console.log('[Image] Generated description for:', _context.fileName, description.substring(0, 100));
-        return { description };
+
+        // Generate title using AI helper (injected utility)
+        const title = await utils.generateTitle({
+          systemPrompt: "Generate a concise 3-8 word title for an image based on its description. Return only the title, no quotes.",
+          content: `File: ${_context.fileName}\n\nImage description:\n${description.substring(0, 500)}`,
+          label: "Image",
+        });
+
+        return { description, title };
       }
 
       console.log('[Image] No description generated for:', _context.fileName);

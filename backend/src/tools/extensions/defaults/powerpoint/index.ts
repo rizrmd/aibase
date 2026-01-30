@@ -9,6 +9,21 @@ import * as path from 'path';
 import { extractTextFromPowerPoint, isPowerPointFile } from '../../../../utils/document-extractor';
 import { getProjectFilesDir } from '../../../../config/paths';
 
+// Type definition for injected utilities
+interface ExtensionUtils {
+  generateTitle: (options: {
+    systemPrompt?: string;
+    content: string;
+    label?: string;
+    timeoutMs?: number;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => Promise<string | undefined>;
+}
+
+declare const utils: ExtensionUtils;
+
 // Type definitions
 interface ExtractOptions {
   filePath?: string;
@@ -189,9 +204,16 @@ Total Lines: ${lineCount}
 
 Slide count can be determined by structure analysis if needed.`;
 
+        // Generate title using AI helper (injected utility)
+        const title = await utils.generateTitle({
+          systemPrompt: "Generate a concise 3-8 word title for a PowerPoint presentation based on its content. Return only the title, no quotes.",
+          content: `File: ${_context.fileName}\n\nFirst 500 characters of content:\n${preview}`,
+          label: "PowerPointDocument",
+        });
+
         console.log('[PowerPointDocument] Generated description for:', _context.fileName, 'text length:', text.length);
 
-        return { description };
+        return { description, title };
       } catch (error) {
         console.error('[PowerPointDocument] Hook failed:', error);
         console.error('[PowerPointDocument] Error stack:', error instanceof Error ? error.stack : String(error));

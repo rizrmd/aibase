@@ -20,6 +20,7 @@ export interface FileUploadContext {
 
 export interface FileUploadResult {
   description?: string;
+  title?: string;
   [key: string]: any;
 }
 

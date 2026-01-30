@@ -282,6 +282,7 @@ export class FileStorage {
             scope: meta.scope,
             thumbnailUrl: meta.thumbnailUrl,
             description: meta.description,
+            title: meta.title,
           });
         }
       }

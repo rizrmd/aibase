@@ -6,7 +6,21 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import OpenAI from "openai";
+
+// Type definition for injected utilities
+interface ExtensionUtils {
+  generateTitle: (options: {
+    systemPrompt?: string;
+    content: string;
+    label?: string;
+    timeoutMs?: number;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => Promise<string | undefined>;
+}
+
+declare const utils: ExtensionUtils;
 
 // Dynamically import all dependencies to avoid esbuild transpilation issues
 let documentExtractorModule: any = null;
@@ -953,55 +967,12 @@ if (hookRegistry) {
           description.length,
         );
 
-        // Generate title using AI (with timeout)
-        let title: string | undefined;
-        try {
-          const openai = new OpenAI({
-            baseURL: process.env.OPENAI_BASE_URL,
-            apiKey: process.env.OPENAI_API_KEY,
-          });
-
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(
-              () => reject(new Error("Title generation timeout")),
-              8000,
-            );
-          });
-
-          const titleModel =
-            process.env.TITLE_GENERATION_MODEL ||
-            process.env.OPENAI_MODEL ||
-            "gpt-4o-mini";
-          const response = await Promise.race([
-            openai.chat.completions.create({
-              model: titleModel,
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "Generate a concise 3-8 word title for an Excel spreadsheet based on its content. Return only the title, no quotes.",
-                },
-                {
-                  role: "user",
-                  content: `File: ${_context.fileName}\n\nSheets: ${structure.sheets.map((s) => `${s.name} (${s.rowCount} rows)`).join(", ")}\n\nPreview:\n${previewText}`,
-                },
-              ],
-              temperature: 0.5,
-              max_tokens: 25,
-            }),
-            timeoutPromise,
-          ]);
-
-          title = response.choices[0]?.message?.content?.trim();
-          if (title && title.length > 0 && title.length < 100) {
-            // Remove any surrounding quotes
-            title = title.replace(/^["']|["']$/g, "");
-            console.log("[ExcelDocument] Generated title:", title);
-          }
-        } catch (titleError) {
-          console.warn("[ExcelDocument] Failed to generate title:", titleError);
-          // Continue without title
-        }
+        // Generate title using AI helper (injected utility)
+        const title = await utils.generateTitle({
+          systemPrompt: "Generate a concise 3-8 word title for an Excel spreadsheet based on its content. Return only the title, no quotes.",
+          content: `File: ${_context.fileName}\n\nSheets: ${structure.sheets.map((s) => `${s.name} (${s.rowCount} rows)`).join(", ")}\n\nPreview:\n${previewText}`,
+          label: "ExcelDocument",
+        });
 
         return { description, title };
       } catch (error) {
