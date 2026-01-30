@@ -1004,6 +1004,9 @@ async function processWhatsAppMessageWithAI(
     console.log("[WhatsApp] Starting AI processing for message:", messageText);
     console.log("[WhatsApp] Received attachments:", JSON.stringify(attachments, null, 2));
 
+    // Start typing indicator immediately
+    await startWhatsAppTyping(projectId, whatsappNumber);
+
     // Get ChatHistoryStorage instance (singleton, already imported)
     const chatHistoryStorage = ChatHistoryStorage.getInstance();
     const projectStorage = ProjectStorage.getInstance();
@@ -1013,6 +1016,19 @@ async function processWhatsAppMessageWithAI(
     // === PRE-PROCESS IMAGE ATTACHMENTS ===
     // Analyze images using Vision API and add descriptions to message
     let enhancedMessage = messageText;
+    
+    // Notify user if we are processing images
+    const hasImages = attachments.some(a => a.type === "image" && a.url);
+    if (hasImages) {
+      try {
+        console.log("[WhatsApp] Sending image analysis notification");
+        await sendWhatsAppMessage(projectId, whatsappNumber, {
+          text: `⏳ Analyzing image(s)...`,
+        }, true); // keep typing
+      } catch (err) {
+        console.error("[WhatsApp] Failed to send image analysis notification:", err);
+      }
+    }
     
     for (const attachment of attachments) {
       if (attachment.type === "image" && attachment.url) {
@@ -1119,9 +1135,28 @@ async function processWhatsAppMessageWithAI(
       convId,
       urlParams: { CURRENT_UID: uid },
       tools, // <-- Register tools so AI can call script, todo, memory
+      systemPrompt: `You are a helpful AI assistant on WhatsApp. 
+      
+CRITICAL: YOU HAVE ACCESS TO REAL-TIME EXTERNAL TOOLS.
+When asked about current events, weather, stock prices, or specific data, YOU MUST USE THE 'script' TOOL.
+DO NOT refuse to answer. DO NOT say you cannot access the internet.
+DO NOT say "According to my last update". USE THE TOOLS.
+
+Available Extensions in 'script' tool:
+- search.web(query): Search the internet for real-time information
+- search.image(query): Search for images
+- excel.query(sql): Query CSV/Excel files
+- chart.show(options): Generate charts
+- image.extract(options): Analyze images
+
+Example: To check weather, call script with:
+await search.web("cuaca hari ini di madiun");
+
+Always answer in the same language as the user (Indonesian/English).`,
       hooks: {
         tools: {
           before: async (toolCallId: string, toolName: string, args: any) => {
+            // 1. Handle Script Tool Progress (The "Thinking..." equivalent)
             // Check if this is a script tool progress update
             // The script tool injects __status and __result via the broadcast function
             if (toolName === "script" && args.__status === "progress" && args.__result) {
@@ -1132,11 +1167,32 @@ async function processWhatsAppMessageWithAI(
               try {
                 await sendWhatsAppMessage(projectId, whatsappNumber, {
                   text: `⏳ ${progressMessage}`,
-                });
+                }, true); // keep typing
               } catch (err) {
                 console.error("[WhatsApp] Failed to send progress message:", err);
                 // Don't throw - progress messages are optional
               }
+              return;
+            }
+
+            // 2. Handle Initial Tool Call (The "Green Box" equivalent)
+            // When AI calls a tool, notify user immediately
+            let notificationText = "";
+            if (toolName === "script") {
+              // Extract purpose from script args if available
+              const purpose = args.purpose || "Executing custom script...";
+              notificationText = `⏳ ${purpose}`;
+            } else if (toolName === "search") {
+              notificationText = `🔍 Searching for: ${args.query || "data"}...`;
+            } else {
+              notificationText = `🔧 Using tool: ${toolName}...`;
+            }
+
+            console.log("[WhatsApp] Tool started:", toolName, notificationText);
+            try {
+              await sendWhatsAppMessage(projectId, whatsappNumber, { text: notificationText }, true); // keep typing
+            } catch (err) {
+              console.error("[WhatsApp] Failed to send tool start notification:", err);
             }
           },
           after: async (toolCallId: string, toolName: string, args: any, result: any) => {
@@ -1148,7 +1204,9 @@ async function processWhatsAppMessageWithAI(
             // For script tool, immediately send result to user
             // This ensures user gets data even if AI follow-up is empty
             if (toolName === "script" && result && !toolResultSent) {
+              console.log("[WhatsApp] Formatting script tool result for WhatsApp...");
               const formattedResult = formatToolResultForWhatsApp(toolName, args, result);
+              console.log("[WhatsApp] Formatted result:", formattedResult ? formattedResult.substring(0, 200) + "..." : "NULL");
               if (formattedResult) {
                 console.log("[WhatsApp] Sending tool result directly to user");
                 try {
@@ -1160,6 +1218,8 @@ async function processWhatsAppMessageWithAI(
                 } catch (err) {
                   console.error("[WhatsApp] Failed to send tool result:", err);
                 }
+              } else {
+                console.warn("[WhatsApp] formatToolResultForWhatsApp returned null, not sending");
               }
             }
           },
@@ -1322,6 +1382,39 @@ async function processWhatsAppMessageWithAI(
 }
 
 /**
+ * Start WhatsApp typing indicator
+ */
+async function startWhatsAppTyping(projectId: string, phone: string): Promise<void> {
+  try {
+    // Only send typing indicator if phone is valid
+    if (!phone || phone.includes('@')) { 
+      // Sometimes raw JID is passed, clean it if needed or let endpoint handle it
+      // Ideally we pass phone number only
+    }
+
+    const response = await fetch(`${WHATSAPP_API_URL}/clients/${projectId}/start-typing`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phone }),
+    });
+
+    if (!response.ok) {
+      // Don't log 404s loudly as it might mean feature not supported or client not ready
+      if (response.status !== 404) {
+        const errorText = await response.text();
+        console.warn("[WhatsApp] Failed to start typing indicator:", errorText);
+      }
+    } else {
+      console.log("[WhatsApp] Started typing indicator for", phone);
+    }
+  } catch (error) {
+    console.warn("[WhatsApp] Error starting typing:", error);
+  }
+}
+
+/**
  * Stop WhatsApp typing indicator
  */
 async function stopWhatsAppTyping(projectId: string, phone: string): Promise<void> {
@@ -1353,7 +1446,8 @@ async function stopWhatsAppTyping(projectId: string, phone: string): Promise<voi
 async function sendWhatsAppMessage(
   projectId: string,
   phone: string,
-  message: { text?: string; imageUrl?: string; location?: { lat: number; lng: number } }
+  message: { text?: string; imageUrl?: string; location?: { lat: number; lng: number } },
+  keepTyping: boolean = false
 ): Promise<void> {
   try {
     console.log("[WhatsApp] Sending to WhatsApp:", phone, "message:", message.text?.substring(0, 50) + "...");
@@ -1377,10 +1471,16 @@ async function sendWhatsAppMessage(
 
     console.log("[WhatsApp] Message sent successfully to", phone);
 
-    // Stop typing indicator after message is sent
-    // Typing should continue during AI processing and tool execution,
-    // and only stop when the final message is actually sent
-    await stopWhatsAppTyping(projectId, phone);
+    // Stop typing indicator after message is sent, UNLESS keepTyping is true
+    // Typing should continue during AI processing and tool execution
+    if (!keepTyping) {
+      await stopWhatsAppTyping(projectId, phone);
+    } else {
+      // FORCE restart typing if keepTyping is true
+      // Sending a message usually stops the typing indicator on the client side
+      console.log("[WhatsApp] keepTyping=true, restarting typing indicator...");
+      startWhatsAppTyping(projectId, phone).catch(e => console.warn("[WhatsApp] Failed to restart typing:", e));
+    }
   } catch (error) {
     console.error("[WhatsApp] Error sending message to URL:", `${WHATSAPP_API_URL}/clients/${projectId}/send-message`);
     console.error("[WhatsApp] Error details:", error);

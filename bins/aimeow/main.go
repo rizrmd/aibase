@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal/v3"
@@ -55,29 +55,29 @@ func getBaseURL(c *gin.Context) string {
 }
 
 type WhatsAppClient struct {
-	client        *whatsmeow.Client
-	deviceStore   *store.Device
-	isConnected   bool
-	qrCode        string
-	connectedAt   *time.Time
-	messages      []string
-	images        map[string]string // image_id -> file_path
-	osName        string            // OS name to set after connection
-	typingTimers  map[string]*time.Timer // chat_id -> typing timer
-	typingActive  map[string]bool        // chat_id -> is currently typing
-	mutex         sync.RWMutex
+	client       *whatsmeow.Client
+	deviceStore  *store.Device
+	isConnected  bool
+	qrCode       string
+	connectedAt  *time.Time
+	messages     []string
+	images       map[string]string      // image_id -> file_path
+	osName       string                 // OS name to set after connection
+	typingTimers map[string]*time.Timer // chat_id -> typing timer
+	typingActive map[string]bool        // chat_id -> is currently typing
+	mutex        sync.RWMutex
 }
 
 type ClientManager struct {
-	clients          map[string]*WhatsAppClient
-	container        *sqlstore.Container
-	callbackURL      string
-	configPath       string            // Path to configuration file
-	clientIDMap      map[string]string // Maps WhatsApp device ID -> UUID
-	clientMapPath    string            // Path to client ID mapping file
-	pendingClients   map[string]PendingClient // Maps clientID -> PendingClient
-	pendingClientsPath string          // Path to pending clients file
-	mutex            sync.RWMutex
+	clients            map[string]*WhatsAppClient
+	container          *sqlstore.Container
+	callbackURL        string
+	configPath         string                   // Path to configuration file
+	clientIDMap        map[string]string        // Maps WhatsApp device ID -> UUID
+	clientMapPath      string                   // Path to client ID mapping file
+	pendingClients     map[string]PendingClient // Maps clientID -> PendingClient
+	pendingClientsPath string                   // Path to pending clients file
+	mutex              sync.RWMutex
 }
 
 // Config represents the persistent configuration
@@ -501,9 +501,9 @@ func (cm *ClientManager) eventHandler(client *WhatsAppClient) func(interface{}) 
 			// Send connection status webhook after successful connection
 			if ourUUID != "" {
 				go cm.sendConnectionStatusWebhook(ourUUID, "connected", map[string]interface{}{
-					"osName":       client.osName,
-					"connectedAt":  now.Format(time.RFC3339),
-					"phone":        client.deviceStore.ID.User,
+					"osName":      client.osName,
+					"connectedAt": now.Format(time.RFC3339),
+					"phone":       client.deviceStore.ID.User,
 				})
 			}
 		case *events.LoggedOut:
@@ -633,7 +633,7 @@ type CreateClientResponse struct {
 }
 
 type CreateClientRequest struct {
-	ID     string `json:"id,omitempty"`     // Optional custom client ID
+	ID     string `json:"id,omitempty"` // Optional custom client ID
 	OSName string `json:"osName,omitempty"`
 }
 
@@ -651,19 +651,19 @@ type MessageResponse struct {
 
 // Request and Response structs for sending messages
 type SendMessageRequest struct {
-	Phone    string `json:"phone" binding:"required"`
-	Message  string `json:"message" binding:"required"`
+	Phone   string `json:"phone" binding:"required"`
+	Message string `json:"message" binding:"required"`
 }
 
 type SendImageRequest struct {
-	Phone     string `json:"phone" binding:"required"`
-	ImageURL  string `json:"imageUrl" binding:"required,url"`
-	Caption   string `json:"caption,omitempty"`
+	Phone    string `json:"phone" binding:"required"`
+	ImageURL string `json:"imageUrl" binding:"required,url"`
+	Caption  string `json:"caption,omitempty"`
 }
 
 type SendMultipleImagesRequest struct {
-	Phone     string `json:"phone" binding:"required"`
-	Images    []ImageItem `json:"images" binding:"required,min=1"`
+	Phone  string      `json:"phone" binding:"required"`
+	Images []ImageItem `json:"images" binding:"required,min=1"`
 }
 
 type SendDocumentRequest struct {
@@ -757,7 +757,7 @@ func createClient(c *gin.Context) {
 			} else if evt.Event == "timeout" {
 				// QR code expired
 				fmt.Printf("QR code expired for client %s\n", clientID)
-				
+
 				// Send webhook for timeout
 				// We need to use the clientID (UUID) here
 				go manager.sendConnectionStatusWebhook(clientID, "qr_timeout", map[string]interface{}{})
@@ -1999,9 +1999,9 @@ func (cm *ClientManager) sendConnectionStatusWebhook(clientID string, event stri
 	statusURL += "status"
 
 	webhookData := map[string]interface{}{
-		"clientId": clientID,
-		"event":    event,
-		"data":     data,
+		"clientId":  clientID,
+		"event":     event,
+		"data":      data,
 		"timestamp": time.Now().Unix(),
 	}
 
@@ -2334,7 +2334,7 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 
 	// Determine message type and extract content
 	var mentions []string
-	
+
 	switch {
 	case msg.Message.GetConversation() != "":
 		// Text message
@@ -2346,7 +2346,7 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		extMsg := msg.Message.GetExtendedTextMessage()
 		messageData["type"] = "text"
 		messageData["text"] = extMsg.GetText()
-		
+
 		// Extract mentions
 		if extMsg.ContextInfo != nil {
 			for _, mentionedJID := range extMsg.ContextInfo.MentionedJID {
@@ -2365,7 +2365,7 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		if imgMsg.GetFileLength() > 0 {
 			messageData["fileSize"] = imgMsg.GetFileLength()
 		}
-		
+
 		// Extract mentions
 		if imgMsg.ContextInfo != nil {
 			for _, mentionedJID := range imgMsg.ContextInfo.MentionedJID {
@@ -2382,7 +2382,7 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		if vidMsg.GetFileLength() > 0 {
 			messageData["fileSize"] = vidMsg.GetFileLength()
 		}
-		
+
 		// Extract mentions
 		if vidMsg.ContextInfo != nil {
 			for _, mentionedJID := range vidMsg.ContextInfo.MentionedJID {
@@ -2400,14 +2400,14 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		messageData["speed"] = locMsg.GetSpeedInMps()
 		messageData["bearing"] = locMsg.GetDegreesClockwiseFromMagneticNorth()
 		messageData["caption"] = locMsg.GetCaption()
-		
+
 		// Extract mentions
 		if locMsg.ContextInfo != nil {
 			for _, mentionedJID := range locMsg.ContextInfo.MentionedJID {
 				mentions = append(mentions, mentionedJID)
 			}
 		}
-		
+
 		fmt.Printf("[Location] Live location received: lat=%.6f, lng=%.6f, accuracy=%dm\n",
 			locMsg.GetDegreesLatitude(), locMsg.GetDegreesLongitude(), locMsg.GetAccuracyInMeters())
 
@@ -2422,14 +2422,14 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 		if locMsg.GetURL() != "" {
 			messageData["url"] = locMsg.GetURL()
 		}
-		
+
 		// Extract mentions
 		if locMsg.ContextInfo != nil {
 			for _, mentionedJID := range locMsg.ContextInfo.MentionedJID {
 				mentions = append(mentions, mentionedJID)
 			}
 		}
-		
+
 		fmt.Printf("[Location] Static location received: lat=%.6f, lng=%.6f, name=%s\n",
 			locMsg.GetDegreesLatitude(), locMsg.GetDegreesLongitude(), locMsg.GetName())
 
@@ -2442,7 +2442,7 @@ func (cm *ClientManager) extractMessageData(client *WhatsAppClient, message inte
 	if len(mentions) > 0 {
 		messageData["mentions"] = mentions
 	}
-	
+
 	// Add isGroup flag and myPhone
 	messageData["isGroup"] = msg.Info.IsGroup
 	if client.deviceStore.ID != nil {
@@ -2614,6 +2614,106 @@ func recreatePendingClients(container *sqlstore.Container) error {
 	return nil
 }
 
+// @Summary Start typing indicator
+// @Description Starts showing the typing indicator in a chat
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param message body map[string]string true "Phone number details"
+// @Success 200 {object} map[string]bool
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id}/start-typing [post]
+func startTypingHandler(c *gin.Context) {
+	clientID := c.Param("id")
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Format phone number
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Start typing
+	manager.startTyping(waClient, targetJIDParsed)
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// @Summary Stop typing indicator
+// @Description Stops showing the typing indicator in a chat
+// @Tags messages
+// @Accept json
+// @Produce json
+// @Param id path string true "Client ID"
+// @Param message body map[string]string true "Phone number details"
+// @Success 200 {object} map[string]bool
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /clients/{id}/stop-typing [post]
+func stopTypingHandler(c *gin.Context) {
+	clientID := c.Param("id")
+	waClient, err := manager.getClient(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !waClient.isConnected {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client is not connected"})
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Format phone number
+	targetJID := strings.TrimSuffix(req.Phone, "@s.whatsapp.net")
+	if !strings.Contains(targetJID, "@") {
+		targetJID += "@s.whatsapp.net"
+	}
+
+	// Parse JID
+	targetJIDParsed, err := types.ParseJID(targetJID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number format: %v", err)})
+		return
+	}
+
+	// Stop typing
+	manager.stopTyping(waClient, targetJIDParsed)
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func main() {
 	fmt.Println("Starting Aimeow WhatsApp API Server...")
 
@@ -2728,6 +2828,10 @@ func main() {
 			clients.POST("/:id/send-document", sendDocument)
 			clients.POST("/:id/send-document-base64", sendDocumentBase64)
 			clients.POST("/:id/delete-message", deleteMessage)
+
+			// Typing indicator endpoints
+			clients.POST("/:id/start-typing", startTypingHandler)
+			clients.POST("/:id/stop-typing", stopTypingHandler)
 
 			// Contact info endpoints
 			clients.GET("/:id/profile-picture/:phone", getProfilePicture)
