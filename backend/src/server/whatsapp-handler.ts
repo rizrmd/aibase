@@ -1322,6 +1322,32 @@ async function processWhatsAppMessageWithAI(
 }
 
 /**
+ * Stop WhatsApp typing indicator
+ */
+async function stopWhatsAppTyping(projectId: string, phone: string): Promise<void> {
+  try {
+    const response = await fetch(`${WHATSAPP_API_URL}/clients/${projectId}/stop-typing`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phone }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn("[WhatsApp] Failed to stop typing indicator:", errorText);
+      // Don't throw - this is not critical
+    } else {
+      console.log("[WhatsApp] Stopped typing indicator for", phone);
+    }
+  } catch (error) {
+    console.warn("[WhatsApp] Error stopping typing:", error);
+    // Don't throw - this is not critical
+  }
+}
+
+/**
  * Send WhatsApp message
  */
 async function sendWhatsAppMessage(
@@ -1350,6 +1376,11 @@ async function sendWhatsAppMessage(
     }
 
     console.log("[WhatsApp] Message sent successfully to", phone);
+
+    // Stop typing indicator after message is sent
+    // Typing should continue during AI processing and tool execution,
+    // and only stop when the final message is actually sent
+    await stopWhatsAppTyping(projectId, phone);
   } catch (error) {
     console.error("[WhatsApp] Error sending message to URL:", `${WHATSAPP_API_URL}/clients/${projectId}/send-message`);
     console.error("[WhatsApp] Error details:", error);
