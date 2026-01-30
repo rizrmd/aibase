@@ -353,39 +353,45 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
     }
 
     // Extract WhatsApp phone number for reply target
-    // For DM: rawChat contains the phone number JID (e.g. "6281803417004@s.whatsapp.net")
-    // For Group: rawSender contains the sender JID, but we still reply to rawChat (group)
-    // The 'from' field may contain LID which is NOT suitable for replies
+    // For LID contacts: rawSenderAlt contains the actual phone number
+    // For normal contacts: rawChat/rawSender contain the phone number
     let whatsappNumber: string;
 
-    // PRIORITY 1: For DM, use rawChat (the chat JID is the phone number)
-    // Accept both @s.whatsapp.net and @lid (though @lid should be filtered above)
-    if (!messageData.isGroup && messageData.rawChat) {
-      const rawChatClean = messageData.rawChat.split('@')[0];
-      // Skip if it's obviously an LID (too long)
-      if (rawChatClean.length < 15) {
-        whatsappNumber = rawChatClean;
-        console.log("[WhatsApp] Using rawChat for DM reply target:", whatsappNumber);
-      }
-    }
-    // PRIORITY 2: For Group, use rawSender (who sent the message)
-    else if (messageData.isGroup && messageData.rawSender) {
-      const rawSenderClean = messageData.rawSender.split('@')[0];
-      if (rawSenderClean.length < 15) {
-        whatsappNumber = rawSenderClean;
-        console.log("[WhatsApp] Using rawSender for Group reply target:", whatsappNumber);
-      }
-    }
-    // PRIORITY 3: Try rawSenderAlt if available (this is usually the real phone number)
-    else if (messageData.rawSenderAlt) {
+    // PRIORITY 1: rawSenderAlt - this always has the real phone number when available
+    // This is critical for LID contacts where Chat/Sender contain the LID
+    if (messageData.rawSenderAlt) {
       const rawSenderAltClean = messageData.rawSenderAlt.split('@')[0];
-      if (rawSenderAltClean.length < 15) {
-        whatsappNumber = rawSenderAltClean;
+      // Remove device ID suffix if present (e.g., "6281298329132:94" -> "6281298329132")
+      const phoneClean = rawSenderAltClean.split(':')[0];
+      if (phoneClean.length >= 8 && phoneClean.length < 15) {
+        whatsappNumber = phoneClean;
         console.log("[WhatsApp] Using rawSenderAlt for reply target:", whatsappNumber);
       }
     }
+
+    // PRIORITY 2: For DM, use rawChat (only if we haven't found a number yet)
+    if (!whatsappNumber && !messageData.isGroup && messageData.rawChat) {
+      const rawChatClean = messageData.rawChat.split('@')[0];
+      const phoneClean = rawChatClean.split(':')[0];
+      // Skip if it's obviously an LID (too long)
+      if (phoneClean.length < 15) {
+        whatsappNumber = phoneClean;
+        console.log("[WhatsApp] Using rawChat for DM reply target:", whatsappNumber);
+      }
+    }
+
+    // PRIORITY 3: For Group, use rawSender (who sent the message)
+    if (!whatsappNumber && messageData.isGroup && messageData.rawSender) {
+      const rawSenderClean = messageData.rawSender.split('@')[0];
+      const phoneClean = rawSenderClean.split(':')[0];
+      if (phoneClean.length < 15) {
+        whatsappNumber = phoneClean;
+        console.log("[WhatsApp] Using rawSender for Group reply target:", whatsappNumber);
+      }
+    }
+
     // FALLBACK: Use 'from' field - but validate it's not an LID
-    else {
+    if (!whatsappNumber) {
       const fromCandidate = messageData.from.replace(/[^0-9]/g, '');
       // Check if it's an obvious LID (too long for a phone number)
       if (fromCandidate.length >= 15) {
