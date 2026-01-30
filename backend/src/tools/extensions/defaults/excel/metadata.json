@@ -4,7 +4,7 @@
   "description": "Extract and query Excel spreadsheets using DuckDB. Includes SQL query capability for CSV, Parquet, and JSON files.",
   "author": "AIBase",
   "version": "2.0.0",
-  "category": "data-tools",
+  "category": "document-tools",
   "enabled": true,
   "isDefault": true,
   "createdAt": 0,
