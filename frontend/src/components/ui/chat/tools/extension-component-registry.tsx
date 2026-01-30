@@ -192,7 +192,14 @@ async function loadComponentFromBackend(
         part.charAt(0).toUpperCase() + part.slice(1)
       ).join('') + 'Message';
 
-      const component = moduleExports[messageComponentName] || moduleExports.default;
+      const windowFallback =
+        typeof window !== "undefined"
+          ? ((window as any)[messageComponentName] ||
+              (window as any).libs?.[messageComponentName])
+          : null;
+
+      const component =
+        moduleExports[messageComponentName] || moduleExports.default || windowFallback;
 
       if (component) {
         console.log(`[ExtensionRegistry] Successfully loaded backend UI for ${extensionId}:`, messageComponentName);

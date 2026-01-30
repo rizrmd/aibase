@@ -510,6 +510,7 @@ const create = async (options: CreateOptions) => {
   let metadata: any | undefined;
   let code: string | undefined;
   let ui: string | undefined;
+  const warnings: string[] = [];
   let lockAcquired = false;
   let stage = "prepare";
 
@@ -583,6 +584,38 @@ const create = async (options: CreateOptions) => {
       ...(normalizedDeps ? { dependencies: normalizedDeps } : {}),
     };
 
+    const shouldAutoGenerateUI = shouldGenerateUI(description, metadata, normalizedDeps);
+    let uiProvided = false;
+    let uiInvalid = false;
+
+    if (options.ui) {
+      const normalizedUI = normalizeUIContent(options.ui);
+      const uiCheck = analyzeUIContent(normalizedUI);
+      if (!uiCheck.valid) {
+        uiInvalid = true;
+        warnings.push(...uiCheck.reasons.map((reason) => `UI ignored: ${reason}`));
+      } else {
+        const runtime = normalizeUIRuntime(normalizedUI, {
+          extensionId,
+          messageComponentName: metadata?.messageUI?.componentName,
+          inspectorComponentName: metadata?.inspectionUI?.componentName,
+        });
+        ui = runtime.ui;
+        warnings.push(...runtime.warnings);
+        uiProvided = true;
+      }
+    }
+
+    if (uiInvalid) {
+      if (metadata?.messageUI) delete metadata.messageUI;
+      if (metadata?.inspectionUI) delete metadata.inspectionUI;
+    }
+
+    const wantsUI =
+      uiProvided ||
+      shouldAutoGenerateUI ||
+      Boolean(metadata?.messageUI || metadata?.inspectionUI);
+
     if (options.code) {
       code = options.code;
     } else if (options.functions) {
@@ -592,31 +625,26 @@ const create = async (options: CreateOptions) => {
         description,
         functions: functionsArray,
         metadata,
+        returnArgs: wantsUI,
+        visualizationType: metadata?.messageUI?.visualizationType || metadata?.id,
       });
     }
     if (!code) {
       code = generateEmptyCode(metadata);
     }
 
-    if (options.ui) {
-      ui = normalizeUIContent(options.ui);
-    }
-
-    if (!ui) {
-      const shouldGenerate = shouldGenerateUI(description, metadata, normalizedDeps);
-      if (shouldGenerate) {
-        const uiResult = generateDefaultUI({
-          description,
-          metadata,
-          dependencies: normalizedDeps,
-        });
-        ui = uiResult.ui;
-        if (uiResult.messageUI && !metadata.messageUI) {
-          metadata.messageUI = uiResult.messageUI;
-        }
-        if (uiResult.inspectionUI && !metadata.inspectionUI) {
-          metadata.inspectionUI = uiResult.inspectionUI;
-        }
+    if (!ui && wantsUI) {
+      const uiResult = generateDefaultUI({
+        description,
+        metadata,
+        dependencies: normalizedDeps,
+      });
+      ui = uiResult.ui;
+      if (uiResult.messageUI && !metadata.messageUI) {
+        metadata.messageUI = uiResult.messageUI;
+      }
+      if (uiResult.inspectionUI && !metadata.inspectionUI) {
+        metadata.inspectionUI = uiResult.inspectionUI;
       }
     }
 
@@ -702,6 +730,7 @@ const create = async (options: CreateOptions) => {
       preview: generatePreview(metadata, code),
       message: `Extension "${extensionId}" written successfully.`,
       path: `data/projects/${tenantId}/${projectId}/extensions/${extensionId}/`,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   } catch (error) {
     return buildFailureResult({
@@ -758,6 +787,7 @@ const modify = async (input: ModifyOptions | string) => {
   let metadata: any | undefined;
   let code: string | undefined;
   let ui: string | undefined;
+  const warnings: string[] = [];
   let lockAcquired = false;
   let stage = "lock";
   let base: any;
@@ -816,16 +846,24 @@ const modify = async (input: ModifyOptions | string) => {
       ...(normalizedDeps ? { dependencies: normalizedDeps } : {}),
     };
 
+    const shouldAutoGenerateUI = shouldGenerateUI(description, metadata, normalizedDeps);
+    let uiProvided = false;
+    let uiInvalid = false;
+
     code = base.code;
     if (opts.code) {
       code = opts.code;
     } else if (opts.functions) {
       stage = "generateCode";
       const functionsArray = normalizeFunctionsArray(opts.functions);
+      const wantsUIForCode =
+        shouldAutoGenerateUI || Boolean(metadata?.messageUI || metadata?.inspectionUI || opts.ui);
       code = await generateCode({
         description,
         functions: functionsArray,
         metadata,
+        returnArgs: wantsUIForCode,
+        visualizationType: metadata?.messageUI?.visualizationType || metadata?.id,
       });
     }
     if (!code) {
@@ -834,24 +872,45 @@ const modify = async (input: ModifyOptions | string) => {
 
     ui = base.ui;
     if (opts.ui) {
-      ui = normalizeUIContent(opts.ui);
+      const normalizedUI = normalizeUIContent(opts.ui);
+      const uiCheck = analyzeUIContent(normalizedUI);
+      if (!uiCheck.valid) {
+        uiInvalid = true;
+        warnings.push(...uiCheck.reasons.map((reason) => `UI ignored: ${reason}`));
+      } else {
+        const runtime = normalizeUIRuntime(normalizedUI, {
+          extensionId,
+          messageComponentName: metadata?.messageUI?.componentName,
+          inspectorComponentName: metadata?.inspectionUI?.componentName,
+        });
+        ui = runtime.ui;
+        warnings.push(...runtime.warnings);
+        uiProvided = true;
+      }
     }
 
-    if (!ui) {
-      const shouldGenerate = shouldGenerateUI(description, metadata, normalizedDeps);
-      if (shouldGenerate) {
-        const uiResult = generateDefaultUI({
-          description,
-          metadata,
-          dependencies: normalizedDeps,
-        });
-        ui = uiResult.ui;
-        if (uiResult.messageUI && !metadata.messageUI) {
-          metadata.messageUI = uiResult.messageUI;
-        }
-        if (uiResult.inspectionUI && !metadata.inspectionUI) {
-          metadata.inspectionUI = uiResult.inspectionUI;
-        }
+    if (uiInvalid && !ui) {
+      if (metadata?.messageUI) delete metadata.messageUI;
+      if (metadata?.inspectionUI) delete metadata.inspectionUI;
+    }
+
+    const wantsUI =
+      uiProvided ||
+      shouldAutoGenerateUI ||
+      Boolean(metadata?.messageUI || metadata?.inspectionUI);
+
+    if (!ui && wantsUI) {
+      const uiResult = generateDefaultUI({
+        description,
+        metadata,
+        dependencies: normalizedDeps,
+      });
+      ui = uiResult.ui;
+      if (uiResult.messageUI && !metadata.messageUI) {
+        metadata.messageUI = uiResult.messageUI;
+      }
+      if (uiResult.inspectionUI && !metadata.inspectionUI) {
+        metadata.inspectionUI = uiResult.inspectionUI;
       }
     }
 
@@ -920,6 +979,7 @@ const modify = async (input: ModifyOptions | string) => {
       preview: generatePreview(metadata, code),
       message: `Extension "${extensionId}" updated successfully.`,
       path: `data/projects/${tenantId}/${projectId}/extensions/${extensionId}/`,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   } catch (error) {
     return buildFailureResult({
@@ -947,14 +1007,17 @@ const modify = async (input: ModifyOptions | string) => {
  * and object format {getWeather: {name, description, parameters}}
  */
 function normalizeFunctionsArray(functions: FunctionDescription[] | Record<string, FunctionDescription>): FunctionDescription[] {
-  if (Array.isArray(functions)) {
-    return functions;
-  }
+  const list = Array.isArray(functions)
+    ? functions
+    : Object.entries(functions).map(([key, fn]) => ({
+        ...fn,
+        name: fn.name || key,
+      }));
 
-  // Convert object to array
-  return Object.entries(functions).map(([key, fn]) => ({
+  const used = new Set<string>();
+  return list.map((fn) => ({
     ...fn,
-    name: fn.name || key,
+    name: ensureFunctionName(fn, used),
   }));
 }
 
@@ -987,6 +1050,72 @@ function generateNameFromId(id: string): string {
     .split(/(?=[A-Z])/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function ensureFunctionName(fn: FunctionDescription, used: Set<string>): string {
+  const fromName = normalizeIdentifier(fn.name || "");
+  const fromDesc = normalizeIdentifier(deriveNameFromDescription(fn.description));
+  const base = fromName || fromDesc || "func";
+  const unique = makeUniqueIdentifier(base, used);
+  used.add(unique);
+  return unique;
+}
+
+function deriveNameFromDescription(description: string): string {
+  if (!description) return "";
+  const words = description
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 5);
+  return toCamelCase(words.join(" "));
+}
+
+function normalizeIdentifier(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (isValidIdentifier(trimmed)) return trimmed;
+  const camel = toCamelCase(trimmed);
+  if (!camel) return "";
+  return isValidIdentifier(camel) ? camel : coerceIdentifier(camel);
+}
+
+function makeUniqueIdentifier(base: string, used: Set<string>): string {
+  let name = coerceIdentifier(base);
+  let counter = 2;
+  while (used.has(name)) {
+    name = `${base}${counter}`;
+    name = coerceIdentifier(name);
+    counter += 1;
+  }
+  return name;
+}
+
+function coerceIdentifier(value: string): string {
+  let name = value.replace(/[^a-zA-Z0-9_$]/g, "");
+  if (!name) return "func";
+  if (!/^[A-Za-z_$]/.test(name)) {
+    name = `fn${name}`;
+  }
+  return name;
+}
+
+function isValidIdentifier(value: string): boolean {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value);
+}
+
+function toCamelCase(value: string): string {
+  const parts = value
+    .replace(/['"`]/g, "")
+    .split(/[^a-zA-Z0-9]+/g)
+    .filter(Boolean);
+  const [first, ...rest] = parts;
+  if (!first) return "";
+  return (
+    first.toLowerCase() +
+    rest.map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("")
+  );
 }
 
 /**
@@ -1125,44 +1254,39 @@ function buildGenericUI(
   inspectorComponent: string,
   extensionId: string,
 ): string {
-  return `import React from "react";
+  return `const React = window.libs.React;
 
-interface MessageProps {
-  toolInvocation?: { result?: { args?: any } };
-}
-
-interface InspectorProps {
-  data?: any;
-  error?: string;
-}
-
-export function ${messageComponent}({ toolInvocation }: MessageProps) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
-      <div className="text-sm font-semibold">${extensionId}</div>
-      <div className="text-xs text-muted-foreground">
-        Message UI for ${extensionId}.
-      </div>
-    </div>
+export function ${messageComponent}({ toolInvocation }) {
+  return React.createElement(
+    "div",
+    { className: "flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm" },
+    React.createElement("div", { className: "text-sm font-semibold" }, "${extensionId}"),
+    React.createElement(
+      "div",
+      { className: "text-xs text-muted-foreground" },
+      "Message UI for ${extensionId}."
+    )
   );
 }
 
-export default function ${inspectorComponent}({ data, error }: InspectorProps) {
+export default function ${inspectorComponent}({ data, error }) {
   if (error) {
-    return (
-      <div className="p-4 text-sm text-red-600 dark:text-red-400">
-        {error}
-      </div>
+    return React.createElement(
+      "div",
+      { className: "p-4 text-sm text-red-600 dark:text-red-400" },
+      error
     );
   }
 
-  return (
-    <div className="p-4 text-sm">
-      <div className="font-semibold mb-2">Inspector</div>
-      <pre className="text-xs whitespace-pre-wrap">
-{JSON.stringify(data ?? {}, null, 2)}
-      </pre>
-    </div>
+  return React.createElement(
+    "div",
+    { className: "p-4 text-sm" },
+    React.createElement("div", { className: "font-semibold mb-2" }, "Inspector"),
+    React.createElement(
+      "pre",
+      { className: "text-xs whitespace-pre-wrap" },
+      JSON.stringify(data ?? {}, null, 2)
+    )
   );
 }
 `;
@@ -1244,12 +1368,16 @@ async function generateCode(input: {
   description: string;
   functions: FunctionDescription[];
   metadata: any;
+  returnArgs?: boolean;
+  visualizationType?: string;
 }): Promise<string> {
   const intent = analyzeIntent(input.description);
 
   // Generate functions
   const functionCode = await Promise.all(
-    input.functions.map((fn) => generateFunction(fn, intent)),
+    input.functions.map((fn) =>
+      generateFunction(fn, intent, input.returnArgs, input.visualizationType),
+    ),
   );
 
   // Assemble extension object
@@ -1275,9 +1403,18 @@ return ${camelize(input.metadata.id)};
 async function generateFunction(
   fn: FunctionDescription,
   intent: any,
+  returnArgs?: boolean,
+  visualizationType?: string,
 ): Promise<string> {
   const params = parseParameters(fn.parameters || "");
-  const impl = generateImplementation(fn, intent);
+  const paramNames = parseParameterNames(fn.parameters || "");
+  const impl = generateImplementationWithParams(
+    fn,
+    intent,
+    paramNames,
+    returnArgs,
+    visualizationType,
+  );
 
   return `
   /**
@@ -1292,6 +1429,16 @@ async function generateFunction(
  * Generate function implementation based on intent
  */
 function generateImplementation(fn: FunctionDescription, intent: any): string {
+  return generateImplementationWithParams(fn, intent, [], false);
+}
+
+function generateImplementationWithParams(
+  fn: FunctionDescription,
+  intent: any,
+  paramNames: string[],
+  returnArgs?: boolean,
+  visualizationType?: string,
+): string {
   if (intent.type === "api") {
     return `
     // TODO: Implement API call for "${fn.description}"
@@ -1320,6 +1467,27 @@ function generateImplementation(fn: FunctionDescription, intent: any): string {
   `;
   }
 
+  if (returnArgs) {
+    const argsObject = paramNames.length > 0 ? `{ ${paramNames.join(", ")} }` : "{}";
+    const vizType = visualizationType || "";
+    const vizBlock = vizType
+      ? `
+    const toolCallId = \`viz_${vizType}_\${Date.now()}_\${Math.random().toString(36).slice(2, 9)}\`;
+    return {
+      args: ${argsObject},
+      __visualization: {
+        type: "${vizType}",
+        toolCallId,
+        args: ${argsObject}
+      }
+    };
+  `
+      : `
+    return { args: ${argsObject} };
+  `;
+    return vizBlock;
+  }
+
   return `
     // TODO: Implement: ${fn.description}
     throw new Error("Not implemented yet");
@@ -1334,17 +1502,27 @@ function parseParameters(params: string | any): string {
 
   // If already a string, parse old format
   if (typeof params === "string") {
+    // Normalize common patterns like "origin: {x, y}" -> "origin"
+    const normalized = params.replace(/[:=]\s*\{[^}]*\}/g, "");
+
     // Parse: "param1 (required), param2 optional" -> "param1, param2"
-    return params
+    return normalized
       .split(",")
       .map((p) => p.trim())
       .filter((p) => p)
       .map((p) => {
         // Remove parenthetical hints and trailing optional/required tokens
-        const cleaned = p
+        let cleaned = p
           .replace(/\([^)]*\)/g, " ")
           .replace(/\b(optional|required)\b/gi, " ")
           .trim();
+
+        // Remove stop-words or fillers
+        cleaned = cleaned.replace(/\b(and|or|etc|etc\.|with|without)\b/gi, " ").trim();
+
+        // Drop trailing fragments like "-" or ":" and strip extra tokens
+        cleaned = cleaned.replace(/[-:]+$/g, "").trim();
+
         const match = cleaned.match(/^([A-Za-z_$][\w$]*)/);
         return match ? match[1] : "";
       })
@@ -1364,6 +1542,147 @@ function parseParameters(params: string | any): string {
   }
 
   return "";
+}
+
+function parseParameterNames(params: string | any): string[] {
+  if (!params) return [];
+  if (typeof params === "string") {
+    const normalized = params.replace(/[:=]\s*\{[^}]*\}/g, "");
+    return normalized
+      .split(",")
+      .map((p) => p.trim())
+      .filter((p) => p)
+      .map((p) =>
+        p
+          .replace(/\([^)]*\)/g, " ")
+          .replace(/\b(optional|required)\b/gi, " ")
+          .replace(/\b(and|or|etc|etc\.|with|without)\b/gi, " ")
+          .replace(/[-:]+$/g, "")
+          .trim(),
+      )
+      .map((p) => {
+        const match = p.match(/^([A-Za-z_$][\w$]*)/);
+        return match ? match[1] : undefined;
+      })
+      .filter((p): p is string => Boolean(p));
+  }
+
+  if (params.properties && typeof params.properties === "object") {
+    return Object.keys(params.properties)
+      .map((key) => {
+        const match = key.match(/^([A-Za-z_$][\w$]*)/);
+        return match ? match[1] : undefined;
+      })
+      .filter((p): p is string => Boolean(p));
+  }
+
+  return [];
+}
+
+function analyzeUIContent(ui: string): { valid: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (/(^|\n)\s*import\s+/m.test(ui)) {
+    reasons.push("UI contains import statements (not supported at runtime).");
+  }
+  if (/<\s*[A-Za-z]/.test(ui) && !/React\.createElement/.test(ui)) {
+    reasons.push("UI appears to use JSX (use React.createElement with window.libs.React).");
+  }
+  return { valid: reasons.length === 0, reasons };
+}
+
+function normalizeUIRuntime(
+  ui: string,
+  options?: {
+    extensionId?: string;
+    messageComponentName?: string;
+    inspectorComponentName?: string;
+  },
+): { ui: string; warnings: string[] } {
+  let updated = ui.trim();
+  const warnings: string[] = [];
+
+  const hasReactBinding = /const\s+React\s*=\s*window\.libs\.React\s*;/.test(updated);
+  const usesReact = /\bReact\./.test(updated);
+  if (usesReact && !hasReactBinding) {
+    updated = `const React = window.libs.React;\n\n${updated}`;
+    warnings.push("UI normalized: injected window.libs.React binding.");
+  }
+
+  const usesDataProps = /function\s+\w+\s*\(\s*\{\s*data\s*\}\s*\)/.test(updated)
+    || /export\s+default\s+function\s+\w+\s*\(\s*\{\s*data\s*\}\s*\)/.test(updated);
+  const usesToolInvocation = /\btoolInvocation\b/.test(updated);
+  if (usesDataProps && !usesToolInvocation) {
+    updated = `const __extractData = (toolInvocation) => toolInvocation?.result?.args ?? toolInvocation?.result ?? {};\n\n${updated}`;
+    updated = updated.replace(/\(\s*\{\s*data\s*\}\s*\)/g, "({ toolInvocation })");
+    updated = updated.replace(/\bconst\s+\{\s*([^\}]*?)\s*\}\s*=\s*data\s*;/g, "const { $1 } = __extractData(toolInvocation);");
+    updated = updated.replace(/\bdata\b/g, "__extractData(toolInvocation)");
+    warnings.push("UI normalized: mapped data props to toolInvocation.result.args.");
+  }
+
+  const exportResult = ensureUIExports(updated, options);
+  updated = exportResult.ui;
+  warnings.push(...exportResult.warnings);
+
+  return { ui: updated, warnings };
+}
+
+function ensureUIExports(
+  ui: string,
+  options?: {
+    extensionId?: string;
+    messageComponentName?: string;
+    inspectorComponentName?: string;
+  },
+): { ui: string; warnings: string[] } {
+  let updated = ui.trim();
+  const warnings: string[] = [];
+
+  const extensionId = options?.extensionId?.trim();
+  const derivedMessageName = extensionId ? `${toPascalCase(extensionId)}Message` : undefined;
+  const messageName = options?.messageComponentName?.trim() || derivedMessageName;
+
+  if (messageName) {
+    const hasExport =
+      new RegExp(`export\\s+(?:default\\s+)?(?:function|const|class)\\s+${messageName}\\b`).test(updated) ||
+      new RegExp(`export\\s*\\{[^}]*\\b${messageName}\\b[^}]*\\}`).test(updated);
+    const hasDeclaration =
+      new RegExp(`function\\s+${messageName}\\b`).test(updated) ||
+      new RegExp(`(?:const|let|var)\\s+${messageName}\\b`).test(updated) ||
+      new RegExp(`class\\s+${messageName}\\b`).test(updated);
+    const hasWindowBinding =
+      new RegExp(`window\\.libs\\.${messageName}\\b`).test(updated) ||
+      new RegExp(`window\\.libs\\[\\s*['"]${messageName}['"]\\s*\\]`).test(updated);
+
+    if (!hasExport) {
+      if (hasDeclaration) {
+        updated += `\n\nexport { ${messageName} };`;
+        warnings.push(`UI normalized: exported ${messageName} for message UI.`);
+      } else if (hasWindowBinding) {
+        updated += `\n\nconst ${messageName} = window.libs["${messageName}"];\nexport { ${messageName} };`;
+        warnings.push(`UI normalized: exported ${messageName} from window.libs.`);
+      }
+    }
+  }
+
+  if (derivedMessageName && messageName && derivedMessageName !== messageName) {
+    const hasDerivedExport =
+      new RegExp(`export\\s+(?:default\\s+)?(?:function|const|class)\\s+${derivedMessageName}\\b`).test(updated) ||
+      new RegExp(`export\\s*\\{[^}]*\\b${derivedMessageName}\\b[^}]*\\}`).test(updated);
+
+    if (!hasDerivedExport) {
+      const canAlias =
+        new RegExp(`function\\s+${messageName}\\b`).test(updated) ||
+        new RegExp(`(?:const|let|var)\\s+${messageName}\\b`).test(updated) ||
+        new RegExp(`export\\s*\\{[^}]*\\b${messageName}\\b[^}]*\\}`).test(updated);
+
+      if (canAlias) {
+        updated += `\n\nexport { ${messageName} as ${derivedMessageName} };`;
+        warnings.push(`UI normalized: aliased ${messageName} as ${derivedMessageName} for message UI.`);
+      }
+    }
+  }
+
+  return { ui: updated, warnings };
 }
 
 function generateEmptyCode(metadata: any): string {
