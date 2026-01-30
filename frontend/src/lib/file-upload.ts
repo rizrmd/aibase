@@ -26,6 +26,7 @@ export interface UploadOptions {
   onProgress?: (progress: UploadProgress) => void;
   signal?: AbortSignal;
   projectId: string; // Required project ID
+  convId?: string; // Conversation ID for status broadcasts
 }
 
 /**
@@ -46,6 +47,9 @@ export async function uploadFiles(
   // Build URL query params manually
   const params = new URLSearchParams();
   params.append("projectId", projectId);
+  if (options.convId) {
+    params.append("convId", options.convId);
+  }
 
   const url = `${UPLOAD_ENDPOINT}?${params.toString()}`;
 
@@ -99,6 +103,9 @@ export function uploadFilesWithProgress(
     // Build URL query params manually
     const params = new URLSearchParams();
     params.append("projectId", projectId);
+    if (options.convId) {
+      params.append("convId", options.convId);
+    }
 
     const url = `${UPLOAD_ENDPOINT}?${params.toString()}`;
     const xhr = new XMLHttpRequest();

@@ -5,6 +5,7 @@
 
 import { FileStorage, type FileScope } from '../storage/file-storage';
 import { ProjectStorage } from '../storage/project-storage';
+import { FileContextStorage } from '../storage/file-context-storage';
 import { createLogger } from '../utils/logger';
 import sharp from 'sharp';
 import * as path from 'path';
@@ -306,6 +307,30 @@ export async function handleFileUpload(req: Request, wsServer?: WSServer): Promi
       });
 
       logger.info({ path: storedFile.path, scope }, 'File saved');
+    }
+
+    // Auto-check logic: If total files < 10, automatically include new files in context
+    try {
+      const fileContextStorage = FileContextStorage.getInstance();
+      const allFiles = await fileStorage.listFiles(convId || '', projectId, tenantId);
+
+      console.log(`[UPLOAD-HANDLER] Total files in project ${projectId}: ${allFiles.length}`);
+
+      if (allFiles.length < 10) {
+        console.log(`[UPLOAD-HANDLER] Auto-checking ${uploadedFiles.length} new files in context (total files: ${allFiles.length} < 10)`);
+        await fileContextStorage.bulkSetFilesInContext(
+          uploadedFiles.map(f => f.id),
+          true,
+          projectId,
+          tenantId
+        );
+        console.log(`[UPLOAD-HANDLER] Successfully auto-checked ${uploadedFiles.length} files in context`);
+      } else {
+        console.log(`[UPLOAD-HANDLER] Not auto-checking files (total files: ${allFiles.length} >= 10)`);
+      }
+    } catch (error) {
+      // Log error but don't fail the upload
+      console.error('[UPLOAD-HANDLER] Failed to auto-check files in context:', error);
     }
 
     return Response.json({

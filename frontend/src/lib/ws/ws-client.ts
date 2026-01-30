@@ -249,6 +249,23 @@ export class WSClient extends WSEventEmitter {
   }
 
   /**
+   * Get file context mapping
+   */
+  getFileContext(): void {
+    this.sendControl({ type: "get_file_context" });
+  }
+
+  /**
+   * Set file in context
+   */
+  setFileInContext(fileId: string, included: boolean): void {
+    this.sendControl({
+      type: "set_file_context",
+      data: { fileId, included },
+    });
+  }
+
+  /**
    * Get connection state
    */
   getConnectionState(): ConnectionState {
@@ -456,6 +473,10 @@ export class WSClient extends WSEventEmitter {
 
       case "todo_update":
         this.emit("todo_update", message.data);
+        break;
+
+      case "file_context_update":
+        this.emit("file_context_update", message.data);
         break;
 
       case "conversation_title_update":

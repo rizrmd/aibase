@@ -7,14 +7,10 @@ import {
   FileCode,
   FileArchive,
   Loader2,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { UploadedFileAttachment } from "./chat";
-import { useState } from "react";
 
 interface FileAttachmentProps {
   file: UploadedFileAttachment;
@@ -61,8 +57,6 @@ export function FileAttachment({ file, className }: FileAttachmentProps) {
   const Icon = getFileIcon(file.type);
   const hasProcessingStatus =
     file.processingStatus && file.processingStatus.length > 0;
-  const hasDescription = file.description && file.description.length > 0;
-  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <div
@@ -103,33 +97,9 @@ export function FileAttachment({ file, className }: FileAttachmentProps) {
                 </span>
               </>
             )}
-            {hasDescription && (
-              <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="ml-auto text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 flex items-center gap-1 transition-colors"
-              >
-                {isExpanded ? (
-                  <>
-                    <ChevronUp className="h-3 w-3" />
-                    Hide details
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="h-3 w-3" />
-                    Show details
-                  </>
-                )}
-              </button>
-            )}
           </div>
         </div>
       </div>
-      {hasDescription && isExpanded && (
-        <div className="text-[70%] px-3 text-blue-900 max-w-[400px] max-h-[400px] overflow-auto dark:text-blue-100 border-t border-blue-200 dark:border-blue-800 pt-2">
-          <MarkdownRenderer>{file.description || ''}</MarkdownRenderer>
-        </div>
-      )}
     </div>
   );
 }

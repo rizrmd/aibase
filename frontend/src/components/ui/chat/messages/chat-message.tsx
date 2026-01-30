@@ -116,14 +116,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           <FileAttachmentList files={attachments} className="mb-2" />
         )}
 
-        {/* Only show message bubble if there's actual content */}
-        {content &&
-          content.trim() &&
-          !(attachments && attachments.length > 0) && (
-            <div className={cn(chatBubbleVariants({ isUser, animation }))}>
-              <MarkdownRenderer>{content}</MarkdownRenderer>
-            </div>
-          )}
+        {/* Show message text if there's actual content */}
+        {content && content.trim() && (
+          <div className={cn(chatBubbleVariants({ isUser, animation }))}>
+            <MarkdownRenderer>{content}</MarkdownRenderer>
+          </div>
+        )}
 
         {showTimeStamp && createdAt ? (
           <time
@@ -271,8 +269,29 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }
 
   // Split content at first meaningful newline (skip leading newlines) if we have tool invocations
+  // IMPORTANT: Don't split if message is complete (has completionTime) - the full content
+  // from backend is already in correct order and splitting would cause duplication
   const shouldSplitContent =
-    !isUser && toolInvocations && toolInvocations.length > 0;
+    !isUser &&
+    toolInvocations &&
+    toolInvocations.length > 0 &&
+    !parts &&
+    !completionTime; // Don't split completed messages to prevent duplication
+
+  // For completed messages with tool invocations but no parts, hide tool invocations
+  // since the content already includes the tool results
+  const shouldHideToolInvocations =
+    !isUser &&
+    toolInvocations &&
+    toolInvocations.length > 0 &&
+    !parts &&
+    completionTime; // Hide tool invocations for completed messages
+
+  if (shouldHideToolInvocations) {
+    // Clear tool invocations to prevent duplication
+    toolInvocations = undefined;
+  }
+
   let beforeToolContent = "";
   let afterToolContent = content;
 

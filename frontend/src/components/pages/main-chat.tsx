@@ -181,6 +181,7 @@ export function MainChat({
     useMessageSubmission({
       wsClient,
       projectId: currentProject?.id,
+      convId,
       input,
       setInput,
       setMessages,

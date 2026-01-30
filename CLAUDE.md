@@ -179,13 +179,6 @@ All pages must follow layout patterns to prevent navigation overlap (see `fronte
 - Backend: Error messages broadcast via WebSocket, proper HTTP status codes
 - Abort handling: Graceful cleanup, partial response persistence
 
-### Session Management (Beads Workflow)
-This project uses [beads](https://github.com/beads-track/beads) for multi-session issue tracking:
-- Run `bd ready` to find work without blockers
-- Use `bd create` to file issues for follow-up work
-- `bd sync` at session end to commit changes
-- See `.beads/` directory for persistent context
-
 ## First-Time Setup
 
 1. **Configure environment**: Copy `.env.example` to `.env` and add API credentials

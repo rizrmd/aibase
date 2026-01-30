@@ -30,6 +30,7 @@ export type MessageType =
   | 'tool_call'
   | 'tool_result'
   | 'todo_update'
+  | 'file_context_update'
   | 'error'
   | 'control_response'
   | 'pong'
@@ -38,7 +39,17 @@ export type MessageType =
 
 // Control message types
 export interface ControlMessage {
-  type: 'abort' | 'pause' | 'resume' | 'clear_history' | 'get_history' | 'get_status' | 'compact_chat' | 'get_compaction_status';
+  type:
+    | 'abort'
+    | 'pause'
+    | 'resume'
+    | 'clear_history'
+    | 'get_history'
+    | 'get_status'
+    | 'compact_chat'
+    | 'get_compaction_status'
+    | 'get_file_context'
+    | 'set_file_context';
   targetId?: string;
   data?: any;
 }

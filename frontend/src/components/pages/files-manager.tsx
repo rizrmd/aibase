@@ -25,6 +25,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import React from "react";
@@ -34,11 +40,15 @@ import {
   fetchProjectFiles,
   formatFileSize,
   renameFile,
+  getFileContext,
+  setFileInContext,
   type FileInfo,
+  type FileContextMapping,
 } from "@/lib/files-api";
 import { uploadFilesWithProgress, type UploadProgress } from "@/lib/file-upload";
 import { useChatStore } from "@/stores/chat-store";
 import { useConversationStore } from "@/stores/conversation-store";
+import { useFileContextStore } from "@/stores/file-context-store";
 import {
   AlertCircle,
   Download,
@@ -59,6 +69,7 @@ import {
   Eye,
   Upload,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -125,6 +136,10 @@ export function FilesManagerPage() {
   >("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
+  // File context state
+  const [fileContext, setFileContext] = useState<FileContextMapping>({});
+  const [fileContextLoading, setFileContextLoading] = useState(false);
+
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -135,6 +150,7 @@ export function FilesManagerPage() {
     if (projectId) {
       loadConversations(projectId);
       loadFiles(projectId);
+      loadFileContext(projectId);
     }
   }, [projectId, loadConversations]);
 
@@ -167,6 +183,20 @@ export function FilesManagerPage() {
       setFiles([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadFileContext = async (projectId: string) => {
+    setFileContextLoading(true);
+    try {
+      const data = await getFileContext(projectId);
+      setFileContext(data.fileContext);
+    } catch (error) {
+      console.error("[FilesPage] Error loading file context:", error);
+      // Don't show toast for this error, just log it
+      setFileContext({});
+    } finally {
+      setFileContextLoading(false);
     }
   };
 
@@ -255,6 +285,22 @@ export function FilesManagerPage() {
     } catch (error) {
       console.error("Error deleting files:", error);
       toast.error("Failed to delete some files");
+    }
+  };
+
+  const handleToggleFileContext = async (fileId: string, included: boolean) => {
+    if (!projectId) return;
+
+    setFileContext((prev) => ({ ...prev, [fileId]: included }));
+
+    try {
+      await setFileInContext(projectId, fileId, included);
+      // No toast needed, the visual checkbox update is sufficient feedback
+    } catch (error) {
+      console.error("Error toggling file context:", error);
+      // Revert the change on error
+      setFileContext((prev) => ({ ...prev, [fileId]: !included }));
+      toast.error("Failed to update file context");
     }
   };
 
@@ -598,6 +644,20 @@ export function FilesManagerPage() {
                               aria-label="Select all"
                             />
                           </TableHead>
+                          <TableHead className="w-[50px]" title="Include in AI context">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="flex items-center justify-center">
+                                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Include in AI context</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
                           <TableHead className="w-[300px]">Name</TableHead>
                           <TableHead>Size</TableHead>
                           <TableHead>Conversation</TableHead>
@@ -623,6 +683,39 @@ export function FilesManagerPage() {
                                   }
                                   aria-label={`Select ${file.name}`}
                                 />
+                              </TableCell>
+                              <TableCell>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={`h-7 w-7 ${
+                                          !!fileContext[file.id || `file_${file.uploadedAt}_${file.name}`]
+                                            ? "text-amber-500 hover:text-amber-600"
+                                            : "text-muted-foreground hover:text-foreground"
+                                        }`}
+                                        onClick={() =>
+                                          handleToggleFileContext(
+                                            file.id || `file_${file.uploadedAt}_${file.name}`,
+                                            !fileContext[file.id || `file_${file.uploadedAt}_${file.name}`]
+                                          )
+                                        }
+                                        disabled={fileContextLoading}
+                                      >
+                                        <Sparkles className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {!!fileContext[file.id || `file_${file.uploadedAt}_${file.name}`]
+                                          ? "Remove from AI context"
+                                          : "Include in AI context"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               </TableCell>
                               <TableCell>
                                 <div
@@ -761,6 +854,41 @@ export function FilesManagerPage() {
                               aria-label={`Select ${file.name}`}
                               className="bg-background/80 backdrop-blur"
                             />
+                          </div>
+
+                          {/* File Context Toggle */}
+                          <div className="absolute top-2 left-2">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={`h-7 w-7 bg-background/80 backdrop-blur ${
+                                      !!fileContext[file.id || `file_${file.uploadedAt}_${file.name}`]
+                                        ? "text-amber-500 hover:text-amber-600"
+                                        : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                                    onClick={() =>
+                                      handleToggleFileContext(
+                                        file.id || `file_${file.uploadedAt}_${file.name}`,
+                                        !fileContext[file.id || `file_${file.uploadedAt}_${file.name}`]
+                                      )
+                                    }
+                                    disabled={fileContextLoading}
+                                  >
+                                    <Sparkles className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>
+                                    {!!fileContext[file.id || `file_${file.uploadedAt}_${file.name}`]
+                                      ? "Remove from AI context"
+                                      : "Include in AI context"}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </div>
 
                           {/* Card Content */}

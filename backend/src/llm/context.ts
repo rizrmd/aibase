@@ -1,6 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { getConversationDir, getProjectDir, getProjectFilesDir } from "../config/paths";
+import { FileContextStorage } from "../storage/file-context-storage";
 
 interface TodoItem {
   id: string;
@@ -385,17 +386,28 @@ function getFilesDirectory(convId: string, projectId: string, tenantId: number |
 
 /**
  * Load files for a conversation
+ * @param filterByContext - If true, only return files that are included in file_context.json
  */
 async function loadFiles(
   convId: string,
   projectId: string,
-  tenantId: number | string
+  tenantId: number | string,
+  filterByContext: boolean = false
 ): Promise<FileInfo[] | null> {
   const filesDir = getFilesDirectory(convId, projectId, tenantId);
 
   try {
     const entries = await fs.readdir(filesDir, { withFileTypes: true });
     const files: FileInfo[] = [];
+
+    // Load file context if filtering is enabled
+    let includedFileIds: Set<string> | undefined;
+    if (filterByContext) {
+      const fileContextStorage = FileContextStorage.getInstance();
+      const includedIds = await fileContextStorage.getIncludedFileIds(projectId, tenantId);
+      includedFileIds = new Set(includedIds);
+      console.log(`[Context] Filtering files by context: ${includedIds.length} files included`);
+    }
 
     for (const entry of entries) {
       // Skip metadata files and directories
@@ -405,6 +417,15 @@ async function loadFiles(
 
       const fullPath = path.join(filesDir, entry.name);
       const stats = await fs.stat(fullPath);
+
+      // Generate file ID (matches the format used when uploading)
+      const fileId = `file_${stats.mtimeMs}_${entry.name}`;
+
+      // Skip if not in context (when filtering is enabled)
+      if (filterByContext && includedFileIds && !includedFileIds.has(fileId)) {
+        console.log(`[Context] Skipping file ${entry.name} (not in context)`);
+        continue;
+      }
 
       // Load metadata to get scope, description, and title
       let scope: 'user' | 'public' = 'user';
@@ -544,8 +565,8 @@ export const defaultContext = async (
   // const todoList = await loadTodos(convId, projectId, tenantId);
   const todoList = null;
 
-  // Load conversation-specific files
-  const files = await loadFiles(convId, projectId, tenantId);
+  // Load conversation-specific files (filter by file_context.json)
+  const files = await loadFiles(convId, projectId, tenantId, true);
 
   // Inject dynamic content into template (URL params, tool context, memory, todos, extensions)
   let context = await injectDynamicContent(template, memory, todoList, urlParams || null, projectId, tenantId, convId);

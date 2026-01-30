@@ -21,6 +21,7 @@ import * as path from "path";
 import { AuthService } from "../services/auth-service";
 import { ProjectStorage } from "../storage/project-storage";
 import { FileStorage } from "../storage/file-storage";
+import { FileContextStorage } from "../storage/file-context-storage";
 import { ExtensionLoader } from "../tools/extensions/extension-loader";
 
 const authService = AuthService.getInstance();
@@ -1306,6 +1307,83 @@ export class WSServer extends WSEventEmitter {
           } catch (error: any) {
             console.error(`[Compaction] Error getting status:`, error);
             this.sendError(ws, "COMPACTION_STATUS_ERROR", error.message);
+          }
+          break;
+
+        case "get_file_context":
+          console.log(`[FileContext] Get file context for project: ${connectionInfo.projectId}`);
+          try {
+            const fileContextStorage = FileContextStorage.getInstance();
+            const fileContext = await fileContextStorage.loadFileContext(
+              connectionInfo.projectId,
+              connectionInfo.tenantId
+            );
+
+            this.sendToWebSocket(ws, {
+              type: "control_response",
+              id: message.id,
+              data: {
+                status: "file_context",
+                type: control.type,
+                fileContext: fileContext.files,
+              },
+              metadata: { timestamp: Date.now() },
+            });
+
+            console.log(`[FileContext] Sent file context: ${Object.keys(fileContext.files).length} files`);
+          } catch (error: any) {
+            console.error(`[FileContext] Error getting file context:`, error);
+            this.sendError(ws, "FILE_CONTEXT_ERROR", error.message);
+          }
+          break;
+
+        case "set_file_context":
+          console.log(`[FileContext] Set file context for project: ${connectionInfo.projectId}`, control.data);
+          try {
+            const { fileId, included } = control.data || {};
+
+            if (!fileId || typeof included !== 'boolean') {
+              throw new Error('Invalid set_file_context data: missing fileId or included flag');
+            }
+
+            const fileContextStorage = FileContextStorage.getInstance();
+            await fileContextStorage.setFileInContext(
+              fileId,
+              included,
+              connectionInfo.projectId,
+              connectionInfo.tenantId
+            );
+
+            // Broadcast the update to all clients in this project/conversation
+            this.broadcastToConv(connectionInfo.convId, {
+              type: "file_context_update",
+              id: this.generateMessageId(),
+              data: {
+                fileId,
+                included,
+              },
+              metadata: {
+                timestamp: Date.now(),
+                convId: connectionInfo.convId,
+              },
+            });
+
+            this.sendToWebSocket(ws, {
+              type: "control_response",
+              id: message.id,
+              data: {
+                status: "file_context_updated",
+                type: control.type,
+                fileId,
+                included,
+              },
+              metadata: { timestamp: Date.now() },
+            });
+
+            console.log(`[FileContext] Set file ${fileId} in context: ${included}`);
+          } catch (error: any) {
+            console.error(`[FileContext] Error setting file context:`, error);
+            this.sendError(ws, "FILE_CONTEXT_ERROR", error.message);
           }
           break;
 

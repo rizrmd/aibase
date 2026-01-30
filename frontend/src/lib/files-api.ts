@@ -166,3 +166,84 @@ export function getFileIcon(fileName: string): string {
 
   return "📎";
 }
+
+/**
+ * File context types
+ */
+export interface FileContextMapping {
+  [fileId: string]: boolean;
+}
+
+export interface FileContextData {
+  fileContext: FileContextMapping;
+  version: string;
+  updatedAt: number;
+}
+
+/**
+ * Get file context for a project
+ */
+export async function getFileContext(
+  projectId: string
+): Promise<FileContextData> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/file-context`
+  );
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || "Failed to fetch file context");
+  }
+
+  return data.data;
+}
+
+/**
+ * Set file in context
+ */
+export async function setFileInContext(
+  projectId: string,
+  fileId: string,
+  included: boolean
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/file-context`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fileId, included }),
+    }
+  );
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || "Failed to set file context");
+  }
+}
+
+/**
+ * Bulk set files in context
+ */
+export async function bulkSetFilesInContext(
+  projectId: string,
+  fileIds: string[],
+  included: boolean
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/file-context`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fileIds, included }),
+    }
+  );
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || "Failed to bulk set file context");
+  }
+}

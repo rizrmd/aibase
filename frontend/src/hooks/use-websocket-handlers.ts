@@ -6,6 +6,7 @@ import type { WSClient } from "@/lib/ws/ws-connection-manager";
 import { useChatStore } from "@/stores/chat-store";
 import { useConversationStore } from "@/stores/conversation-store";
 import { useFileStore } from "@/stores/file-store";
+import { useFileContextStore } from "@/stores/file-context-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -67,6 +68,8 @@ export function useWebSocketHandlers({
       setIsHistoryLoading(true);
       // Request message history from server when connected
       wsClient.getHistory();
+      // Request file context from server when connected
+      wsClient.getFileContext();
     };
 
     const handleDisconnected = () => {
@@ -473,7 +476,18 @@ export function useWebSocketHandlers({
           );
 
           // Find message to update in the full array (before removing thinking indicator)
-          const messageIndex = prevMessages.findIndex((m) => m.id === data.messageId && !m.isThinking);
+          let messageIndex = prevMessages.findIndex((m) => m.id === data.messageId && !m.isThinking);
+
+          // Fallback: if not found by exact ID, try to find by currentMessageIdRef
+          // This handles cases where the completion message ID differs from streaming message ID
+          if (messageIndex === -1 && currentMessageIdRef.current) {
+            messageIndex = prevMessages.findIndex((m) => m.id === currentMessageIdRef.current && !m.isThinking);
+            if (messageIndex !== -1) {
+              console.log(
+                `[Complete] Found message by currentMessageIdRef ${currentMessageIdRef.current}, updating with completion ID ${data.messageId}`
+              );
+            }
+          }
 
           if (messageIndex !== -1) {
             // Message already exists from streaming chunks
@@ -510,43 +524,30 @@ export function useWebSocketHandlers({
 
             const mergedToolInvocations = Array.from(toolInvocationsMap.values());
 
-            // SOLUTION: Always keep parts array consistent to avoid re-render/blink
-            // Update the text part with fullText, keep tool invocations if any
-            let finalParts = existingMessage.parts;
+            // SOLUTION: Preserve parts array from streaming to maintain order
+            // - If existing message has parts, preserve them and just update completion metadata
+            // - Only create new parts if message doesn't have any
+            let finalParts: any[] | undefined;
 
             if (existingMessage.parts && existingMessage.parts.length > 0) {
-              // Has parts array - update text part in place
-              const textPartIndex = existingMessage.parts.findIndex(p => p.type === "text");
-              if (textPartIndex !== -1) {
-                // Create new parts array with updated text
-                finalParts = [...existingMessage.parts];
-                const textPart = existingMessage.parts[textPartIndex];
-                if (textPart.type === "text") {
-                  finalParts[textPartIndex] = {
-                    type: "text",
-                    text: fullText,
-                  };
-                  console.log(
-                    `[Complete] Updated text part at index ${textPartIndex} from ${textPart.text.length} to ${fullText.length} chars`
-                  );
-                }
-              } else {
-                // No text part exists, add one
-                finalParts = [
-                  { type: "text", text: fullText },
-                  ...existingMessage.parts,
-                ];
-                console.log(
-                  `[Complete] Added new text part with ${fullText.length} chars to existing parts array`
-                );
-              }
+              // Preserve existing parts array from streaming - it already has the correct order
+              finalParts = existingMessage.parts;
+              console.log(`[Complete] Preserving existing parts array with ${finalParts.length} parts from streaming`);
+            } else if (mergedToolInvocations.length > 0) {
+              // Message has tool invocations but no parts - this shouldn't happen with proper streaming
+              // Fallback: create parts with tool invocations for proper rendering
+              console.log(`[Complete] Creating new parts array for message with ${mergedToolInvocations.length} tool invocations (no existing parts)`);
+              finalParts = [];
+              mergedToolInvocations.forEach((inv: any) => {
+                finalParts!.push({
+                  type: "tool-invocation",
+                  toolInvocation: inv,
+                });
+              });
             } else {
-              // No parts array exists - create one with text part
-              // This ensures consistency with streaming behavior
-              finalParts = [{ type: "text", text: fullText }];
-              console.log(
-                `[Complete] Created new parts array with text part (${fullText.length} chars)`
-              );
+              // Simple message with no tools - no parts needed
+              finalParts = undefined;
+              console.log(`[Complete] No parts needed for simple message (${fullText.length} chars)`);
             }
 
             // Update message AND remove thinking indicator in one atomic render
@@ -593,23 +594,17 @@ export function useWebSocketHandlers({
               ? Array.from(currentToolInvocationsRef.current.values())
               : undefined;
 
-          // Create parts array for new message (always include to ensure consistent rendering)
-          // Start with text part, then add tool invocations if any
-          const parts: any[] = [{ type: "text", text: fullText }];
-          if (toolInvocations && toolInvocations.length > 0) {
-            parts.push(
-              ...toolInvocations.map(inv => ({
-                type: "tool-invocation",
-                toolInvocation: inv,
-              }))
-            );
-          }
+          // Preserve parts array from currentPartsRef if it exists (streaming state)
+          // Otherwise create simple parts array
+          const parts = currentPartsRef.current.length > 0
+            ? [...currentPartsRef.current]
+            : undefined;
 
           const newMessage: Message = {
             id: data.messageId,
             role: "assistant",
             content: fullText,
-            parts: parts, // Always include parts
+            parts: parts, // Preserve parts from streaming if available
             createdAt: new Date(),
             completionTime: completionTimeSeconds,
             ...(data.thinkingDuration !== undefined && { thinkingDuration: data.thinkingDuration }),
@@ -1191,6 +1186,13 @@ export function useWebSocketHandlers({
         if (data.todos) {
           setTodos(data.todos);
         }
+      } else if (data.status === "file_context" || data.type === "get_file_context") {
+        console.log("Processing file context data:", data.fileContext);
+        // Update file context store with the mapping from server
+        if (data.fileContext) {
+          const { setFileContext } = useFileContextStore.getState();
+          setFileContext(data.fileContext);
+        }
       }
     };
 
@@ -1509,9 +1511,14 @@ export function useWebSocketHandlers({
             const toolInvocations = Array.from(
               currentToolInvocationsRef.current.values()
             );
-            const parts = currentPartsRef.current.length > 0
-              ? [...currentPartsRef.current]
-              : undefined;
+
+            // IMPORTANT: Preserve existing parts array if it exists, otherwise use currentPartsRef
+            // This prevents losing the parts array that was built during streaming
+            const parts = lastMsg.parts && lastMsg.parts.length > 0
+              ? lastMsg.parts
+              : (currentPartsRef.current.length > 0
+                  ? [...currentPartsRef.current]
+                  : undefined);
 
             // Check if any tools are still executing
             const hasExecutingTools = toolInvocations.some(
@@ -1519,6 +1526,7 @@ export function useWebSocketHandlers({
             );
 
             console.log("[Tool Result] Has executing tools after result:", hasExecutingTools);
+            console.log("[Tool Result] Last message has parts:", !!(lastMsg.parts && lastMsg.parts.length > 0), "parts length:", lastMsg.parts?.length || 0);
 
             // If no tools are executing, remove thinking indicator. If tools are still executing, update it.
             if (hasExecutingTools) {
@@ -1585,6 +1593,13 @@ export function useWebSocketHandlers({
       logout();
     };
 
+    const handleFileContextUpdate = (data: { fileId: string; included: boolean }) => {
+      // Update file context store when another client changes it
+      console.log("[File Context] Received update:", data);
+      const { setFileInContext } = useFileContextStore.getState();
+      setFileInContext(data.fileId, data.included);
+    };
+
     // Register event listeners
     wsClient.on("connected", handleConnected);
     wsClient.on("disconnected", handleDisconnected);
@@ -1598,6 +1613,7 @@ export function useWebSocketHandlers({
     wsClient.on("tool_call", handleToolCall);
     wsClient.on("tool_result", handleToolResult);
     wsClient.on("todo_update", handleTodoUpdate);
+    wsClient.on("file_context_update", handleFileContextUpdate);
     wsClient.on("conversation_title_update", handleConversationTitleUpdate);
     wsClient.on("auth_failed", handleAuthFailed);
 
@@ -1648,6 +1664,7 @@ export function useWebSocketHandlers({
       wsClient.off("tool_call", handleToolCall);
       wsClient.off("tool_result", handleToolResult);
       wsClient.off("todo_update", handleTodoUpdate);
+      wsClient.off("file_context_update", handleFileContextUpdate);
       wsClient.off("conversation_title_update", handleConversationTitleUpdate);
       wsClient.off("auth_failed", handleAuthFailed);
     };

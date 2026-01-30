@@ -8,6 +8,7 @@ import { useChatStore } from "@/stores/chat-store";
 interface UseMessageSubmissionProps {
   wsClient: WSClient | null;
   projectId: string | undefined;
+  convId?: string; // Conversation ID for file upload status broadcasts
   input: string;
   setInput: (input: string) => void;
   setMessages: (updater: (prev: Message[]) => Message[]) => void;
@@ -29,6 +30,7 @@ interface UseMessageSubmissionProps {
 export function useMessageSubmission({
   wsClient,
   projectId,
+  convId,
   input,
   setInput,
   setMessages,
@@ -182,6 +184,7 @@ export function useMessageSubmission({
             let uploadComplete = false;
             uploadedFiles = await uploadFilesWithProgress(filesArray, {
               projectId,
+              convId,
               onProgress: (progress) => {
                 console.log("[Upload Progress]", progress.percentage + "%");
                 // Stop updating if upload is complete (prevents race condition with "Analyzing..." status)

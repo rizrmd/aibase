@@ -3,8 +3,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Info, Copy, Check, FileJson } from "lucide-react";
+import { Info, Copy, Check, FileJson, FileText } from "lucide-react";
 import { useChatStore } from "@/stores/chat-store";
+import { useFileContextStore } from "@/stores/file-context-store";
 import { useState } from "react";
 import type { Message } from "@/components/ui/chat/messages/types";
 
@@ -18,6 +19,9 @@ export function TokenStatus({ convId }: TokenStatusProps) {
   const maxTokens = useChatStore((state) => state.maxTokens) || 200000;
   const messages = useChatStore((state) => state.messages);
   const [copiedFormat, setCopiedFormat] = useState<"markdown" | "json" | null>(null);
+
+  // Get file context count
+  const getContextFileCount = useFileContextStore((state) => state.getContextFileCount);
 
   const tokenStats = {
     totalTokens: tokenUsage?.totalTokens || 0,
@@ -249,6 +253,10 @@ export function TokenStatus({ convId }: TokenStatusProps) {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Messages Tracked</span>
                 <span className="font-medium">{tokenStats.messageCount}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Files in Context</span>
+                <span className="font-medium">{getContextFileCount()}</span>
               </div>
             </div>
           </div>

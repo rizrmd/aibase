@@ -97,6 +97,11 @@ import {
   handleRenameFile,
   handleMoveFile,
 } from "./files-handler";
+import {
+  handleGetFileContext,
+  handleSetFileContext,
+  handleBulkSetFileContext,
+} from "./file-context-handler";
 import { migrateEmbedConversations } from "../scripts/migrate-embed-conversations";
 import {
   handleRegister,
@@ -422,6 +427,17 @@ export class WebSocketServer {
         // Get all files for a project (GET /api/files?projectId={id})
         if (pathname === "/api/files" && req.method === "GET") {
           return handleGetProjectFiles(req);
+        }
+
+        // File context API endpoints
+        if (pathname.startsWith("/api/projects/") && pathname.endsWith("/file-context")) {
+          if (req.method === "GET") {
+            return handleGetFileContext(req);
+          } else if (req.method === "POST") {
+            return handleSetFileContext(req);
+          } else if (req.method === "PUT") {
+            return handleBulkSetFileContext(req);
+          }
         }
 
         // Memory API endpoints
