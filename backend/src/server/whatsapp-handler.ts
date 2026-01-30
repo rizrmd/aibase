@@ -9,6 +9,9 @@ import { ChatHistoryStorage } from "../storage/chat-history-storage";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { PATHS, getProjectDir } from "../config/paths";
+import { ScriptRuntime } from "../tools/extensions/script-runtime";
+import { ExtensionLoader } from "../tools/extensions/extension-loader";
+import { getBuiltinTools } from "../tools";
 
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || "http://localhost:7031/api/v1";
 
@@ -354,6 +357,32 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
     // Ensure format is clean (digits only)
     whatsappNumber = whatsappNumber.replace(/[^0-9]/g, '');
 
+    // FIX: Remove device-specific suffix if present (e.g. "33" or "32" at end of phone number)
+    // WhatsApp multi-device sometimes appends device ID to JID
+    // Indonesian numbers start with 62 and are usually 11-13 digits max. 
+    // If it's longer than 13 digits and ends with common suffixes, trim it.
+    if (whatsappNumber.startsWith('62') && whatsappNumber.length > 13) {
+      // Check for common suffixes like 33, 2, 1 etc
+      // Only trim if the result is still a valid length (10-13 digits)
+      
+      // Try removing last 2 digits if it ends with known patterns
+      if (whatsappNumber.endsWith('33') || whatsappNumber.endsWith('24') || whatsappNumber.endsWith('25')) {
+        const trimmed = whatsappNumber.slice(0, -2);
+        if (trimmed.length >= 10) {
+           console.log(`[WhatsApp] Correcting phone number from ${whatsappNumber} to ${trimmed}`);
+           whatsappNumber = trimmed;
+        }
+      }
+      // Try removing last 1 digit (usually device ID)
+      else if (whatsappNumber.length > 14) {
+         const trimmed = whatsappNumber.slice(0, -1);
+         if (trimmed.length >= 10) {
+            console.log(`[WhatsApp] trimming extra digit from phone number ${whatsappNumber} to ${trimmed}`);
+            whatsappNumber = trimmed;
+         }
+      }
+    }
+
     const uid = `whatsapp_user_${whatsappNumber}`;
 
     // Get or create conversation for this WhatsApp contact
@@ -579,6 +608,254 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
 }
 
 /**
+ * Detect and extract inline script JSON from AI response
+ * Returns the parsed script object if found, null otherwise
+ */
+function detectInlineScriptJSON(response: string): { purpose?: string; code: string } | null {
+  // Pattern 1: JSON in markdown code block
+  const codeBlockMatch = response.match(/```json\s*\n?\s*(\{[\s\S]*?\})\s*\n?```/);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    try {
+      const parsed = JSON.parse(codeBlockMatch[1]);
+      if (parsed.code && typeof parsed.code === 'string') {
+        return parsed;
+      }
+    } catch (e) {
+      // Not valid JSON, continue
+    }
+  }
+
+  // Pattern 2: Raw JSON object with code field
+  const jsonMatch = response.match(/^\s*\{[\s\S]*"code"\s*:\s*"[\s\S]*"\s*[\s\S]*\}\s*$/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(response.trim());
+      if (parsed.code && typeof parsed.code === 'string') {
+        return parsed;
+      }
+    } catch (e) {
+      // Not valid JSON, continue
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Execute script using ScriptRuntime with full extension support
+ * This gives WhatsApp users access to ALL extensions (search, excel, chart, postgresql, etc.)
+ */
+async function executeWhatsAppScript(
+  scriptData: { purpose?: string; code: string },
+  projectId: string,
+  tenantId: string,
+  whatsappNumber: string
+): Promise<string | null> {
+  try {
+    console.log("[WhatsApp] Executing script with ScriptRuntime:", scriptData.purpose || "Unknown purpose");
+    console.log("[WhatsApp] Script code:", scriptData.code.substring(0, 200) + "...");
+    
+    // Load extensions via ExtensionLoader
+    const extensionLoader = new ExtensionLoader();
+    
+    // Initialize project extensions (copies defaults if needed)
+    try {
+      await extensionLoader.initializeProject(projectId);
+    } catch (initError) {
+      console.warn("[WhatsApp] Extension initialization failed (non-critical):", initError);
+    }
+    
+    // Load all enabled extensions
+    const extensions = await extensionLoader.loadExtensions(projectId);
+    console.log("[WhatsApp] Loaded extensions:", Object.keys(extensions).join(", ") || "none");
+
+    // Create a broadcast function that sends progress to WhatsApp
+    const broadcast = (type: "tool_call" | "tool_result", data: any) => {
+      if (type === "tool_call" && data.status === "progress" && data.result?.message) {
+        // Send progress update to WhatsApp
+        sendWhatsAppMessage(projectId, whatsappNumber, {
+          text: `⏳ ${data.result.message}`,
+        }).catch(console.error);
+      }
+    };
+
+    // Create ScriptRuntime with extensions
+    const runtime = new ScriptRuntime({
+      convId: `wa_${whatsappNumber}`,
+      projectId,
+      userId: `whatsapp_user_${whatsappNumber}`,
+      tools: new Map(), // No additional tools registry needed for WA
+      broadcast,
+      toolCallId: `wa_script_${Date.now()}`,
+      purpose: scriptData.purpose || "WhatsApp script",
+      code: scriptData.code,
+      extensions,
+    });
+
+    // Execute the script with timeout
+    const result = await Promise.race([
+      runtime.execute(scriptData.code),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Script execution timeout (30s)")), 30000)
+      ),
+    ]);
+
+    console.log("[WhatsApp] Script execution result:", JSON.stringify(result).substring(0, 200));
+
+    // Format result for WhatsApp
+    if (result === undefined || result === null) {
+      return null;
+    }
+
+    // Check for error in result
+    if (result && typeof result === 'object' && result.__error) {
+      return `❌ ${result.error || 'Unknown error'}`;
+    }
+
+    // Use helper for formatting
+    const formatted = formatToolResultForWhatsApp("script", { purpose: scriptData.purpose }, result);
+    return formatted || String(result);
+
+  } catch (error) {
+    console.error("[WhatsApp] Error executing script:", error);
+    return `❌ Maaf, terjadi kesalahan saat memproses permintaan: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+/**
+ * Format tool execution result for WhatsApp message
+ */
+function formatToolResultForWhatsApp(toolName: string, args: any, result: any): string | null {
+  try {
+    // Handle null/undefined results
+    if (result === null || result === undefined) {
+      return null;
+    }
+
+    // Handle error results
+    if (typeof result === 'object' && result.error) {
+      return `❌ ${result.error}`;
+    }
+
+    // Handle string results
+    if (typeof result === 'string') {
+      // Skip if it looks like internal JSON
+      if (result.startsWith('{') || result.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(result);
+          return formatToolResultForWhatsApp(toolName, args, parsed);
+        } catch {
+          return result;
+        }
+      }
+      return result;
+    }
+
+    // Handle array results (e.g., search results)
+    if (Array.isArray(result)) {
+      if (result.length === 0) {
+        return "Tidak ada hasil ditemukan.";
+      }
+
+      let formatted = "";
+      
+      // Add title based on context
+      if (args?.purpose) {
+        formatted += `📊 *${args.purpose}*\n\n`;
+      } else if (args?.search_query) {
+        formatted += `🔍 *Hasil pencarian: ${args.search_query}*\n\n`;
+      }
+
+      // Format each item in array
+      const maxItems = 5; // Limit to avoid too long messages
+      const items = result.slice(0, maxItems);
+      
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (typeof item === 'object' && item !== null) {
+          // Format search result style objects
+          if (item.title && item.url) {
+            formatted += `*${i + 1}. ${item.title}*\n`;
+            if (item.description) {
+              formatted += `${item.description.substring(0, 150)}${item.description.length > 150 ? '...' : ''}\n`;
+            }
+            formatted += `🔗 ${item.url}\n\n`;
+          } else {
+            // Generic object formatting
+            for (const [key, value] of Object.entries(item)) {
+              if (key.startsWith('_')) continue;
+              const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+              formatted += `• ${label}: ${typeof value === 'object' ? JSON.stringify(value) : value}\n`;
+            }
+            formatted += '\n';
+          }
+        } else {
+          formatted += `• ${item}\n`;
+        }
+      }
+
+      if (result.length > maxItems) {
+        formatted += `\n_...dan ${result.length - maxItems} hasil lainnya_`;
+      }
+
+      return formatted.trim() || null;
+    }
+
+    // Handle object results - format nicely
+    if (typeof result === 'object') {
+      let formatted = "";
+      
+      // Check if it's a search result wrapper with 'results' array
+      if (result.results && Array.isArray(result.results)) {
+        return formatToolResultForWhatsApp(toolName, args, result.results);
+      }
+      
+      // Add purpose/title if available from args
+      if (args?.purpose) {
+        formatted += `📊 *${args.purpose}*\n\n`;
+      } else if (toolName === 'script') {
+        formatted += `📊 *Hasil*\n\n`;
+      }
+
+      // Format object properties
+      for (const [key, value] of Object.entries(result)) {
+        // Skip internal keys
+        if (key.startsWith('_') || key === 'raw') continue;
+        
+        const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+        
+        // Handle nested arrays
+        if (Array.isArray(value)) {
+          if (value.length > 0 && typeof value[0] === 'object') {
+            // It's an array of objects, format separately
+            const nestedFormatted = formatToolResultForWhatsApp(toolName, { ...args, purpose: label }, value);
+            if (nestedFormatted) {
+              formatted += nestedFormatted + '\n';
+            }
+          } else {
+            formatted += `• ${label}: ${value.join(', ')}\n`;
+          }
+        }
+        // Handle nested objects
+        else if (typeof value === 'object' && value !== null) {
+          formatted += `• ${label}: ${JSON.stringify(value)}\n`;
+        } else {
+          formatted += `• ${label}: ${value}\n`;
+        }
+      }
+
+      return formatted.trim() || null;
+    }
+
+    // Fallback for other types
+    return String(result);
+  } catch (error) {
+    console.error("[WhatsApp] Error formatting tool result:", error);
+    return null;
+  }
+}
+
+/**
  * Clean response before sending to WhatsApp
  * Removes tool call JSON and other unwanted content
  */
@@ -671,13 +948,22 @@ async function processWhatsAppMessageWithAI(
     const existingHistory = await chatHistoryStorage.loadChatHistory(convId, projectId, tenantId);
     console.log("[WhatsApp] Loaded history, messages:", existingHistory?.length || 0);
 
-    // Create conversation instance with custom hooks for script progress
+    // Track tool execution results to send if AI response is empty
+    const toolResults: Array<{ toolName: string; result: any }> = [];
+    let toolResultSent = false;
+
+    // Load built-in tools for this conversation (includes script tool with extensions)
+    const tools = getBuiltinTools(convId, projectId, tenantId, uid);
+    console.log("[WhatsApp] Loaded tools:", tools.map(t => t.name).join(", "));
+
+    // Create conversation instance with custom hooks for script progress and tool results
     console.log("[WhatsApp] Creating conversation instance...");
     const conversation = await Conversation.create({
       projectId,
       tenantId,
       convId,
       urlParams: { CURRENT_UID: uid },
+      tools, // <-- Register tools so AI can call script, todo, memory
       hooks: {
         tools: {
           before: async (toolCallId: string, toolName: string, args: any) => {
@@ -695,6 +981,30 @@ async function processWhatsAppMessageWithAI(
               } catch (err) {
                 console.error("[WhatsApp] Failed to send progress message:", err);
                 // Don't throw - progress messages are optional
+              }
+            }
+          },
+          after: async (toolCallId: string, toolName: string, args: any, result: any) => {
+            console.log("[WhatsApp] Tool executed:", toolName, "Result:", JSON.stringify(result).substring(0, 200));
+            
+            // Store tool result for later use
+            toolResults.push({ toolName, result });
+            
+            // For script tool, immediately send result to user
+            // This ensures user gets data even if AI follow-up is empty
+            if (toolName === "script" && result && !toolResultSent) {
+              const formattedResult = formatToolResultForWhatsApp(toolName, args, result);
+              if (formattedResult) {
+                console.log("[WhatsApp] Sending tool result directly to user");
+                try {
+                  await sendWhatsAppMessage(projectId, whatsappNumber, {
+                    text: formattedResult,
+                  });
+                  toolResultSent = true;
+                  console.log("[WhatsApp] Tool result sent successfully");
+                } catch (err) {
+                  console.error("[WhatsApp] Failed to send tool result:", err);
+                }
               }
             }
           },
@@ -752,13 +1062,80 @@ async function processWhatsAppMessageWithAI(
     const history = (conversation as any)._history || [];
     await chatHistoryStorage.saveChatHistory(convId, history, projectId, tenantId, uid);
 
+    // If tool result was already sent, we may not need to send AI's response
+    // unless it contains additional useful information
+    if (toolResultSent) {
+      console.log("[WhatsApp] Tool result already sent to user");
+      
+      // Check if AI generated a meaningful follow-up response
+      if (fullResponse.trim()) {
+        const cleanedResponse = cleanWhatsAppResponse(fullResponse);
+        
+        // Only send if it's not a generic "I will check..." type response
+        // and contains actual new information
+        const genericPatterns = [
+          /saya akan (cek|periksa|lihat|cari)/i,
+          /mari saya (cek|periksa|lihat|cari)/i,
+          /sedang (mencari|mengecek|memeriksa)/i,
+          /baik.*(saya|akan)/i,
+          /tentu.*(saya|akan)/i,
+        ];
+        
+        const isGenericResponse = genericPatterns.some(p => p.test(cleanedResponse));
+        
+        if (cleanedResponse.trim() && !isGenericResponse && cleanedResponse.length > 50) {
+          console.log("[WhatsApp] Sending additional AI context:", cleanedResponse.substring(0, 50) + "...");
+          await sendWhatsAppMessage(projectId, whatsappNumber, {
+            text: cleanedResponse,
+          });
+        } else {
+          console.log("[WhatsApp] Skipping generic/short AI response since tool result already sent");
+        }
+      }
+      return;
+    }
+
     // Send response back to WhatsApp
     if (fullResponse.trim()) {
+      // First, check if this is an inline script JSON that needs execution
+      const inlineScript = detectInlineScriptJSON(fullResponse);
+      
+      if (inlineScript) {
+        console.log("[WhatsApp] Detected inline script JSON, executing...");
+        const scriptResult = await executeWhatsAppScript(inlineScript, projectId, String(tenantId), whatsappNumber);
+        
+        if (scriptResult) {
+          console.log("[WhatsApp] Script executed, sending result:", scriptResult.substring(0, 100) + "...");
+          await sendWhatsAppMessage(projectId, whatsappNumber, {
+            text: scriptResult,
+          });
+          console.log("[WhatsApp] Script result sent successfully");
+        } else {
+          console.warn("[WhatsApp] Script execution returned no result");
+        }
+        return;
+      }
+      
+      // Normal flow: clean and send response
       const cleanedResponse = cleanWhatsAppResponse(fullResponse);
       
       if (!cleanedResponse.trim()) {
-        console.warn("[WhatsApp] WARNING: Response is empty after cleaning. The AI likely executed a tool but didn't generate a text reply.");
+        console.warn("[WhatsApp] WARNING: Response is empty after cleaning. Checking for tool results...");
         console.warn("[WhatsApp] Full raw response was:", fullResponse);
+        
+        // If we have tool results but didn't send them yet, send now
+        if (toolResults.length > 0) {
+          for (const { toolName, result } of toolResults) {
+            const formatted = formatToolResultForWhatsApp(toolName, {}, result);
+            if (formatted) {
+              console.log("[WhatsApp] Sending stored tool result as fallback");
+              await sendWhatsAppMessage(projectId, whatsappNumber, {
+                text: formatted,
+              });
+              break; // Only send first result to avoid spam
+            }
+          }
+        }
         return;
       }
 
@@ -767,6 +1144,18 @@ async function processWhatsAppMessageWithAI(
         text: cleanedResponse,
       });
       console.log("[WhatsApp] Response sent successfully");
+    } else if (toolResults.length > 0) {
+      // No AI response but we have tool results
+      console.log("[WhatsApp] No AI response, sending tool results");
+      for (const { toolName, result } of toolResults) {
+        const formatted = formatToolResultForWhatsApp(toolName, {}, result);
+        if (formatted) {
+          await sendWhatsAppMessage(projectId, whatsappNumber, {
+            text: formatted,
+          });
+          break;
+        }
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
