@@ -58,140 +58,148 @@ declare global {
  * Context documentation for the extension-creator extension
  */
 const context = () =>
-  "" +
-  "### Extension Creator\n" +
-  "Create and modify extensions through natural language.\n" +
-  "\n" +
-  "**IMPORTANT:** Extension Creator always works with project extensions (data/projects/{tenantId}/{projectId}/extensions/). It never modifies default extensions.\n" +
-  "\n" +
-  "**⚠️ EXTENSION NAMING CONVENTION:**\n" +
-  "- Extension IDs MUST be a SINGLE WORD (no hyphens/spaces)\n" +
-  "- Good: \`weather\`, \`webSearch\`, \`dataParser\`, \`apiClient\`\n" +
-  "- Bad: \`web-search\`, \`data-parser\`, \`my-extension\`\n" +
-  "- Namespace is auto-generated: \`weather\` → called as \`weather.function()\`\n" +
-  "- Multi-word descriptions become camelCase: \"web search\" → \`webSearch\`\n" +
-  "\n" +
-  "**Debugging and Output:**\n" +
-  "- Use `progress(message)` to send status updates that you WILL see in the response\n" +
-  "- Use `console.log()` for developer-side debugging (goes to server logs only, NOT visible to you)\n" +
-  "- Return structured data from functions to show results to users\n" +
-  "- On failure, results include `stage`, `issues`, and `nextAction` to guide fixes\n" +
-  "\n" +
-  "**Available Functions:**\n" +
-  "\n" +
-  "#### create(options)\n" +
-  "Create an extension (immediately active).\n" +
-  "`" +
-  "`" +
-  "typescript" +
-  "await create({" +
+  '' +
+  '### Extension Creator\n' +
+  'Create and modify extensions through natural language.\n' +
+  '\n' +
+  '**IMPORTANT:** Extension Creator always works with project extensions (data/projects/{tenantId}/{projectId}/extensions/). It never modifies default extensions.\n' +
+  '\n' +
+  '**⚠️ EXTENSION NAMING CONVENTION:**\n' +
+  '- Extension IDs MUST be a SINGLE WORD (no hyphens/spaces)\n' +
+  '- Good: \`weather\`, \`webSearch\`, \`dataParser\`, \`apiClient\`\n' +
+  '- Bad: \`web-search\`, \`data-parser\`, \`my-extension\`\n' +
+  '- Namespace is auto-generated: \`weather\` → called as \`weather.function()\`\n' +
+  '- Multi-word descriptions become camelCase: \"web search\" → \`webSearch\`\n' +
+  '\n' +
+  '**Debugging and Output:**\n' +
+  '- Use `progress(message)` to send status updates that you WILL see in the response\n' +
+  '- Use `console.log()` for developer-side debugging (goes to server logs only, NOT visible to you)\n' +
+  '- Return structured data from functions to show results to users\n' +
+  '- On failure, results include `stage`, `issues`, and `nextAction` to guide fixes\n' +
+  '\n' +
+  '**Available Functions:**\n' +
+  '\n' +
+  '#### create(options)\n' +
+  'Create an extension (immediately active).\n' +
+  '`' +
+  '`' +
+  'typescript' +
+  'await extensionCreator.create({' +
   '  description: "weather extension that fetches from OpenWeatherMap API",' +
-  "  functions: [" +
+  '  functions: [' +
   '    { description: "get current weather by city", parameters: "city (required), units (optional)" }' +
-  "  ]" +
-  "});" +
-  "`" +
-  "`" +
-  "\n" +
-  "**Parameters:**\n" +
-  "- `description` (required): What the extension does (used to generate one-word ID)\n" +
-  "- `functions` (optional): Array of functions to create\n" +
-  "- `ui` (optional): ui.tsx source for message/inspector UI\n" +
-  "- `id` / `extensionId` (optional): Force extension ID (kebab-case)\n" +
-  "- `dependencies` (optional): { frontend: { pkg: version }, backend: { pkg: version } }\n" +
-  "- `frontendDependencies` (optional): Array or map of frontend packages (normalized into metadata.dependencies.frontend)\n" +
-  "- `category` (optional): Category ID (inferred if not provided)\n" +
+  '  ]' +
+  '});' +
+  '`' +
+  '`' +
+  '\n' +
+  '**Parameters:**\n' +
+  '- `description` (required): What the extension does (used to generate one-word ID)\n' +
+  '- `functions` (optional): Array of functions to create\n' +
+  '- `ui` (optional): ui.tsx source for message/inspector UI\n' +
+  '- `id` / `extensionId` (optional): Force extension ID (kebab-case)\n' +
+  '- **Recommended:** Always pass `extensionId` to keep a stable ID across retries\n' +
+  '- If you retry, **reuse the same `extensionId`** (do not invent a new one)\n' +
+  '- `dependencies` (optional): { frontend: { pkg: version }, backend: { pkg: version } }\n' +
+  '- `frontendDependencies` (optional): Array or map of frontend packages (normalized into metadata.dependencies.frontend)\n' +
+  '- `category` (optional): Category ID (inferred if not provided)\n' +
   '- `author` (optional): Author name (default: "AIBase")\n' +
-  "- `enabled` (optional): Enable extension (default: true)\n" +
-  "\n" +
-  "#### modify(options)\n" +
-  "Modify an existing extension (same options as create).\n" +
-  "`" +
-  "`" +
-  "typescript" +
-  'await modify({ extensionId: "my-extension", description: "update weather extension", code: "..." });' +
-  "`" +
-  "`" +
-  "\n" +
-  "**Parameters:**\n" +
-  "- `extensionId` (required): Target extension ID\n" +
-  "\n" +
-  "**Examples:**\n" +
-  "\n" +
-  "1. **Create a weather extension:**" +
-  "`" +
-  "`" +
-  "typescript" +
-  "const result = await create({" +
+  '- `enabled` (optional): Enable extension (default: true)\n' +
+  '\n' +
+  '#### modify(options)\n' +
+  'Modify an existing extension (same options as create).\n' +
+  '`' +
+  '`' +
+  'typescript' +
+  'await extensionCreator.modify({ extensionId: "my-extension", description: "update weather extension", code: "..." });' +
+  '`' +
+  '`' +
+  '\n' +
+  '**Parameters:**\n' +
+  '- `extensionId` (required): Target extension ID\n' +
+  '\n' +
+  '**Examples:**\n' +
+  '\n' +
+  '1. **Create a weather extension:**' +
+  '`' +
+  '`' +
+  'typescript' +
+  'const result = await extensionCreator.create({' +
   '  description: "weather extension that fetches from OpenWeatherMap API",' +
-  "  functions: [" +
+  '  functions: [' +
   '    { description: "get weather by city", parameters: "city (required), units (optional metric/imperial)" }' +
-  "  ]" +
-  "});" +
-  "if (!result.success) return result;" +
-  "`" +
-  "`" +
-  "\n" +
-  "2. **Create a web search extension (multi-word):**" +
-  "`" +
-  "`" +
-  "typescript" +
-  "await create({" +
+  '  ]' +
+  '});' +
+  'if (!result.success) return result;' +
+  '`' +
+  '`' +
+  '\n' +
+  '2. **Create a web search extension (multi-word):**' +
+  '`' +
+  '`' +
+  'typescript' +
+  'await extensionCreator.create({' +
   '  description: "webSearch for finding current information",' +
-  "  functions: [" +
+  '  functions: [' +
   '    { description: "search the web", parameters: "query (required)" }' +
-  "  ]" +
-  "});" +
-  "// Creates 'webSearch' extension (camelCase from description)" +
-  "`" +
-  "`" +
-  "\n" +
-  "3. **Modify existing extension:**" +
-  "`" +
-  "`" +
-  "typescript" +
-  'await modify({ extensionId: "weather-extension", description: "update weather extension", functions: [ { description: "get current weather by city", parameters: "city (required)" } ] });' +
-  "`" +
-  "`" +
-  "\n" +
-  "4. **Send progress updates (visible to AI):**" +
-  "`" +
-  "`" +
-  "typescript" +
+  '  ]' +
+  '});' +
+  '// Creates \`webSearch\` extension (camelCase from description)' +
+  '`' +
+  '`' +
+  '\n' +
+  '3. **Modify existing extension:**' +
+  '`' +
+  '`' +
+  'typescript' +
+  'await extensionCreator.modify({ extensionId: "weather-extension", description: "update weather extension", functions: [ { description: "get current weather by city", parameters: "city (required)" } ] });' +
+  '`' +
+  '`' +
+  '\n' +
+  '4. **Send progress updates (visible to AI):**' +
+  '`' +
+  '`' +
+  'typescript' +
   'progress("Generating extension code...");' +
-  "const result = await create({...});" +
+  'const result = await extensionCreator.create({...});' +
   'progress("Result: " + (result.success ? "SUCCESS" : "FAILED"));' +
-  "return result;" +
-  "`" +
-  "`" +
-  "\n" +
-  "**Important Notes:**\n" +
-  "- Extension IDs are auto-generated from description as ONE WORD\n" +
-  "- Multi-word descriptions become camelCase: \"data parser\" → \`dataParser\`\n" +
-  "- Extensions are created in data/projects/{tenantId}/{projectId}/extensions/ (project folder)\n" +
-  "- Modifying a default extension automatically copies it to project first\n" +
-  "- Default extensions are never modified directly\n" +
-  "- Use the Extension Settings UI to manage default vs project versions\n" +
-  "- progress() messages are visible to you during execution\n" +
-  "- console.log() goes to server logs only (for developer debugging)\n" +
-  "- create()/modify() apply changes immediately (no staging)\n" +
-  "- Validation runs after writing; if it fails, the extension may be invalid until fixed\n" +
-  "- **Do NOT use the file tool to create/modify extensions** (it writes to conversation files)\n" +
-  "\n" +
-  "**Validation & Error Handling:**\n" +
-  "- create()/modify() return structured errors with `issues`, `stage`, and `nextAction` when something fails\n" +
-  "- Use those details to fix inputs and retry (no separate validate/finalize steps)\n" +
-  "\n" +
-  "**UI Components (ui.tsx):**\n" +
-  "- If the extension needs a custom UI (message UI and/or inspector UI), provide `ui` in create().\n" +
-  "- Add UI metadata in `metadata`:\n" +
-  "  - messageUI: { componentName: \"MyExtensionMessage\", visualizationType: \"my-extension\", uiFile: \"ui.tsx\" }\n" +
-  "  - inspectionUI: { tabLabel: \"Details\", componentName: \"MyExtensionInspector\", uiFile: \"ui.tsx\", showByDefault: true }\n" +
-  "- Message UI must export a named component `${PascalCaseId}Message` (e.g., show-chart -> ShowChartMessage).\n" +
-  "- Inspector UI should be the default export (e.g., export default function MyExtensionInspector()).\n" +
-  "- If you need npm packages for UI, declare them in metadata.dependencies.frontend and access them via window.libs.\n" +
-  "  Example metadata.dependencies.frontend: { \"some-ui-lib\": \"^1.0.0\" }\n" +
-  "  Example ui.tsx usage: const ReactECharts = window.libs.ReactECharts; const echarts = window.libs.echarts;\n";
+  'return result;' +
+  '`' +
+  '`' +
+  '\n' +
+  '**Important Notes:**\n' +
+  '- Extension IDs are auto-generated from description as ONE WORD\n' +
+  '- Multi-word descriptions become camelCase: "data parser" → \`dataParser\`\n' +
+  '- If an extension already exists, **use modify() instead of create()**\n' +
+  '- To avoid accidental new IDs, **always pass the same `extensionId`** on create/modify\n' +
+  '- If the user request is the same or similar, **do not create a new ID**; modify the existing extension\n' +
+  '- Call functions via \`extensionCreator.create(...)\` and \`extensionCreator.modify(...)\`\n' +
+  '- Extensions are created in data/projects/{tenantId}/{projectId}/extensions/ (project folder)\n' +
+  '- Modifying a default extension automatically copies it to project first\n' +
+  '- Default extensions are never modified directly\n' +
+  '- Use the Extension Settings UI to manage default vs project versions\n' +
+  '- progress() messages are visible to you during execution\n' +
+  '- console.log() goes to server logs only (for developer debugging)\n' +
+  '- create()/modify() apply changes immediately (no staging)\n' +
+  '- Validation runs after writing; if it fails, the extension may be invalid until fixed\n' +
+  '- **Do NOT use the file tool to create/modify extensions** (it writes to conversation files)\n' +
+  '\n' +
+  '**Validation & Error Handling:**\n' +
+  '- create()/modify() return structured errors with `issues`, `stage`, and `nextAction` when something fails\n' +
+  '- Use those details to fix inputs and retry (no separate validate/finalize steps)\n' +
+  '\n' +
+  '**UI Components (ui.tsx):**\n' +
+  '- If the extension needs a custom UI (message UI and/or inspector UI), provide `ui` in create().\n' +
+  '- Avoid backticks inside the ui string; use regular quotes in <style> or strings.\n' +
+  '- UI code should NOT use import/JSX; use `window.libs.React.createElement` and `window.libs["package-name"]` instead.\n' +
+  '- Add UI metadata in `metadata`:\n' +
+  '  - messageUI: { componentName: "MyExtensionMessage", visualizationType: "my-extension", uiFile: "ui.tsx" }\n' +
+  '  - inspectionUI: { tabLabel: "Details", componentName: "MyExtensionInspector", uiFile: "ui.tsx", showByDefault: true }\n' +
+  '- Message UI must export a named component `${PascalCaseId}Message` (e.g., show-chart -> ShowChartMessage).\n' +
+  '- Inspector UI should be the default export (e.g., export default function MyExtensionInspector()).\n' +
+  '- If you need npm packages for UI, declare them in metadata.dependencies.frontend and access them via window.libs.\n' +
+  '  Example metadata.dependencies.frontend: { "some-ui-lib": "^1.0.0" }\n' +
+  '  Example ui.tsx usage: const ReactECharts = window.libs.ReactECharts; const echarts = window.libs.echarts;\n';
 
 const LOCK_TTL_MS = 60_000;
 
@@ -406,6 +414,9 @@ function buildFailureResult(input: {
   metadata?: any;
   code?: string;
   issues?: string[];
+  message?: string;
+  nextAction?: string;
+  warning?: string;
 }) {
   const normalized = normalizeError(input.error);
   const preview = input.metadata ? generatePreview(input.metadata, input.code) : undefined;
@@ -424,10 +435,11 @@ function buildFailureResult(input: {
     extensionId: input.extensionId,
     preview,
     path,
-    message: `Operation failed during "${input.stage}".`,
-    nextAction: input.issues?.length
+    message: input.message ?? `Operation failed during "${input.stage}".`,
+    nextAction: input.nextAction ?? (input.issues?.length
       ? "Fix the issues above and retry the same call."
-      : "Review the error details and retry with corrected inputs.",
+      : "Review the error details and retry with corrected inputs."),
+    warning: input.warning,
     debug: {
       projectId: input.projectId,
       tenantId: input.tenantId,
@@ -582,6 +594,9 @@ const create = async (options: CreateOptions) => {
         metadata,
       });
     }
+    if (!code) {
+      code = generateEmptyCode(metadata);
+    }
 
     if (options.ui) {
       ui = normalizeUIContent(options.ui);
@@ -645,6 +660,13 @@ const create = async (options: CreateOptions) => {
         tenantId,
         metadata,
         code,
+        issues: [
+          "Extension files may have been written but could not be reloaded.",
+          "Do NOT create a new extension ID; use modify() with the SAME extensionId to fix.",
+        ],
+        message: "Reload after write failed; files may already exist on disk.",
+        nextAction: "Call modify() with the same extensionId to fix the written files (do not create a new ID).",
+        warning: "Write succeeded but reload failed.",
       });
     }
 
@@ -806,6 +828,9 @@ const modify = async (input: ModifyOptions | string) => {
         metadata,
       });
     }
+    if (!code) {
+      code = generateEmptyCode(metadata);
+    }
 
     ui = base.ui;
     if (opts.ui) {
@@ -852,6 +877,13 @@ const modify = async (input: ModifyOptions | string) => {
         tenantId,
         metadata,
         code,
+        issues: [
+          "Extension files may have been written but could not be reloaded.",
+          "Do NOT create a new extension ID; retry modify() with the SAME extensionId.",
+        ],
+        message: "Reload after write failed; files may already exist on disk.",
+        nextAction: "Retry modify() with the same extensionId to fix the written files.",
+        warning: "Write succeeded but reload failed.",
       });
     }
 
@@ -1302,20 +1334,51 @@ function parseParameters(params: string | any): string {
 
   // If already a string, parse old format
   if (typeof params === "string") {
-    // Parse: "param1 (required), param2 (optional)" -> "param1, param2"
+    // Parse: "param1 (required), param2 optional" -> "param1, param2"
     return params
       .split(",")
       .map((p) => p.trim())
+      .filter((p) => p)
+      .map((p) => {
+        // Remove parenthetical hints and trailing optional/required tokens
+        const cleaned = p
+          .replace(/\([^)]*\)/g, " ")
+          .replace(/\b(optional|required)\b/gi, " ")
+          .trim();
+        const match = cleaned.match(/^([A-Za-z_$][\w$]*)/);
+        return match ? match[1] : "";
+      })
       .filter((p) => p)
       .join(", ");
   }
 
   // Handle OpenAI format: {type: "object", properties: {...}, required: [...]}
   if (params.properties && typeof params.properties === "object") {
-    return Object.keys(params.properties).join(", ");
+    return Object.keys(params.properties)
+      .map((key) => {
+        const match = key.match(/^([A-Za-z_$][\w$]*)/);
+        return match ? match[1] : "";
+      })
+      .filter((p) => p)
+      .join(", ");
   }
 
   return "";
+}
+
+function generateEmptyCode(metadata: any): string {
+  const name = metadata?.name || metadata?.id || "Extension";
+  const description = metadata?.description || "";
+  return `
+/**
+ * ${name}
+ * ${description}
+ */
+
+const extension = {};
+
+return extension;
+`.trim();
 }
 
 /**
