@@ -352,6 +352,13 @@ export async function handleWhatsAppWebhook(req: Request): Promise<Response> {
       });
     }
 
+    // CHECK: If 'from' field is empty, aimeow couldn't resolve the phone number
+    // Try to extract from raw fields, but if we can't find one, we cannot reply
+    if (!messageData.from || messageData.from === "") {
+      console.warn("[WhatsApp] 'from' field is empty (LID not resolved), attempting extraction from raw fields");
+      // Don't return early - try to extract from raw fields below
+    }
+
     // Extract WhatsApp phone number for reply target
     // For LID contacts: rawSenderAlt contains the actual phone number
     // For normal contacts: rawChat/rawSender contain the phone number
