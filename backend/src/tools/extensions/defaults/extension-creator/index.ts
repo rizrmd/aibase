@@ -25,8 +25,6 @@ interface CreateOptions {
   metadata?: Record<string, any>;
   dependencies?: DependencyConfig;
   frontendDependencies?: string[] | Record<string, string>;
-  mode?: "replace" | "merge";
-  finalize?: boolean;
 }
 
 interface FunctionDescription {
@@ -39,26 +37,7 @@ interface FunctionDescription {
   };
 }
 
-interface ModifyOptions {
-  instruction: string;
-  finalize?: boolean;
-  extensionId?: string;
-  id?: string;
-}
-
-interface CreateOrUpdateControl {
-  finalize?: boolean;
-  mode?: "replace" | "merge";
-}
-
-interface ExtensionSnapshot {
-  metadata?: any;
-  code?: string;
-  ui?: string;
-  projectId?: string;
-  tenantId?: string | number;
-  extensionId?: string;
-}
+interface ModifyOptions extends CreateOptions {}
 
 interface DependencyConfig {
   frontend?: Record<string, string>;
@@ -96,20 +75,21 @@ const context = () =>
   "- Use `progress(message)` to send status updates that you WILL see in the response\n" +
   "- Use `console.log()` for developer-side debugging (goes to server logs only, NOT visible to you)\n" +
   "- Return structured data from functions to show results to users\n" +
+  "- On failure, results include `stage`, `issues`, and `nextAction` to guide fixes\n" +
   "\n" +
   "**Available Functions:**\n" +
   "\n" +
-  "#### createOrUpdate(options, control?)\n" +
-  "Create or update an extension (staging by default).\n" +
+  "#### create(options)\n" +
+  "Create an extension (immediately active).\n" +
   "`" +
   "`" +
   "typescript" +
-  "await createOrUpdate({" +
+  "await create({" +
   '  description: "weather extension that fetches from OpenWeatherMap API",' +
   "  functions: [" +
   '    { description: "get current weather by city", parameters: "city (required), units (optional)" }' +
   "  ]" +
-  "}, { finalize: false, mode: \"replace\" });" +
+  "});" +
   "`" +
   "`" +
   "\n" +
@@ -123,59 +103,18 @@ const context = () =>
   "- `category` (optional): Category ID (inferred if not provided)\n" +
   '- `author` (optional): Author name (default: "AIBase")\n' +
   "- `enabled` (optional): Enable extension (default: true)\n" +
-  "- `mode` (optional): \"replace\" | \"merge\" (default: \"replace\")\n" +
-  "- `finalize` (optional): Write files immediately (default: false)\n" +
   "\n" +
-  "**Control (2nd argument):**\n" +
-  "- `mode` (optional): \"replace\" | \"merge\" (default: \"replace\")\n" +
-  "- `finalize` (optional): Write files immediately (default: false)\n" +
-  "\n" +
-  "#### modify(input)\n" +
-  "Modify an existing extension.\n" +
+  "#### modify(options)\n" +
+  "Modify an existing extension (same options as create).\n" +
   "`" +
   "`" +
   "typescript" +
-  'await modify({ extensionId: "my-extension", instruction: "rename getWeather to getCurrentWeather" });' +
-  "\n" +
-  "await modify({ extensionId: \"my-extension\", instruction: \"rename getWeather to getCurrentWeather\", finalize: true });" +
+  'await modify({ extensionId: "my-extension", description: "update weather extension", code: "..." });' +
   "`" +
   "`" +
   "\n" +
   "**Parameters:**\n" +
-  "- `instruction` (required): Natural language instruction\n" +
   "- `extensionId` (required): Target extension ID\n" +
-  "- `finalize` (optional): Write files immediately (default: true)\n" +
-  "\n" +
-  "#### show(extensionId)\n" +
-  "Show current staging state for an extension.\n" +
-  "`" +
-  "`" +
-  "typescript" +
-  "await show({ extensionId: \"my-extension\" });" +
-  "`" +
-  "`" +
-  "\n" +
-  "#### validate(extensionId)\n" +
-  "Validate staging without writing.\n" +
-  "`" +
-  "`" +
-  "typescript" +
-  "const result = await validate({ extensionId: \"my-extension\" });" +
-  "if (!result.ok) {" +
-  '  return "Errors:\\n" + result.errors.join("\\n");' +
-  "}" +
-  "`" +
-  "`" +
-  "\n" +
-  "#### finalize(extensionId)\n" +
-  "Create the extension (swap staging to active).\n" +
-  "`" +
-  "`" +
-  "typescript" +
-  "const result = await finalize({ extensionId: \"my-extension\" });" +
-  'return "Created! " + result.message;' +
-  "`" +
-  "`" +
   "\n" +
   "**Examples:**\n" +
   "\n" +
@@ -183,14 +122,13 @@ const context = () =>
   "`" +
   "`" +
   "typescript" +
-  "const result = await createOrUpdate({" +
+  "const result = await create({" +
   '  description: "weather extension that fetches from OpenWeatherMap API",' +
   "  functions: [" +
   '    { description: "get weather by city", parameters: "city (required), units (optional metric/imperial)" }' +
   "  ]" +
-  "}, { finalize: false });" +
-  "await validate({ extensionId: result.extensionId });" +
-  "await finalize({ extensionId: result.extensionId });" +
+  "});" +
+  "if (!result.success) return result;" +
   "`" +
   "`" +
   "\n" +
@@ -198,7 +136,7 @@ const context = () =>
   "`" +
   "`" +
   "typescript" +
-  "await createOrUpdate({" +
+  "await create({" +
   '  description: "webSearch for finding current information",' +
   "  functions: [" +
   '    { description: "search the web", parameters: "query (required)" }' +
@@ -212,7 +150,7 @@ const context = () =>
   "`" +
   "`" +
   "typescript" +
-  'await modify({ extensionId: "weather-extension", instruction: "rename getWeather to getCurrentWeather", finalize: true });' +
+  'await modify({ extensionId: "weather-extension", description: "update weather extension", functions: [ { description: "get current weather by city", parameters: "city (required)" } ] });' +
   "`" +
   "`" +
   "\n" +
@@ -221,8 +159,8 @@ const context = () =>
   "`" +
   "typescript" +
   'progress("Generating extension code...");' +
-  "const result = await createOrUpdate({...}, { finalize: false });" +
-  'progress("Validation: " + (result.ready ? "PASS" : "FAIL"));' +
+  "const result = await create({...});" +
+  'progress("Result: " + (result.success ? "SUCCESS" : "FAILED"));' +
   "return result;" +
   "`" +
   "`" +
@@ -236,21 +174,16 @@ const context = () =>
   "- Use the Extension Settings UI to manage default vs project versions\n" +
   "- progress() messages are visible to you during execution\n" +
   "- console.log() goes to server logs only (for developer debugging)\n" +
-  "- Staging is the source of truth: createOrUpdate()/modify() write staging, show()/validate()/finalize() read staging\n" +
+  "- create()/modify() apply changes immediately (no staging)\n" +
+  "- Validation runs after writing; if it fails, the extension may be invalid until fixed\n" +
   "- **Do NOT use the file tool to create/modify extensions** (it writes to conversation files)\n" +
-  "- Use finalize({ extensionId }) or createOrUpdate(..., { finalize: true }) to write extension files\n" +
   "\n" +
-  "**Validation Feedback Loop (MANDATORY):**\n" +
-  "- After any createOrUpdate()/modify(), ALWAYS call validate({ extensionId }).\n" +
-  "- If validate() returns errors:\n" +
-  "  1) Fix the staging snapshot with createOrUpdate()/modify() using the errors as guidance.\n" +
-  "  2) validate() again.\n" +
-  "  3) Repeat until ok, then finalize().\n" +
-  "- NEVER call finalize() when validate() is failing.\n" +
-  "- If repeated attempts fail (e.g., 3 tries), return the validation errors to the user instead of finalizing.\n" +
+  "**Validation & Error Handling:**\n" +
+  "- create()/modify() return structured errors with `issues`, `stage`, and `nextAction` when something fails\n" +
+  "- Use those details to fix inputs and retry (no separate validate/finalize steps)\n" +
   "\n" +
   "**UI Components (ui.tsx):**\n" +
-  "- If the extension needs a custom UI (message UI and/or inspector UI), provide `ui` in createOrUpdate().\n" +
+  "- If the extension needs a custom UI (message UI and/or inspector UI), provide `ui` in create().\n" +
   "- Add UI metadata in `metadata`:\n" +
   "  - messageUI: { componentName: \"MyExtensionMessage\", visualizationType: \"my-extension\", uiFile: \"ui.tsx\" }\n" +
   "  - inspectionUI: { tabLabel: \"Details\", componentName: \"MyExtensionInspector\", uiFile: \"ui.tsx\", showByDefault: true }\n" +
@@ -261,7 +194,6 @@ const context = () =>
   "  Example ui.tsx usage: const ReactECharts = window.libs.ReactECharts; const echarts = window.libs.echarts;\n";
 
 const LOCK_TTL_MS = 60_000;
-const MAX_BACKUPS = 3;
 
 function getRuntimeContext(): { projectId: string; tenantId: string | number } {
   return {
@@ -329,119 +261,84 @@ async function releaseExtensionLock(projectId: string, tenantId: string | number
   await fs.unlink(lockPath).catch(() => {});
 }
 
-async function writeToStaging(snapshot: ExtensionSnapshot): Promise<string> {
+async function writeExtensionFiles(input: {
+  metadata: any;
+  code?: string;
+  ui?: string;
+  projectId: string;
+  tenantId: string | number;
+  extensionId: string;
+}): Promise<{ path: string; files: string[] }> {
   const fs = await import("fs/promises");
   const path = await import("path");
-  if (!snapshot.extensionId || !snapshot.projectId || !snapshot.tenantId) {
-    throw new Error("Staging context is incomplete");
+  if (!input.extensionId || !input.projectId || input.tenantId === undefined) {
+    throw new Error("Write context is incomplete");
   }
-  const basePath = await getExtensionsBasePath(snapshot.tenantId, snapshot.projectId);
-  const stagingPath = path.join(basePath, ".staging", snapshot.extensionId);
+  const basePath = await getExtensionsBasePath(input.tenantId, input.projectId);
+  const targetPath = path.join(basePath, input.extensionId);
 
-  await fs.rm(stagingPath, { recursive: true, force: true });
-  await fs.mkdir(stagingPath, { recursive: true });
-
-  await fs.writeFile(
-    path.join(stagingPath, "metadata.json"),
-    JSON.stringify(snapshot.metadata, null, 2),
-  );
-
-  if (snapshot.code) {
-    await fs.writeFile(path.join(stagingPath, "index.ts"), snapshot.code);
-  }
-
-  if (snapshot.ui) {
-    await fs.writeFile(path.join(stagingPath, "ui.tsx"), snapshot.ui);
-  }
-
-  return stagingPath;
-}
-
-async function cleanupStaging(projectId: string, tenantId: string | number, extensionId: string): Promise<void> {
-  const fs = await import("fs/promises");
-  const path = await import("path");
-  const basePath = await getExtensionsBasePath(tenantId, projectId);
-  const stagingPath = path.join(basePath, ".staging", extensionId);
-  await fs.rm(stagingPath, { recursive: true, force: true });
-}
-
-async function loadStagingSnapshot(
-  projectId: string,
-  tenantId: string | number,
-  extensionId: string,
-): Promise<ExtensionSnapshot | null> {
-  const fs = await import("fs/promises");
-  const path = await import("path");
-  const basePath = await getExtensionsBasePath(tenantId, projectId);
-  const stagingPath = path.join(basePath, ".staging", extensionId);
+  await fs.mkdir(basePath, { recursive: true });
 
   try {
-    const metadataContent = await fs.readFile(
-      path.join(stagingPath, "metadata.json"),
-      "utf-8",
+    await fs.mkdir(targetPath, { recursive: true });
+
+    await fs.writeFile(
+      path.join(targetPath, "metadata.json"),
+      JSON.stringify(input.metadata, null, 2),
     );
-    const metadata = JSON.parse(metadataContent);
 
-    let code: string | undefined;
-    let ui: string | undefined;
-
-    try {
-      code = await fs.readFile(path.join(stagingPath, "index.ts"), "utf-8");
-    } catch {
-      // code is optional
+    if (input.code) {
+      await fs.writeFile(path.join(targetPath, "index.ts"), input.code);
     }
 
-    try {
-      ui = await fs.readFile(path.join(stagingPath, "ui.tsx"), "utf-8");
-    } catch {
-      // ui is optional
+    if (input.ui) {
+      await fs.writeFile(path.join(targetPath, "ui.tsx"), input.ui);
     }
-
-    return {
-      metadata,
-      code,
-      ui,
-      projectId,
-      tenantId,
-      extensionId,
-    };
-  } catch {
-    return null;
+  } catch (error) {
+    throw error;
   }
+
+  const files = [
+    "metadata.json",
+    ...(input.code ? ["index.ts"] : []),
+    ...(input.ui ? ["ui.tsx"] : []),
+  ];
+
+  return { path: targetPath, files };
 }
 
-async function validateSnapshot(snapshot: ExtensionSnapshot): Promise<{ ok: boolean; errors: string[] }> {
+async function validateExtension(input: { metadata: any; code?: string; ui?: string }): Promise<{ ok: boolean; errors: string[] }> {
   const errors: string[] = [];
 
-  if (!snapshot.metadata) {
+  if (!input.metadata) {
     errors.push("No metadata");
     return { ok: false, errors };
   }
 
-  if (!snapshot.metadata.id) {
+  if (!input.metadata.id) {
     errors.push("Extension ID is required");
   }
-  if (!snapshot.metadata.name) {
+  if (!input.metadata.name) {
     errors.push("Name is required");
   }
-  if (!snapshot.metadata.description || snapshot.metadata.description.length < 10) {
+  if (!input.metadata.description || input.metadata.description.length < 10) {
     errors.push("Description must be at least 10 characters");
   }
-  if (!snapshot.metadata.category) {
+  if (!input.metadata.category) {
     errors.push("Category is required");
   }
 
-  if ((snapshot.metadata.messageUI || snapshot.metadata.inspectionUI) && !snapshot.ui) {
+  if ((input.metadata.messageUI || input.metadata.inspectionUI) && !input.ui) {
     errors.push("UI metadata provided but ui.tsx is missing");
   }
 
-  if (snapshot.code) {
-    const syntaxCheck = await checkSyntax(snapshot.code);
+  if (input.code) {
+    const syntaxCheck = await checkSyntax(input.code);
     if (!syntaxCheck.ok) {
       errors.push(`Syntax error: ${syntaxCheck.error}`);
     }
 
-    if (!snapshot.code.includes("return")) {
+    if (!input.code.includes("return")) {
       errors.push("Missing return statement - extension must return an object");
     }
   }
@@ -449,110 +346,21 @@ async function validateSnapshot(snapshot: ExtensionSnapshot): Promise<{ ok: bool
   return { ok: errors.length === 0, errors };
 }
 
-async function testLoadSnapshot(snapshot: ExtensionSnapshot): Promise<{ ok: boolean; error?: string; exports?: string[] }> {
-  if (!snapshot.code) {
-    return {
-      ok: false,
-      error: "No code to test",
-    };
-  }
-
-  try {
-    const transpiler = new (await import("bun")).Transpiler({ loader: "ts" });
-    transpiler.transformSync(snapshot.code);
-
-    return {
-      ok: true,
-      exports: ["syntax_valid"],
-    };
-  } catch (error: any) {
-    return {
-      ok: false,
-      error: error.message || "Syntax error",
-    };
-  }
-}
-
-function generatePreviewFromSnapshot(snapshot: ExtensionSnapshot): string {
+function generatePreview(metadata: any, code?: string): string {
   const parts: string[] = [];
 
-  if (snapshot.metadata) {
-    parts.push(`ID: ${snapshot.metadata.id}`);
-    parts.push(`Name: ${snapshot.metadata.name}`);
-    parts.push(`Category: ${snapshot.metadata.category}`);
+  if (metadata) {
+    parts.push(`ID: ${metadata.id}`);
+    parts.push(`Name: ${metadata.name}`);
+    parts.push(`Category: ${metadata.category}`);
   }
 
-  if (snapshot.code) {
-    const functions = extractFunctions(snapshot.code);
+  if (code) {
+    const functions = extractFunctions(code);
     parts.push(`Functions: ${functions.join(", ")}`);
   }
 
   return parts.join("\n");
-}
-
-async function cleanupBackups(projectId: string, tenantId: string | number, extensionId: string): Promise<void> {
-  const fs = await import("fs/promises");
-  const path = await import("path");
-  const basePath = await getExtensionsBasePath(tenantId, projectId);
-  const backupDir = path.join(basePath, ".bak");
-
-  let entries: string[] = [];
-  try {
-    entries = await fs.readdir(backupDir);
-  } catch {
-    return;
-  }
-
-  const prefix = `${extensionId}-`;
-  const backups = entries
-    .filter((name) => name.startsWith(prefix))
-    .map((name) => ({
-      name,
-      timestamp: Number(name.slice(prefix.length)) || 0,
-    }))
-    .sort((a, b) => b.timestamp - a.timestamp);
-
-  const toRemove = backups.slice(MAX_BACKUPS);
-  for (const entry of toRemove) {
-    await fs.rm(path.join(backupDir, entry.name), { recursive: true, force: true });
-  }
-}
-
-async function atomicSwap(projectId: string, tenantId: string | number, extensionId: string): Promise<void> {
-  const fs = await import("fs/promises");
-  const path = await import("path");
-  const basePath = await getExtensionsBasePath(tenantId, projectId);
-  const stagingPath = path.join(basePath, ".staging", extensionId);
-  const targetPath = path.join(basePath, extensionId);
-  const backupDir = path.join(basePath, ".bak");
-  const backupPath = path.join(backupDir, `${extensionId}-${Date.now()}`);
-
-  await fs.mkdir(backupDir, { recursive: true });
-
-  let hasBackup = false;
-  try {
-    await fs.rename(targetPath, backupPath);
-    hasBackup = true;
-  } catch (error: any) {
-    if (error.code !== "ENOENT") {
-      throw error;
-    }
-  }
-
-  try {
-    await fs.rename(stagingPath, targetPath);
-  } catch (error) {
-    if (hasBackup) {
-      try {
-        await fs.rename(backupPath, targetPath);
-      } catch {
-        // If rollback fails, surface original error
-      }
-    }
-    throw error;
-  }
-
-  await cleanupBackups(projectId, tenantId, extensionId);
 }
 
 async function invalidateExtensionUICache(extensionId: string, projectId: string, tenantId: string | number): Promise<void> {
@@ -565,198 +373,387 @@ async function invalidateExtensionUICache(extensionId: string, projectId: string
 }
 
 /**
- * Create or update extension snapshot
+ * Error helpers
  */
-const createOrUpdate = async (options: CreateOptions, control?: CreateOrUpdateControl) => {
-  const mode = control?.mode ?? options.mode ?? "replace";
-  const finalizeFlag = control?.finalize ?? options.finalize ?? false;
+function normalizeError(error: unknown): { message: string; name?: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      message: error.message || "Unknown error",
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === "string") {
+    return { message: error };
+  }
+
+  try {
+    const serialized = JSON.stringify(error);
+    return { message: serialized ?? String(error) };
+  } catch {
+    return { message: String(error) };
+  }
+}
+
+function buildFailureResult(input: {
+  action: "create" | "modify";
+  stage: string;
+  error: unknown;
+  extensionId?: string;
+  projectId?: string;
+  tenantId?: string | number;
+  metadata?: any;
+  code?: string;
+  issues?: string[];
+}) {
+  const normalized = normalizeError(input.error);
+  const preview = input.metadata ? generatePreview(input.metadata, input.code) : undefined;
+  const path = input.extensionId && input.projectId && input.tenantId !== undefined
+    ? `data/projects/${input.tenantId}/${input.projectId}/extensions/${input.extensionId}/`
+    : undefined;
+
+  const result = {
+    success: false,
+    ready: false,
+    action: input.action,
+    stage: input.stage,
+    error: normalized.message,
+    errorType: normalized.name,
+    issues: input.issues,
+    extensionId: input.extensionId,
+    preview,
+    path,
+    message: `Operation failed during "${input.stage}".`,
+    nextAction: input.issues?.length
+      ? "Fix the issues above and retry the same call."
+      : "Review the error details and retry with corrected inputs.",
+    debug: {
+      projectId: input.projectId,
+      tenantId: input.tenantId,
+      errorStack: normalized.stack,
+    },
+  };
+
+  console.error(`[ExtensionCreator] ${input.action} failed`, {
+    stage: input.stage,
+    extensionId: input.extensionId,
+    error: normalized,
+    issues: input.issues,
+    preview,
+  });
+
+  return result;
+}
+
+function buildValidationFailure(input: {
+  action: "create" | "modify";
+  issues: string[];
+  extensionId?: string;
+  projectId?: string;
+  tenantId?: string | number;
+  metadata: any;
+  code?: string;
+  postWrite?: boolean;
+}) {
+  const preview = generatePreview(input.metadata, input.code);
+  const message = input.postWrite
+    ? "Validation failed after writing files. Extension may be invalid."
+    : "Validation failed. No files were written.";
+  const result = {
+    success: false,
+    ready: false,
+    action: input.action,
+    stage: "validate",
+    issues: input.issues,
+    extensionId: input.extensionId,
+    preview,
+    path: input.extensionId && input.projectId && input.tenantId !== undefined
+      ? `data/projects/${input.tenantId}/${input.projectId}/extensions/${input.extensionId}/`
+      : undefined,
+    message,
+    nextAction: input.postWrite
+      ? "Fix the validation issues and call modify() to overwrite with a valid version."
+      : "Fix the validation issues and retry the same call.",
+    warning: input.postWrite ? "Files were written before validation." : undefined,
+  };
+
+  console.warn(`[ExtensionCreator] ${input.action} validation failed`, {
+    extensionId: input.extensionId,
+    issues: input.issues,
+    preview,
+    postWrite: input.postWrite,
+  });
+
+  return result;
+}
+
+/**
+ * Create extension (immediately active)
+ */
+const create = async (options: CreateOptions) => {
   const { projectId, tenantId } = getRuntimeContext();
 
   let extensionId = options.extensionId || options.id;
-  let baseSnapshot: ExtensionSnapshot | null = null;
+  let metadata: any | undefined;
+  let code: string | undefined;
+  let ui: string | undefined;
+  let lockAcquired = false;
+  let stage = "prepare";
 
-  if (mode === "merge" && extensionId) {
-    baseSnapshot = await loadExtension(projectId, tenantId, extensionId);
-    if (!baseSnapshot) {
-      const defaultSnapshot = await loadDefaultExtension(extensionId);
-      if (defaultSnapshot) {
-        baseSnapshot = {
-          ...defaultSnapshot,
-          projectId,
-          tenantId,
-          extensionId,
-        };
+  try {
+    const baseMetadata: Record<string, any> = {};
+    const baseDescription =
+      options.description ||
+      options.metadata?.description ||
+      options.name ||
+      "";
+
+    if (!extensionId) {
+      if (!baseDescription) {
+        throw new Error("Description is required");
       }
+      extensionId = generateIdFromDescription(options.name || baseDescription);
     }
-  }
 
-  const baseMetadata = baseSnapshot?.metadata || {};
-  const baseDescription =
-    options.description ||
-    options.metadata?.description ||
-    baseMetadata.description ||
-    options.name ||
-    baseMetadata.name ||
-    "";
-
-  if (!extensionId) {
-    if (!baseDescription) {
+    const description = options.description || options.metadata?.description;
+    if (!description) {
       throw new Error("Description is required");
     }
-    extensionId = generateIdFromDescription(options.name || baseDescription);
-  }
 
-  const description = options.description || options.metadata?.description || baseMetadata.description;
-  if (!description) {
-    throw new Error("Description is required");
-  }
-
-  const normalizedDeps = normalizeDependencyConfig(
-    options.dependencies,
-    options.frontendDependencies,
-    options.metadata?.dependencies ?? (mode === "merge" ? baseMetadata.dependencies : undefined),
-  );
-
-  const metadata = {
-    ...baseMetadata,
-    ...options.metadata,
-    id: extensionId,
-    name: options.name || baseMetadata.name || generateNameFromId(extensionId),
-    description,
-    category: options.category || baseMetadata.category || inferCategory(description),
-    author: options.author || baseMetadata.author || "AIBase",
-    version: options.version || baseMetadata.version || "1.0.0",
-    enabled: options.enabled !== undefined ? options.enabled : (baseMetadata.enabled ?? true),
-    isDefault: false,
-    createdAt: baseMetadata.createdAt || Date.now(),
-    updatedAt: Date.now(),
-    ...(normalizedDeps ? { dependencies: normalizedDeps } : {}),
-  };
-
-  let code = mode === "merge" ? baseSnapshot?.code : undefined;
-  if (options.code) {
-    code = options.code;
-  } else if (options.functions) {
-    const functionsArray = normalizeFunctionsArray(options.functions);
-    code = await generateCode({
-      description,
-      functions: functionsArray,
-      metadata,
-    });
-  }
-
-  let ui = mode === "merge" ? baseSnapshot?.ui : undefined;
-  if (options.ui) {
-    ui = normalizeUIContent(options.ui);
-  }
-
-  if (!ui) {
-    const shouldGenerate = shouldGenerateUI(description, metadata, normalizedDeps);
-    if (shouldGenerate) {
-      const uiResult = generateDefaultUI({
-        description,
-        metadata,
-        dependencies: normalizedDeps,
+    stage = "checkExists";
+    const existingProject = await loadExtension(projectId, tenantId, extensionId);
+    if (existingProject) {
+      return buildFailureResult({
+        action: "create",
+        stage,
+        error: new Error(`Extension "${extensionId}" already exists in the project.`),
+        extensionId,
+        projectId,
+        tenantId,
+        issues: [`Extension "${extensionId}" already exists. Use modify() to update it.`],
       });
-      ui = uiResult.ui;
-      if (uiResult.messageUI && !metadata.messageUI) {
-        metadata.messageUI = uiResult.messageUI;
-      }
-      if (uiResult.inspectionUI && !metadata.inspectionUI) {
-        metadata.inspectionUI = uiResult.inspectionUI;
+    }
+
+    const existingDefault = await loadDefaultExtension(extensionId);
+    if (existingDefault) {
+      return buildFailureResult({
+        action: "create",
+        stage,
+        error: new Error(`Extension "${extensionId}" already exists as a default extension.`),
+        extensionId,
+        projectId,
+        tenantId,
+        issues: [`Extension "${extensionId}" exists in defaults. Use modify() to override it in the project.`],
+      });
+    }
+
+    stage = "normalize";
+    const normalizedDeps = normalizeDependencyConfig(
+      options.dependencies,
+      options.frontendDependencies,
+      options.metadata?.dependencies,
+    );
+
+    metadata = {
+      ...baseMetadata,
+      ...options.metadata,
+      id: extensionId,
+      name: options.name || baseMetadata.name || generateNameFromId(extensionId),
+      description,
+      category: options.category || baseMetadata.category || inferCategory(description),
+      author: options.author || baseMetadata.author || "AIBase",
+      version: options.version || baseMetadata.version || "1.0.0",
+      enabled: options.enabled !== undefined ? options.enabled : (baseMetadata.enabled ?? true),
+      isDefault: false,
+      createdAt: baseMetadata.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      ...(normalizedDeps ? { dependencies: normalizedDeps } : {}),
+    };
+
+    if (options.code) {
+      code = options.code;
+    } else if (options.functions) {
+      stage = "generateCode";
+      const functionsArray = normalizeFunctionsArray(options.functions);
+      code = await generateCode({
+        description,
+        functions: functionsArray,
+        metadata,
+      });
+    }
+
+    if (options.ui) {
+      ui = normalizeUIContent(options.ui);
+    }
+
+    if (!ui) {
+      const shouldGenerate = shouldGenerateUI(description, metadata, normalizedDeps);
+      if (shouldGenerate) {
+        const uiResult = generateDefaultUI({
+          description,
+          metadata,
+          dependencies: normalizedDeps,
+        });
+        ui = uiResult.ui;
+        if (uiResult.messageUI && !metadata.messageUI) {
+          metadata.messageUI = uiResult.messageUI;
+        }
+        if (uiResult.inspectionUI && !metadata.inspectionUI) {
+          metadata.inspectionUI = uiResult.inspectionUI;
+        }
       }
     }
-  }
 
-  const snapshot: ExtensionSnapshot = {
-    metadata,
-    code,
-    ui,
-    projectId,
-    tenantId,
-    extensionId,
-  };
+    stage = "lock";
+    await acquireExtensionLock(projectId, tenantId, extensionId);
+    lockAcquired = true;
 
-  await acquireExtensionLock(projectId, tenantId, extensionId);
-  try {
-    await writeToStaging(snapshot);
-    const validation = await validateSnapshot(snapshot);
+    stage = "checkExists";
+    const existingAfterLock = await loadExtension(projectId, tenantId, extensionId);
+    if (existingAfterLock) {
+      return buildFailureResult({
+        action: "create",
+        stage,
+        error: new Error(`Extension "${extensionId}" already exists in the project.`),
+        extensionId,
+        projectId,
+        tenantId,
+        issues: [`Extension "${extensionId}" already exists. Use modify() to update it.`],
+      });
+    }
 
-    if (finalizeFlag) {
-      if (!validation.ok) {
-        return {
-          success: false,
-          ready: false,
-          issues: validation.errors,
-          preview: generatePreviewFromSnapshot(snapshot),
-          extensionId,
-          message: "Validation failed. Not finalized.",
-          nextAction:
-            "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
-        };
-      }
+    stage = "write";
+    const writeResult = await writeExtensionFiles({
+      metadata,
+      code,
+      ui,
+      projectId,
+      tenantId,
+      extensionId,
+    });
 
-      const finalizeResult = await finalize({ extensionId, projectId, tenantId, withLock: false });
-      return {
-        success: finalizeResult.created,
-        ready: validation.ok,
+    stage = "validate_disk";
+    const disk = await loadExtension(projectId, tenantId, extensionId);
+    if (!disk) {
+      return buildFailureResult({
+        action: "create",
+        stage,
+        error: new Error("Failed to reload extension after write."),
+        extensionId,
+        projectId,
+        tenantId,
+        metadata,
+        code,
+      });
+    }
+
+    const validation = await validateExtension({
+      metadata: disk.metadata,
+      code: disk.code,
+      ui: disk.ui,
+    });
+    if (!validation.ok) {
+      return buildValidationFailure({
+        action: "create",
         issues: validation.errors,
-        preview: generatePreviewFromSnapshot(snapshot),
-        extensionId: finalizeResult.extensionId,
-        files: finalizeResult.files,
-        message: finalizeResult.message,
-        path: `data/projects/${tenantId}/${projectId}/extensions/${finalizeResult.extensionId}/`,
-      };
+        extensionId,
+        projectId,
+        tenantId,
+        metadata: disk.metadata,
+        code: disk.code,
+        postWrite: true,
+      });
+    }
+
+    stage = "cache";
+    if (ui) {
+      await invalidateExtensionUICache(extensionId, projectId, tenantId);
     }
 
     return {
       success: true,
-      ready: validation.ok,
-      issues: validation.errors,
-      preview: generatePreviewFromSnapshot(snapshot),
+      ready: true,
+      issues: [],
       extensionId,
-      message: validation.ok
-        ? "Staging updated. Call finalize() to write files."
-        : "Staging has validation issues. Fix and retry.",
-      ...(validation.ok
-        ? {}
-        : {
-            nextAction:
-              "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
-          }),
+      files: writeResult.files,
+      preview: generatePreview(metadata, code),
+      message: `Extension "${extensionId}" written successfully.`,
       path: `data/projects/${tenantId}/${projectId}/extensions/${extensionId}/`,
     };
+  } catch (error) {
+    return buildFailureResult({
+      action: "create",
+      stage,
+      error,
+      extensionId,
+      projectId,
+      tenantId,
+      metadata,
+      code,
+    });
   } finally {
-    await releaseExtensionLock(projectId, tenantId, extensionId);
+    if (lockAcquired && extensionId) {
+      await releaseExtensionLock(projectId, tenantId, extensionId);
+    }
   }
 };
 
 /**
  * Modify existing extension
  */
-const modify = async (input: string | ModifyOptions) => {
-  const opts = typeof input === "string" ? { instruction: input } : input;
-  const finalizeFlag = opts.finalize ?? true;
-  const extensionId = opts.extensionId || opts.id;
-  if (!extensionId) {
-    throw new Error("extensionId is required to modify an extension");
+const modify = async (input: ModifyOptions | string) => {
+  if (typeof input === "string") {
+    return buildFailureResult({
+      action: "modify",
+      stage: "input",
+      error: new Error("modify() now expects an options object (same shape as create)."),
+    });
   }
-  if (!opts.instruction) {
-    throw new Error("instruction is required to modify an extension");
+
+  const opts = input;
+  const extensionId = opts.extensionId || opts.id || opts.metadata?.id;
+
+  if (!extensionId) {
+    return buildFailureResult({
+      action: "modify",
+      stage: "input",
+      error: new Error("extensionId is required to modify an extension"),
+    });
+  }
+
+  if (opts.metadata?.id && opts.metadata.id !== extensionId) {
+    return buildFailureResult({
+      action: "modify",
+      stage: "input",
+      error: new Error("metadata.id must match extensionId"),
+      extensionId,
+      issues: ["metadata.id must match extensionId"],
+    });
   }
 
   const { projectId, tenantId } = getRuntimeContext();
+  let metadata: any | undefined;
+  let code: string | undefined;
+  let ui: string | undefined;
+  let lockAcquired = false;
+  let stage = "lock";
+  let base: any;
+  let copiedFromDefault = false;
 
-  await acquireExtensionLock(projectId, tenantId, extensionId);
   try {
-    let base = await loadExtension(projectId, tenantId, extensionId);
-    let copiedFromDefault = false;
+    await acquireExtensionLock(projectId, tenantId, extensionId);
+    lockAcquired = true;
+
+    stage = "loadBase";
+    base = await loadExtension(projectId, tenantId, extensionId);
 
     if (!base) {
+      stage = "loadDefault";
       const defaultExt = await loadDefaultExtension(extensionId);
       if (!defaultExt) {
         throw new Error(
-          `Extension "${extensionId}" not found. Create it first using createOrUpdate().`,
+          `Extension "${extensionId}" not found. Create it first using create().`,
         );
       }
 
@@ -764,219 +761,150 @@ const modify = async (input: string | ModifyOptions) => {
       copiedFromDefault = true;
     }
 
-    const snapshot: ExtensionSnapshot = {
-      metadata: copiedFromDefault ? { ...base.metadata, isDefault: false } : base.metadata,
-      code: base.code,
-      ui: base.ui,
+    const baseMetadata: Record<string, any> = base.metadata || {};
+    const description =
+      opts.description ||
+      opts.metadata?.description ||
+      baseMetadata.description;
+
+    if (!description) {
+      throw new Error("Description is required");
+    }
+
+    stage = "normalize";
+    const normalizedDeps = normalizeDependencyConfig(
+      opts.dependencies,
+      opts.frontendDependencies,
+      opts.metadata?.dependencies ?? baseMetadata.dependencies,
+    );
+
+    metadata = {
+      ...baseMetadata,
+      ...opts.metadata,
+      id: extensionId,
+      name: opts.name || baseMetadata.name || generateNameFromId(extensionId),
+      description,
+      category: opts.category || baseMetadata.category || inferCategory(description),
+      author: opts.author || baseMetadata.author || "AIBase",
+      version: opts.version || baseMetadata.version || "1.0.0",
+      enabled: opts.enabled !== undefined ? opts.enabled : (baseMetadata.enabled ?? true),
+      isDefault: false,
+      createdAt: baseMetadata.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      ...(normalizedDeps ? { dependencies: normalizedDeps } : {}),
+    };
+
+    code = base.code;
+    if (opts.code) {
+      code = opts.code;
+    } else if (opts.functions) {
+      stage = "generateCode";
+      const functionsArray = normalizeFunctionsArray(opts.functions);
+      code = await generateCode({
+        description,
+        functions: functionsArray,
+        metadata,
+      });
+    }
+
+    ui = base.ui;
+    if (opts.ui) {
+      ui = normalizeUIContent(opts.ui);
+    }
+
+    if (!ui) {
+      const shouldGenerate = shouldGenerateUI(description, metadata, normalizedDeps);
+      if (shouldGenerate) {
+        const uiResult = generateDefaultUI({
+          description,
+          metadata,
+          dependencies: normalizedDeps,
+        });
+        ui = uiResult.ui;
+        if (uiResult.messageUI && !metadata.messageUI) {
+          metadata.messageUI = uiResult.messageUI;
+        }
+        if (uiResult.inspectionUI && !metadata.inspectionUI) {
+          metadata.inspectionUI = uiResult.inspectionUI;
+        }
+      }
+    }
+
+    stage = "write";
+    const writeResult = await writeExtensionFiles({
+      metadata: copiedFromDefault ? { ...metadata, isDefault: false } : metadata,
+      code,
+      ui,
       projectId,
       tenantId,
       extensionId,
-    };
+    });
 
-    const change = parseChangeInstruction(opts.instruction);
-    await applyChange(change, snapshot);
+    stage = "validate_disk";
+    const disk = await loadExtension(projectId, tenantId, extensionId);
+    if (!disk) {
+      return buildFailureResult({
+        action: "modify",
+        stage,
+        error: new Error("Failed to reload extension after write."),
+        extensionId,
+        projectId,
+        tenantId,
+        metadata,
+        code,
+      });
+    }
 
-    await writeToStaging(snapshot);
-    const validation = await validateSnapshot(snapshot);
-
-    if (finalizeFlag && validation.ok) {
-      const finalizeResult = await finalize({ extensionId, projectId, tenantId, withLock: false });
-      return {
-        success: finalizeResult.created,
-        modified: true,
-        preview: generatePreviewFromSnapshot(snapshot),
-        ready: validation.ok,
+    const validation = await validateExtension({
+      metadata: disk.metadata,
+      code: disk.code,
+      ui: disk.ui,
+    });
+    if (!validation.ok) {
+      return buildValidationFailure({
+        action: "modify",
         issues: validation.errors,
-        extensionId: finalizeResult.extensionId,
-        files: finalizeResult.files,
-        message: finalizeResult.message,
-      };
+        extensionId,
+        projectId,
+        tenantId,
+        metadata: disk.metadata,
+        code: disk.code,
+        postWrite: true,
+      });
+    }
+
+    stage = "cache";
+    if (ui || base.ui) {
+      await invalidateExtensionUICache(extensionId, projectId, tenantId);
     }
 
     return {
       success: true,
       modified: true,
-      preview: generatePreviewFromSnapshot(snapshot),
-      ready: validation.ok,
-      issues: validation.errors,
+      ready: true,
+      issues: [],
       extensionId,
-      message: finalizeFlag
-        ? "Validation failed. Not finalized."
-        : "Staging updated. Call finalize() to write files.",
-      ...(validation.ok
-        ? {}
-        : {
-            nextAction:
-              "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
-          }),
+      files: writeResult.files,
+      preview: generatePreview(metadata, code),
+      message: `Extension "${extensionId}" updated successfully.`,
+      path: `data/projects/${tenantId}/${projectId}/extensions/${extensionId}/`,
     };
-  } finally {
-    await releaseExtensionLock(projectId, tenantId, extensionId);
-  }
-};
-
-/**
- * Show current state
- */
-const show = async (input?: string | { extensionId?: string; id?: string }) => {
-  const extensionId =
-    typeof input === "string" ? input : input?.extensionId || input?.id;
-  if (!extensionId) {
-    return {
-      summary: "No extension selected",
-      hint: "Provide extensionId to show staging state",
-    };
-  }
-
-  const { projectId, tenantId } = getRuntimeContext();
-  const snapshot = await loadStagingSnapshot(projectId, tenantId, extensionId);
-  if (!snapshot) {
-    return {
-      summary: `No staging data for "${extensionId}"`,
-      hint: "Use createOrUpdate() to create or update staging data",
-    };
-  }
-
-  return {
-    summary: `Extension: ${snapshot.metadata?.name || extensionId}`,
-    id: extensionId,
-    description: snapshot.metadata?.description || "",
-    category: snapshot.metadata?.category || "",
-    status: snapshot.code ? "Code generated" : "No code yet",
-    hasUI: !!snapshot.ui,
-    preview: generatePreviewFromSnapshot(snapshot),
-  };
-};
-
-/**
- * Validate extension
- */
-const validate = async (input?: string | { extensionId?: string; id?: string }) => {
-  const extensionId =
-    typeof input === "string" ? input : input?.extensionId || input?.id;
-  if (!extensionId) {
-    return {
-      ok: false,
-      errors: ["extensionId is required to validate staging"],
-      nextAction: "Provide extensionId to validate staging.",
-    };
-  }
-
-  const { projectId, tenantId } = getRuntimeContext();
-  const snapshot = await loadStagingSnapshot(projectId, tenantId, extensionId);
-  if (!snapshot) {
-    return {
-      ok: false,
-      errors: [`No staging data found for "${extensionId}"`],
-      nextAction: "Use createOrUpdate() or modify() to create staging data first.",
-    };
-  }
-
-  return await validateSnapshot(snapshot);
-};
-
-/**
- * Test load extension (dry run)
- */
-const testLoad = async (input?: string | { extensionId?: string; id?: string }) => {
-  const extensionId =
-    typeof input === "string" ? input : input?.extensionId || input?.id;
-  if (!extensionId) {
-    return { ok: false, error: "extensionId is required to test staging" };
-  }
-
-  const { projectId, tenantId } = getRuntimeContext();
-  const snapshot = await loadStagingSnapshot(projectId, tenantId, extensionId);
-  if (!snapshot) {
-    return { ok: false, error: `No staging data found for "${extensionId}"` };
-  }
-
-  return await testLoadSnapshot(snapshot);
-};
-
-/**
- * Finalize and write files
- */
-const finalize = async (input?: {
-  extensionId?: string;
-  id?: string;
-  projectId?: string;
-  tenantId?: string | number;
-  withLock?: boolean;
-}) => {
-  const extensionId = input?.extensionId || input?.id;
-  if (!extensionId) {
-    return { created: false, error: "extensionId is required to finalize" };
-  }
-
-  const runtime = getRuntimeContext();
-  const projectId = input?.projectId || runtime.projectId;
-  const tenantId = input?.tenantId ?? runtime.tenantId;
-  const withLock = input?.withLock ?? true;
-
-  const snapshot = await loadStagingSnapshot(projectId, tenantId, extensionId);
-  if (!snapshot) {
-    return {
-      created: false,
-      error: `No staging data found for "${extensionId}"`,
-    };
-  }
-
-  const validation = await validateSnapshot(snapshot);
-  if (!validation.ok) {
-    return {
-      created: false,
-      error: "Cannot create extension with validation errors",
-      issues: validation.errors,
-      nextAction:
-        "Fix the staging snapshot with createOrUpdate/modify using issues, then validate() again before finalize().",
-    };
-  }
-
-  const testResult = await testLoadSnapshot(snapshot);
-  if (!testResult.ok) {
-    return {
-      created: false,
-      error: "Extension failed validation",
-      details: testResult.error,
-    };
-  }
-
-  if (withLock) {
-    await acquireExtensionLock(projectId, tenantId, extensionId);
-  }
-
-  try {
-    await atomicSwap(projectId, tenantId, extensionId);
-
-    if (snapshot.ui) {
-      await invalidateExtensionUICache(extensionId, projectId, tenantId);
-    }
   } catch (error) {
-    await cleanupStaging(projectId, tenantId, extensionId);
-    throw error;
+    return buildFailureResult({
+      action: "modify",
+      stage,
+      error,
+      extensionId,
+      projectId,
+      tenantId,
+      metadata,
+      code,
+    });
   } finally {
-    if (withLock) {
+    if (lockAcquired) {
       await releaseExtensionLock(projectId, tenantId, extensionId);
     }
   }
-
-  const createdFiles = [
-    "metadata.json",
-    ...(snapshot.code ? ["index.ts"] : []),
-    ...(snapshot.ui ? ["ui.tsx"] : []),
-  ];
-
-  return {
-    created: true,
-    extensionId,
-    files: createdFiles,
-    message: `Extension "${extensionId}" created successfully!`,
-    nextSteps: [
-      "Extension is now active for this project",
-      "No restart required (loaded automatically on next script execution)",
-    ],
-  };
 };
 
 // ==================== Helper Functions ====================
@@ -1412,57 +1340,6 @@ function analyzeIntent(description: string): any {
 }
 
 /**
- * Parse change instruction
- */
-function parseChangeInstruction(instruction: string) {
-  const lower = instruction.toLowerCase();
-
-  // Rename function
-  const renameMatch = lower.match(/rename\s+(\w+)\s+to\s+(\w+)/);
-  if (renameMatch) {
-    return {
-      type: "renameFunction",
-      oldName: renameMatch[1],
-      newName: renameMatch[2],
-    };
-  }
-
-  // Add function
-  const addMatch = lower.match(/add\s+(\w+)\s+function/);
-  if (addMatch) {
-    return {
-      type: "addFunction",
-      functionName: addMatch[1],
-      description: instruction,
-    };
-  }
-
-  return { type: "unknown", instruction };
-}
-
-/**
- * Apply change to staging snapshot
- */
-async function applyChange(change: any, snapshot: ExtensionSnapshot) {
-  switch (change.type) {
-    case "renameFunction":
-      if (snapshot.code) {
-        // Use split/join instead of replaceAll for broader compatibility
-        snapshot.code = snapshot.code.split(
-          change.oldName,
-        ).join(change.newName);
-      }
-      break;
-
-    case "addFunction":
-      // Would generate and add new function
-      throw new Error(
-        "Adding functions not yet implemented. Use createOrUpdate with all functions.",
-      );
-  }
-}
-
-/**
  * Check TypeScript syntax
  */
 async function checkSyntax(
@@ -1622,11 +1499,8 @@ const setContext = (context: {
 
 // Export the extension
 const extensionCreatorExtension = {
-  createOrUpdate,
+  create,
   modify,
-  show,
-  validate,
-  finalize,
   setContext,
 };
 
