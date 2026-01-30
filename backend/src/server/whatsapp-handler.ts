@@ -671,13 +671,35 @@ async function processWhatsAppMessageWithAI(
     const existingHistory = await chatHistoryStorage.loadChatHistory(convId, projectId, tenantId);
     console.log("[WhatsApp] Loaded history, messages:", existingHistory?.length || 0);
 
-    // Create conversation instance
+    // Create conversation instance with custom hooks for script progress
     console.log("[WhatsApp] Creating conversation instance...");
     const conversation = await Conversation.create({
       projectId,
       tenantId,
       convId,
       urlParams: { CURRENT_UID: uid },
+      hooks: {
+        tools: {
+          before: async (toolCallId: string, toolName: string, args: any) => {
+            // Check if this is a script tool progress update
+            // The script tool injects __status and __result via the broadcast function
+            if (toolName === "script" && args.__status === "progress" && args.__result) {
+              const progressMessage = args.__result.message;
+              console.log("[WhatsApp] Script progress:", progressMessage);
+
+              // Send progress update to WhatsApp
+              try {
+                await sendWhatsAppMessage(projectId, whatsappNumber, {
+                  text: `⏳ ${progressMessage}`,
+                });
+              } catch (err) {
+                console.error("[WhatsApp] Failed to send progress message:", err);
+                // Don't throw - progress messages are optional
+              }
+            }
+          },
+        },
+      },
     });
     console.log("[WhatsApp] Conversation created");
 
