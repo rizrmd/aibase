@@ -400,23 +400,23 @@ export class WebSocketServer {
           return handleSaveImage(req);
         }
 
-        // Handle file download (GET /api/files/{projectId}/{convId}/{fileName})
+        // Handle file download (GET /api/files/{projectId}/{fileName})
         if (pathname.startsWith("/api/files/") && req.method === "GET") {
           return handleFileDownload(req);
         }
 
-        // Handle file deletion (DELETE /api/files/{projectId}/{convId}/{fileName})
-        const fileDeleteMatch = pathname.match(/^\/api\/files\/([^\/]+)\/([^\/]+)\/([^\/]+)$/);
+        // Handle file deletion (DELETE /api/files/{projectId}/{fileName})
+        const fileDeleteMatch = pathname.match(/^\/api\/files\/([^\/]+)\/([^\/]+)$/);
         if (fileDeleteMatch && req.method === "DELETE") {
-          const [, projectId, convId, fileName] = fileDeleteMatch;
-          return handleDeleteFile(req, projectId!, convId!, fileName!);
+          const [, projectId, fileName] = fileDeleteMatch;
+          return handleDeleteFile(req, projectId!, fileName!);
         }
 
-        // Handle file rename (PATCH /api/files/{projectId}/{convId}/{fileName}/rename)
-        const fileRenameMatch = pathname.match(/^\/api\/files\/([^\/]+)\/([^\/]+)\/([^\/]+)\/rename$/);
+        // Handle file rename (PATCH /api/files/{projectId}/{fileName}/rename)
+        const fileRenameMatch = pathname.match(/^\/api\/files\/([^\/]+)\/([^\/]+)\/rename$/);
         if (fileRenameMatch && req.method === "PATCH") {
-          const [, projectId, convId, fileName] = fileRenameMatch;
-          return handleRenameFile(req, projectId!, convId!, fileName!);
+          const [, projectId, fileName] = fileRenameMatch;
+          return handleRenameFile(req, projectId!, fileName!);
         }
 
         // Handle file move (POST /api/files/move)
