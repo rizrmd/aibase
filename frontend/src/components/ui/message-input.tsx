@@ -185,7 +185,7 @@ export function MessageInput({
 
   useAutosizeTextArea({
     ref: textAreaRef as React.RefObject<HTMLTextAreaElement>,
-    maxHeight: 240,
+    maxHeight: 200,
     borderWidth: 1,
     dependencies: [props.value, showFileList],
   })
@@ -209,8 +209,8 @@ export function MessageInput({
         onStopRecording={stopRecording}
       />
 
-      <div className="relative flex w-full items-center space-x-2">
-        <div className="relative flex-1 pb-2">
+      <div className="relative flex w-full items-end space-x-2">
+        <div className="relative flex-1">
           <textarea
             aria-label="Write your prompt here"
             placeholder={placeholder}
@@ -218,6 +218,8 @@ export function MessageInput({
             onPaste={onPaste}
             onKeyDown={onKeyDown}
             autoFocus
+            enterKeyHint="send"
+            inputMode="text"
             className={cn(
               "z-10 w-full grow resize-none rounded-xl border border-input bg-background p-3 pr-24 text-sm ring-offset-background transition-[border] placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
               showFileList && "pb-16",

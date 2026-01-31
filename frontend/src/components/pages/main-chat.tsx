@@ -310,7 +310,7 @@ export function MainChat({
       <div className="flex-1 flex flex-col min-w-0">
         {/* Error Alert */}
         {error && (
-          <Alert className="mt-[60px] mx-auto mb-2 w-[650px] border-red-200 bg-red-50">
+          <Alert className="mt-[60px] mx-4 md:mx-auto mb-2 md:w-[650px] border-red-200 bg-red-50">
             <AlertCircle className="h-4 w-4 text-red-600" />
             <AlertDescription className="text-red-800">
               {error}

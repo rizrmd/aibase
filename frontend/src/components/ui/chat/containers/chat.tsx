@@ -198,7 +198,7 @@ export function Chat({
       <GlobalToolDialogs toolInvocations={allToolInvocations} />
 
       {isEmpty ? (
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-1 items-center justify-center px-4">
           {isHistoryLoading ? (
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -220,7 +220,7 @@ export function Chat({
       ) : null}
 
       <ChatForm
-        className="mt-auto mx-auto w-full md:max-w-[650px]"
+        className="mt-auto mx-auto w-full md:max-w-[650px] px-3 md:px-0 pb-4 md:pb-0"
         handleSubmit={handleSubmit}
       >
         {({ files, setFiles }) => (
