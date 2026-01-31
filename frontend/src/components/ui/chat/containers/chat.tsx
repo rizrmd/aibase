@@ -14,7 +14,7 @@ import { useFileStore } from "@/stores/file-store";
 import { cn } from "@/lib/utils";
 import { GlobalToolDialogs, type ToolInvocation } from "../tools";
 
-interface ChatPropsBase {
+interface ChatProps {
   handleSubmit: (
     event?: { preventDefault?: () => void },
     options?: { experimental_attachments?: FileList }
@@ -35,8 +35,6 @@ interface ChatPropsBase {
   welcomeMessage?: string | null;
 }
 
-interface ChatProps extends ChatPropsBase { }
-
 export function Chat({
   messages,
   handleSubmit,
@@ -52,137 +50,82 @@ export function Chat({
   welcomeMessage,
 }: ChatProps) {
   const isEmpty = messages.length === 0;
-
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  // Enhanced stop function that marks pending tool calls as cancelled
   const handleStop = useCallback(() => {
     stop?.();
-
     if (!setMessages) return;
 
     const latestMessages = [...messagesRef.current];
-    const lastAssistantMessage = latestMessages.findLast(
-      (m) => m.role === "assistant"
-    );
-
+    const lastAssistantMessage = latestMessages.findLast((m) => m.role === "assistant");
     if (!lastAssistantMessage) return;
 
     let needsUpdate = false;
     let updatedMessage = { ...lastAssistantMessage };
 
     if (lastAssistantMessage.toolInvocations) {
-      const updatedToolInvocations = lastAssistantMessage.toolInvocations.map(
-        (toolInvocation) => {
-          if (toolInvocation.state === "call") {
-            needsUpdate = true;
-            return {
-              ...toolInvocation,
-              state: "result",
-              result: {
-                content: "Tool execution was cancelled",
-                __cancelled: true,
-              },
-            } as const;
-          }
-          return toolInvocation;
+      const updatedToolInvocations = lastAssistantMessage.toolInvocations.map((toolInvocation) => {
+        if (toolInvocation.state === "call") {
+          needsUpdate = true;
+          return {
+            ...toolInvocation,
+            state: "result",
+            result: { content: "Tool execution was cancelled", __cancelled: true },
+          } as const;
         }
-      );
-
-      if (needsUpdate) {
-        updatedMessage = {
-          ...updatedMessage,
-          toolInvocations: updatedToolInvocations,
-        };
-      }
+        return toolInvocation;
+      });
+      if (needsUpdate) updatedMessage = { ...updatedMessage, toolInvocations: updatedToolInvocations };
     }
 
-    if (lastAssistantMessage.parts && lastAssistantMessage.parts.length > 0) {
+    if (lastAssistantMessage.parts) {
       const updatedParts = lastAssistantMessage.parts.map((part) => {
-        if (
-          part.type === "tool-invocation" &&
-          part.toolInvocation &&
-          part.toolInvocation.state === "call"
-        ) {
+        if (part.type === "tool-invocation" && part.toolInvocation?.state === "call") {
           needsUpdate = true;
           return {
             ...part,
-            toolInvocation: {
-              ...part.toolInvocation,
-              state: "result" as const,
-              result: {
-                content: "Tool execution was cancelled",
-                __cancelled: true,
-              },
-            },
+            toolInvocation: { ...part.toolInvocation, state: "result" as const, result: { content: "Tool execution was cancelled", __cancelled: true } },
           };
         }
         return part;
       });
-
-      if (needsUpdate) {
-        updatedMessage = {
-          ...updatedMessage,
-          parts: updatedParts,
-        };
-      }
+      if (needsUpdate) updatedMessage = { ...updatedMessage, parts: updatedParts };
     }
 
     if (needsUpdate) {
-      const messageIndex = latestMessages.findIndex(
-        (m) => m.id === lastAssistantMessage.id
-      );
+      const messageIndex = latestMessages.findIndex((m) => m.id === lastAssistantMessage.id);
       if (messageIndex !== -1) {
         latestMessages[messageIndex] = updatedMessage;
         setMessages(latestMessages);
       }
     }
-  }, [stop, setMessages, messagesRef]);
+  }, [stop, setMessages]);
 
   const messageOptions = useCallback(
     (message: Message) => ({
       actions: onRateResponse ? (
         <>
           <div className="border-r pr-1">
-            <CopyButton
-              content={message.content}
-              copyMessage="Copied response to clipboard!"
-            />
+            <CopyButton content={message.content} copyMessage="Copied response to clipboard!" />
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            onClick={() => onRateResponse(message.id, "thumbs-up")}
-          >
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onRateResponse(message.id, "thumbs-up")}>
             <ThumbsUp className="h-4 w-4" />
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            onClick={() => onRateResponse(message.id, "thumbs-down")}
-          >
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onRateResponse(message.id, "thumbs-down")}>
             <ThumbsDown className="h-4 w-4" />
           </Button>
         </>
       ) : (
-        <CopyButton
-          content={message.content}
-          copyMessage="Copied response to clipboard!"
-        />
+        <CopyButton content={message.content} copyMessage="Copied response to clipboard!" />
       ),
     }),
     [onRateResponse]
   );
 
-  // Collect all tool invocations from all messages for GlobalToolDialogs
   const allToolInvocations: ToolInvocation[] = [];
   messages.forEach((message) => {
-    if (message.toolInvocations) {
-      allToolInvocations.push(...message.toolInvocations);
-    }
+    if (message.toolInvocations) allToolInvocations.push(...message.toolInvocations);
     if (message.parts) {
       message.parts.forEach((part) => {
         if (part.type === "tool-invocation" && part.toolInvocation) {
@@ -192,13 +135,25 @@ export function Chat({
     }
   });
 
+  const {
+    containerRef,
+    scrollToBottom,
+    handleScroll,
+    shouldAutoScroll,
+    handleTouchStart,
+  } = useAutoScroll([messages]);
+
   return (
-    <div className={cn("flex flex-col h-full w-full", className)}>
-      {/* Global tool dialogs - single instance for entire chat */}
+    <div className={cn("flex flex-col h-full", className)}>
       <GlobalToolDialogs toolInvocations={allToolInvocations} />
 
-      {/* Scrollable messages area */}
-      <div className="flex-1 min-h-0 overflow-hidden relative">
+      {/* Messages - flex-1 with overflow */}
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+      >
         {isEmpty ? (
           <div className="h-full flex items-center justify-center px-4">
             {isHistoryLoading ? (
@@ -211,100 +166,61 @@ export function Chat({
             )}
           </div>
         ) : (
-          <ChatMessagesList 
-            messages={messages} 
-            messageOptions={messageOptions}
-          />
+          <div className="max-w-[650px] mx-auto px-4 py-4">
+            <MessageList messages={messages} messageOptions={messageOptions} />
+          </div>
+        )}
+
+        {/* Scroll to bottom button */}
+        {!isEmpty && !shouldAutoScroll && (
+          <div className="sticky bottom-4 flex justify-end px-4 pointer-events-none">
+            <Button
+              onClick={scrollToBottom}
+              className="pointer-events-auto h-8 w-8 rounded-full shadow-md"
+              size="icon"
+              variant="secondary"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
 
-      {/* Fixed input area at bottom */}
-      <ChatForm
-        className="flex-shrink-0 w-full md:max-w-[650px] mx-auto px-3 md:px-0 py-2 md:py-0 border-t md:border-0 bg-background"
-        handleSubmit={handleSubmit}
-      >
-        {({ files, setFiles }) => (
-          <MessageInput
-            value={input}
-            onChange={handleInputChange}
-            allowAttachments
-            files={files}
-            setFiles={setFiles}
-            stop={handleStop}
-            isGenerating={isGenerating}
-            transcribeAudio={transcribeAudio}
-          />
-        )}
-      </ChatForm>
-    </div>
-  );
-}
-Chat.displayName = "Chat";
-
-// Separate component for the scrollable message list
-function ChatMessagesList({
-  messages,
-  messageOptions,
-}: {
-  messages: Message[];
-  messageOptions: (message: Message) => { actions: React.ReactNode };
-}) {
-  const {
-    containerRef,
-    scrollToBottom,
-    handleScroll,
-    shouldAutoScroll,
-    handleTouchStart,
-  } = useAutoScroll([messages]);
-
-  return (
-    <div
-      className="h-full overflow-y-auto overflow-x-hidden scroll-smooth"
-      ref={containerRef}
-      onScroll={handleScroll}
-      onTouchStart={handleTouchStart}
-    >
-      <div className="max-w-[650px] mx-auto px-4 py-4">
-        <MessageList messages={messages} messageOptions={messageOptions} />
+      {/* Input area - fixed height */}
+      <div className="h-16 md:h-20 border-t bg-background px-3 md:px-0">
+        <ChatForm
+          className="h-full max-w-[650px] mx-auto flex items-center"
+          handleSubmit={handleSubmit}
+        >
+          {({ files, setFiles }) => (
+            <MessageInput
+              value={input}
+              onChange={handleInputChange}
+              allowAttachments
+              files={files}
+              setFiles={setFiles}
+              stop={handleStop}
+              isGenerating={isGenerating}
+              transcribeAudio={transcribeAudio}
+              className="h-10 md:h-12"
+            />
+          )}
+        </ChatForm>
       </div>
-
-      {/* Scroll to bottom button */}
-      {!shouldAutoScroll && (
-        <div className="sticky bottom-2 right-2 flex justify-end pointer-events-none">
-          <Button
-            onClick={scrollToBottom}
-            className="pointer-events-auto h-8 w-8 rounded-full shadow-md"
-            size="icon"
-            variant="secondary"
-          >
-            <ArrowDown className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
 
 interface ChatFormProps {
   className?: string;
-  handleSubmit: (
-    event?: { preventDefault?: () => void },
-    options?: { experimental_attachments?: FileList }
-  ) => void;
-  children: (props: {
-    files: File[] | null;
-    setFiles: React.Dispatch<React.SetStateAction<File[] | null>>;
-  }) => ReactElement;
+  handleSubmit: (event?: { preventDefault?: () => void }, options?: { experimental_attachments?: FileList }) => void;
+  children: (props: { files: File[] | null; setFiles: React.Dispatch<React.SetStateAction<File[] | null>> }) => ReactElement;
 }
 
 const ChatForm = forwardRef<HTMLFormElement, ChatFormProps>(
   ({ children, handleSubmit, className }, ref) => {
     const { files, setFiles, clearFiles } = useFileStore(
-      useShallow((state) => ({
-        files: state.files,
-        setFiles: state.setFiles,
-        clearFiles: state.clearFiles,
-      }))
+      useShallow((state) => ({ files: state.files, setFiles: state.setFiles, clearFiles: state.clearFiles }))
     );
 
     const onSubmit = (event: React.FormEvent) => {
@@ -312,7 +228,6 @@ const ChatForm = forwardRef<HTMLFormElement, ChatFormProps>(
         handleSubmit(event);
         return;
       }
-
       const fileList = createFileList(files);
       handleSubmit(event, { experimental_attachments: fileList });
       clearFiles();

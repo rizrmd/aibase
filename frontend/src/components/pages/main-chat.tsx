@@ -23,10 +23,8 @@ interface ShadcnChatInterfaceProps {
   isTodoPanelVisible?: boolean;
   isEmbedMode?: boolean;
   welcomeMessage?: string | null;
-  // Optional: Override conversation ID management for embed mode
   embedConvId?: string;
   embedGenerateNewConvId?: () => string;
-  // Embed specific auth props
   uid?: string;
   embedToken?: string;
   projectId?: string;
@@ -44,7 +42,6 @@ export function MainChat({
   embedToken,
   projectId,
 }: ShadcnChatInterfaceProps) {
-  // Zustand stores (reactive state only)
   const {
     messages,
     input,
@@ -82,73 +79,47 @@ export function MainChat({
   );
 
   const { setUploadProgress } = useFileStore(
-    useShallow((state) => ({
-      setUploadProgress: state.setUploadProgress,
-    }))
+    useShallow((state) => ({ setUploadProgress: state.setUploadProgress }))
   );
 
-  // Get current project
   const { currentProject } = useProjectStore();
-
-  // Use the client ID management hook (or use embed mode overrides)
   const defaultConvIdHook = useConvId();
   const convId = embedConvId ?? defaultConvIdHook.convId;
   const generateNewConvId = embedGenerateNewConvId ?? defaultConvIdHook.generateNewConvId;
 
-  // Use WebSocket connection manager - this ensures only one connection even with Strict Mode
   const wsClient = useWSConnection({
     url: wsUrl,
-    projectId: projectId ?? currentProject?.id, // Use prop if provided (embed mode), else store
-    uid, // Pass uid for embed auth
-    embedToken, // Pass embedToken for embed auth
-    convId: embedConvId, // Pass embed convId if in embed mode
+    projectId: projectId ?? currentProject?.id,
+    uid,
+    embedToken,
+    convId: embedConvId,
     reconnectAttempts: 5,
     reconnectDelay: 1000,
     heartbeatInterval: 30000,
     timeout: 10000,
   });
 
-  // Keep refs as regular useRef (non-reactive tracking for streaming)
   const currentMessageRef = useRef<string | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
   const currentToolInvocationsRef = useRef<Map<string, any>>(new Map());
   const currentPartsRef = useRef<any[]>([]);
-
-  // Create a stable component reference for tab management
   const componentRef = useRef({});
-
-  // Track thinking indicator start time (server sends this timestamp)
   const thinkingStartTimeRef = useRef<number | null>(null);
 
-  // Memoize whether we have a thinking message to avoid unnecessary effect re-runs
   const hasThinkingMessage = useMemo(() => messages.some((m) => m.isThinking), [messages]);
 
-  // Update thinking indicator seconds every second based on server startTime
   useEffect(() => {
-    // Only set interval if thinking indicator exists
-    if (!hasThinkingMessage) {
-      return;
-    }
+    if (!hasThinkingMessage) return;
 
     const intervalId = setInterval(() => {
-      // Check if we have startTime from server (may arrive after first render)
-      if (thinkingStartTimeRef.current === null) {
-        return;
-      }
-
-      const elapsedSeconds = Math.floor(
-        (Date.now() - thinkingStartTimeRef.current) / 1000
-      );
+      if (thinkingStartTimeRef.current === null) return;
+      const elapsedSeconds = Math.floor((Date.now() - thinkingStartTimeRef.current) / 1000);
 
       setMessages((prev) => {
         const thinkingIndex = prev.findIndex((m) => m.isThinking);
         if (thinkingIndex === -1) return prev;
-
         const updated = [...prev];
-        updated[thinkingIndex] = {
-          ...updated[thinkingIndex],
-          content: `Thinking... ${elapsedSeconds}s`,
-        };
+        updated[thinkingIndex] = { ...updated[thinkingIndex], content: `Thinking... ${elapsedSeconds}s` };
         return updated;
       });
     }, 1000);
@@ -156,7 +127,6 @@ export function MainChat({
     return () => clearInterval(intervalId);
   }, [hasThinkingMessage, setMessages]);
 
-  // Set up WebSocket event handlers
   useWebSocketHandlers({
     wsClient,
     convId,
@@ -176,108 +146,36 @@ export function MainChat({
     currentPartsRef,
   });
 
-  // Use message submission hook
-  const { handleSubmit, abort, handleNewConversation } =
-    useMessageSubmission({
-      wsClient,
-      projectId: currentProject?.id,
-      convId,
-      input,
-      setInput,
-      setMessages,
-      setIsLoading,
-      setError,
-      setTodos,
-      setUploadProgress,
-      isLoading,
-      thinkingStartTimeRef,
-      currentMessageRef,
-      currentMessageIdRef,
-      currentToolInvocationsRef,
-      currentPartsRef,
-      generateNewConvId,
-      isEmbedMode,
-      updateMessage,
-    });
+  const { handleSubmit, abort, handleNewConversation } = useMessageSubmission({
+    wsClient,
+    projectId: currentProject?.id,
+    convId,
+    input,
+    setInput,
+    setMessages,
+    setIsLoading,
+    setError,
+    setTodos,
+    setUploadProgress,
+    isLoading,
+    thinkingStartTimeRef,
+    currentMessageRef,
+    currentMessageIdRef,
+    currentToolInvocationsRef,
+    currentPartsRef,
+    generateNewConvId,
+    isEmbedMode,
+    updateMessage,
+  });
 
-  const handleInputChange = useCallback(
-    (e: ChangeEvent<HTMLTextAreaElement>) => {
-      setInput(e.target.value);
-    },
-    []
-  );
-
-  // Load conversation messages when convId changes (for conversation switching)
-  // NOTE: Disabled because WebSocket handler already loads messages via get_history control message
-  // Having both REST API and WebSocket loading messages causes race conditions where tokenUsage gets lost
-  // useEffect(() => {
-  //   const loadConversationMessages = async () => {
-  //     if (!convId || !currentProject?.id) return;
-
-  //     // If messages are empty and we had a previously loaded conversation, reset the ref
-  //     // This handles the case when starting a new conversation
-  //     if (messages.length === 0 && lastLoadedConvIdRef.current !== null) {
-  //       console.log("[MainChat] Messages cleared, resetting loaded conversation ref");
-  //       lastLoadedConvIdRef.current = null;
-  //     }
-
-  //     // Skip if we've already loaded this conversation
-  //     if (lastLoadedConvIdRef.current === convId) {
-  //       console.log("[MainChat] Conversation already loaded:", convId);
-  //       return;
-  //     }
-
-  //     try {
-  //       console.log("[MainChat] Attempting to load messages for conversation:", convId);
-  //       const conversationData = await fetchConversationMessages(convId, currentProject.id);
-
-  //       if (conversationData.messages && conversationData.messages.length > 0) {
-  //         // Convert backend messages to frontend format
-  //         const loadedMessages: Message[] = conversationData.messages.map((msg: any, index: number) => ({
-  //           id: `msg_${convId}_${index}`,
-  //           role: msg.role,
-  //           content: typeof msg.content === "string" ? msg.content : "",
-  //           createdAt: new Date(),
-  //           // Preserve tokenUsage, completionTime, and other metadata
-  //           ...(msg.tokenUsage && { tokenUsage: msg.tokenUsage }),
-  //           ...(msg.completionTime !== undefined && { completionTime: msg.completionTime }),
-  //           ...(msg.toolInvocations && { toolInvocations: msg.toolInvocations }),
-  //           ...(msg.parts && { parts: msg.parts }),
-  //           ...(msg.aborted && { aborted: msg.aborted }),
-  //         }));
-
-  //         console.log("[MainChat] Loaded", loadedMessages.length, "messages from backend");
-  //         setMessages(loadedMessages);
-
-  //         // Mark this conversation as loaded
-  //         lastLoadedConvIdRef.current = convId;
-  //       } else {
-  //         console.log("[MainChat] No messages found for conversation:", convId);
-  //         // Mark as loaded even if empty to avoid repeated attempts
-  //         lastLoadedConvIdRef.current = convId;
-  //       }
-  //     } catch (error) {
-  //       console.error("[MainChat] Error loading conversation messages:", error);
-  //       // Mark as loaded to avoid repeated failed attempts
-  //       lastLoadedConvIdRef.current = convId;
-  //     }
-  //   };
-
-  //   loadConversationMessages();
-  // }, [convId, currentProject?.id, messages.length, setMessages]);
-
-  // Auto-scroll to chat input on mobile when starting new conversation
-  useEffect(() => {
-    if (messages.length === 0 && window.innerWidth < 768) {
-      // Scroll to bottom so user can see chat input
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }
-  }, [messages.length]);
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+  }, []);
 
   return (
-    <div className={`flex flex-col h-full ${className} relative overflow-hidden`}>
-      {/* Top bar with New Conversation Button and Token Status */}
-      <div className="flex items-center justify-between px-4 py-2 border-b md:border-0 flex-shrink-0">
+    <div className={`flex flex-col h-full ${className}`}>
+      {/* Top bar - fixed height */}
+      <div className="h-12 md:h-14 flex items-center justify-between px-4 border-b flex-shrink-0">
         <div>
           {!isEmbedMode && messages.length > 0 && (
             <PageActionButton
@@ -290,37 +188,31 @@ export function MainChat({
             />
           )}
         </div>
-        <div className={`${isEmbedMode ? 'hidden md:block' : ''}`}>
+        <div className={isEmbedMode ? "hidden md:block" : ""}>
           <TokenStatus convId={convId} />
         </div>
       </div>
 
-      {/* Error Alert - shown below top bar */}
+      {/* Error Alert */}
       {error && (
-        <Alert className="mx-4 md:mx-auto mb-2 md:w-[650px] border-red-200 bg-red-50 flex-shrink-0">
+        <Alert className="mx-4 md:mx-auto mt-2 md:w-[650px] border-red-200 bg-red-50 flex-shrink-0">
           <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            {error}
-          </AlertDescription>
+          <AlertDescription className="text-red-800">{error}</AlertDescription>
         </Alert>
       )}
 
-      {/* Compaction Status - Show when messages exist */}
+      {/* Compaction Status */}
       {messages.length > 0 && (
-        <div className="mx-4 mb-2 flex-shrink-0">
+        <div className="mx-4 mt-2 flex-shrink-0">
           <CompactionStatus wsClient={wsClient} />
         </div>
       )}
 
-      {/* Main Chat Area - takes remaining space */}
+      {/* Chat - fills remaining space */}
       <div className="flex-1 min-h-0 relative">
-        {/* Todo Panel - Absolute positioned on left */}
         {(todos?.items?.length > 0 || isLoading) && (
           <div className="absolute left-2 top-2 z-10">
-            <TodoPanel
-              todos={todos}
-              isVisible={isTodoPanelVisible}
-            />
+            <TodoPanel todos={todos} isVisible={isTodoPanelVisible} />
           </div>
         )}
 
